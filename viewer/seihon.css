@@ -1,0 +1,2350 @@
+/*
+ * 製本ビューア: Chrome 標準 PDF ビューア風の見た目
+ *
+ * 配色・寸法は Chromium の PDF ビューア(chrome/browser/resources/pdf)の値に合わせている。
+ *   ツールバー #3c3c3c / サイドバー #28292a / 背景 #282828 / 選択色 #8ab4f8 / 高さ 56px / サイドバー幅 300px
+ * Chrome 標準ビューアはシステムがライトでも常に暗い配色。
+ * 仕様の「システムのライト/ダークに追従」に合わせて、ライト時用の明るい配色も用意している
+ * (常に Chrome と同じ見た目が良い場合は、詳細設定でテーマを「ダーク」にする)。
+ */
+
+/* ---------------------------------------------------------------------------
+ * 配色(テーマ)
+ * ------------------------------------------------------------------------- */
+:root {
+  --toolbar-height: 56px; /* PDF.js 側のレイアウト計算にも使われる */
+  --sh-toolbar-h: 56px;
+  --sh-sidebar-w: 300px;
+  --sh-font: system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Sans", "Hiragino Kaku Gothic ProN",
+    "Yu Gothic UI", Meiryo, "Noto Sans JP", sans-serif;
+
+  /* PDF.js のページ配置 */
+  --page-margin: 0 auto 8px;
+  --page-border: none;
+  --spreadHorizontalWrapped-margin-LR: 1px;
+  --pdfViewer-padding-bottom: 0px;
+}
+
+:root,
+:root[data-theme="dark"] {
+  --sh-toolbar-bg: #3c3c3c;
+  --sh-toolbar-fg: #f1f1f1;
+  --sh-toolbar-border: transparent;
+  --sh-icon: #f1f1f1;
+  --sh-icon-disabled: rgba(241, 241, 241, 0.38);
+  --sh-hover: rgba(255, 255, 255, 0.08);
+  --sh-active-bg: rgba(255, 255, 255, 0.24);
+  --sh-pressed-icon: #a8c7fa;
+  --sh-input-bg: rgba(0, 0, 0, 0.5);
+  --sh-input-selection: rgba(255, 255, 255, 0.3);
+  --sh-sep: rgba(255, 255, 255, 0.3);
+  --sh-side-bg: #28292a;
+  --sh-side-fg: #ffffff;
+  --sh-side-border: #5e5e5e;
+  --sh-main-bg: #282828;
+  --sh-accent: #8ab4f8;
+  --sh-focus: #9aa0a6;
+  --sh-page-shadow: none;
+  --sh-thumb-label: #ffffff;
+  --sh-menu-bg: #202124;
+  --sh-menu-fg: #e8eaed;
+  --sh-menu-hover: #3c4043;
+  --sh-menu-sep: rgba(255, 255, 255, 0.1);
+  --sh-menu-shadow: rgba(0, 0, 0, 0.3) 0 1px 2px 0, rgba(0, 0, 0, 0.15) 0 3px 6px 2px;
+  --sh-muted: #9aa0a6;
+  --sh-panel-bg: #303134;
+  --sh-panel-fg: #e8eaed;
+  --sh-panel-fg2: #bdc1c6;
+  --sh-btn-fg: #8ab4f8;
+  --sh-btn-border: #5f6368;
+  --sh-btn-hover: rgba(138, 180, 248, 0.08);
+  --sh-btn-primary-bg: #8ab4f8;
+  --sh-btn-primary-fg: #202124;
+  --sh-findbar-bg: #35363a;
+  --sh-findbar-fg: #e8eaed;
+  --sh-find-error: #f28b82;
+  --sh-scroll-thumb: #9aa0a6;
+  --sh-scroll-thumb-hover: #dadce0;
+  --sh-toast-bg: #e8eaed;
+  --sh-toast-fg: #202124;
+  --sh-toast-action: #1a73e8;
+  --sh-chip-border: rgba(255, 255, 255, 0.35);
+}
+
+:root[data-theme="light"] {
+  --sh-toolbar-bg: #ffffff;
+  --sh-toolbar-fg: #1f1f1f;
+  --sh-toolbar-border: #dadce0;
+  --sh-icon: #474747;
+  --sh-icon-disabled: rgba(31, 31, 31, 0.32);
+  --sh-hover: rgba(0, 0, 0, 0.06);
+  --sh-active-bg: rgba(0, 0, 0, 0.12);
+  --sh-pressed-icon: #0b57d0;
+  --sh-input-bg: rgba(0, 0, 0, 0.07);
+  --sh-input-selection: rgba(11, 87, 208, 0.25);
+  --sh-sep: rgba(0, 0, 0, 0.2);
+  --sh-side-bg: #f8f9fa;
+  --sh-side-fg: #1f1f1f;
+  --sh-side-border: #dadce0;
+  --sh-main-bg: #e8eaed;
+  --sh-accent: #0b57d0;
+  --sh-focus: #0b57d0;
+  --sh-page-shadow: 0 1px 2px rgba(60, 64, 67, 0.3), 0 1px 3px 1px rgba(60, 64, 67, 0.15);
+  --sh-thumb-label: #1f1f1f;
+  --sh-menu-bg: #ffffff;
+  --sh-menu-fg: #1f1f1f;
+  --sh-menu-hover: #f1f3f4;
+  --sh-menu-sep: rgba(0, 0, 0, 0.12);
+  --sh-menu-shadow: rgba(60, 64, 67, 0.3) 0 1px 2px 0, rgba(60, 64, 67, 0.15) 0 2px 6px 2px;
+  --sh-muted: #5f6368;
+  --sh-panel-bg: #ffffff;
+  --sh-panel-fg: #1f1f1f;
+  --sh-panel-fg2: #444746;
+  --sh-btn-fg: #0b57d0;
+  --sh-btn-border: #c4c7c5;
+  --sh-btn-hover: rgba(11, 87, 208, 0.06);
+  --sh-btn-primary-bg: #0b57d0;
+  --sh-btn-primary-fg: #ffffff;
+  --sh-findbar-bg: #ffffff;
+  --sh-findbar-fg: #1f1f1f;
+  --sh-find-error: #c5221f;
+  --sh-scroll-thumb: #bdc1c6;
+  --sh-scroll-thumb-hover: #80868b;
+  --sh-toast-bg: #303030;
+  --sh-toast-fg: #f2f2f2;
+  --sh-toast-action: #8ab4f8;
+  --sh-chip-border: #c4c7c5;
+}
+
+html,
+body {
+  font-family: var(--sh-font);
+  background-color: var(--sh-main-bg);
+  overflow: hidden;
+}
+
+/* 印刷: 画面用の overflow: hidden が残ると、印刷されるのが1ページ目(表紙)だけになるため外す */
+@media print {
+  html,
+  body {
+    overflow: visible !important;
+    background: none !important;
+  }
+}
+
+/* スクロールバー(Chromium の PDF ビューアと同じ形) */
+#viewerContainer::-webkit-scrollbar,
+#viewsManagerContent::-webkit-scrollbar,
+.sh-popup::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+#viewerContainer::-webkit-scrollbar-thumb,
+#viewsManagerContent::-webkit-scrollbar-thumb,
+.sh-popup::-webkit-scrollbar-thumb {
+  background-clip: padding-box;
+  background-color: var(--sh-scroll-thumb);
+  border: 4px solid transparent;
+  border-radius: 8px;
+}
+#viewerContainer::-webkit-scrollbar-thumb:hover,
+#viewsManagerContent::-webkit-scrollbar-thumb:hover {
+  background-color: var(--sh-scroll-thumb-hover);
+}
+#viewerContainer::-webkit-scrollbar-track,
+#viewerContainer::-webkit-scrollbar-corner,
+#viewsManagerContent::-webkit-scrollbar-track,
+.sh-popup::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---------------------------------------------------------------------------
+ * 共通部品
+ * ------------------------------------------------------------------------- */
+.sh-icon {
+  width: 20px;
+  height: 20px;
+  display: block;
+  flex: none;
+}
+
+.sh-icon-btn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  color: var(--sh-icon);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex: none;
+}
+.sh-icon-btn:hover {
+  background: var(--sh-hover);
+}
+.sh-icon-btn:focus-visible {
+  outline: 2px solid var(--sh-focus);
+  outline-offset: -2px;
+}
+.sh-icon-btn:disabled {
+  color: var(--sh-icon-disabled);
+  background: transparent;
+  cursor: default;
+}
+.sh-icon-btn.sh-active,
+.sh-icon-btn.sh-pressed {
+  background: var(--sh-active-bg);
+}
+.sh-icon-btn.sh-pressed {
+  color: var(--sh-pressed-icon);
+}
+
+.sh-btn {
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 18px;
+  border: 1px solid var(--sh-btn-border);
+  background: transparent;
+  color: var(--sh-btn-fg);
+  font: 500 14px var(--sh-font);
+  cursor: pointer;
+}
+.sh-btn:hover {
+  background: var(--sh-btn-hover);
+}
+.sh-btn:focus-visible {
+  outline: 2px solid var(--sh-focus);
+  outline-offset: 2px;
+}
+.sh-btn-primary {
+  background: var(--sh-btn-primary-bg);
+  color: var(--sh-btn-primary-fg);
+  border-color: transparent;
+}
+.sh-btn-primary:hover {
+  background: var(--sh-btn-primary-bg);
+  filter: brightness(1.06);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.sh-select {
+  font: 13px var(--sh-font);
+  color: inherit;
+  background: var(--sh-input-bg);
+  border: none;
+  border-radius: 4px;
+  padding: 4px 6px;
+}
+
+kbd {
+  font: 12px var(--sh-font);
+  padding: 1px 6px;
+  border: 1px solid var(--sh-btn-border);
+  border-radius: 4px;
+}
+
+/* ---------------------------------------------------------------------------
+ * ツールバー
+ * ------------------------------------------------------------------------- */
+#shToolbar {
+  position: absolute;
+  top: 0;
+  inset-inline: 0;
+  height: var(--sh-toolbar-h);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  background: var(--sh-toolbar-bg);
+  color: var(--sh-toolbar-fg);
+  border-bottom: 1px solid var(--sh-toolbar-border);
+  box-sizing: border-box;
+  z-index: 30;
+  font-size: 13px;
+  user-select: none;
+}
+
+.sh-start,
+.sh-end {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.sh-start {
+  overflow: hidden;
+  padding-inline-end: 20px;
+}
+.sh-end {
+  justify-content: flex-end;
+  padding-inline-start: 20px;
+  white-space: nowrap;
+}
+.sh-end > * + * {
+  margin-inline-start: 4px;
+}
+
+.sh-title {
+  margin-inline-start: 16px;
+  font-size: 0.87rem;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sh-center {
+  display: flex;
+  align-items: center;
+  flex: none;
+}
+
+.sh-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--sh-sep);
+  flex: none;
+}
+
+.sh-page-selector {
+  display: inline-flex;
+  align-items: center;
+  height: 36px;
+  margin-inline-end: 20px;
+  font-size: 0.81rem;
+  direction: ltr;
+}
+.sh-page-selector input,
+#shZoomInput {
+  height: 24px;
+  box-sizing: border-box;
+  background: var(--sh-input-bg);
+  border: none;
+  border-radius: 0;
+  color: inherit;
+  caret-color: currentColor;
+  font: inherit;
+  text-align: center;
+  outline: none;
+  padding: 0 4px;
+}
+.sh-page-selector input {
+  width: calc(var(--sh-page-digits, 2) * 1ch + 9px);
+  font-size: 0.81rem;
+}
+.sh-page-selector input::selection,
+#shZoomInput::selection {
+  background: var(--sh-input-selection);
+}
+.sh-page-selector input:focus-visible,
+#shZoomInput:focus-visible {
+  outline: 2px solid var(--sh-focus);
+}
+.sh-page-divider {
+  margin: 0 4px;
+}
+#shPageCount {
+  min-width: calc(var(--sh-page-digits, 2) * 1ch);
+}
+
+.sh-zoom {
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+}
+#shZoomInput {
+  width: 5.5ch;
+  margin: 0 4px;
+  font-size: 13px;
+}
+
+#shFit {
+  margin-inline-start: 12px;
+}
+#shViewMode {
+  margin: 0 6px;
+}
+.sh-center > .sh-sep + #shViewMode {
+  margin-inline-start: 6px;
+}
+
+.sh-annot {
+  display: flex;
+  align-items: center;
+  margin-inline-start: 6px;
+}
+.sh-annot .sh-sep {
+  margin-inline: 6px;
+}
+
+/* Chrome標準で開く(ラベル付きの小さなボタン) */
+.sh-chip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px 0 10px;
+  border: 1px solid var(--sh-chip-border);
+  border-radius: 16px;
+  background: transparent;
+  color: var(--sh-toolbar-fg);
+  font: 500 12.5px var(--sh-font);
+  cursor: pointer;
+  flex: none;
+  margin-inline-end: 8px;
+}
+.sh-chip-btn:hover {
+  background: var(--sh-hover);
+}
+.sh-chip-btn:focus-visible {
+  outline: 2px solid var(--sh-focus);
+  outline-offset: 1px;
+}
+.sh-chip-icon {
+  display: inline-flex;
+  color: var(--sh-icon);
+}
+/* 編集した内容があるときだけ出す「保存」 */
+.sh-chip-btn.sh-save-btn {
+  border-color: transparent;
+  background: var(--sh-btn-primary-bg);
+  color: var(--sh-btn-primary-fg);
+}
+.sh-chip-btn.sh-save-btn:hover {
+  background: var(--sh-btn-primary-bg);
+  filter: brightness(1.08);
+}
+.sh-chip-btn.sh-save-btn .sh-chip-icon {
+  color: inherit;
+}
+.sh-chip-btn.sh-save-btn[hidden] {
+  display: none;
+}
+.sh-chip-btn.sh-save-btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.sh-chip-icon .sh-icon {
+  width: 18px;
+  height: 18px;
+}
+
+/* 読み込み中(Chrome と同じく中央のボタン類は隠す) */
+#shToolbar.sh-loading .sh-center,
+#shToolbar.sh-loading #shDownload,
+#shToolbar.sh-loading #shPrint,
+#shToolbar.sh-loading #shBindOutput {
+  opacity: 0;
+  visibility: hidden;
+}
+.sh-center,
+#shDownload,
+#shPrint,
+#shBindOutput {
+  transition: opacity 100ms cubic-bezier(0, 0, 0.2, 1);
+}
+body.sh-has-error .sh-center,
+body.sh-has-error #shDownload,
+body.sh-has-error #shPrint,
+body.sh-has-error #shBindOutput,
+body.sh-no-document .sh-center,
+body.sh-no-document #shDownload,
+body.sh-no-document #shPrint,
+body.sh-no-document #shBindOutput,
+body.sh-no-document #shOpenNative,
+body.sh-no-document #viewsManagerToggleButton {
+  visibility: hidden;
+}
+
+/* 読み込みの進み具合(ツールバー下端の細い線) */
+#loadingBar {
+  --progressBar-color: var(--sh-accent);
+  --progressBar-bg-color: transparent;
+  --progressBar-blend-color: var(--sh-accent);
+  position: absolute;
+  inset-inline: 0;
+  bottom: -1px;
+  top: auto;
+  height: 3px;
+  border: none;
+  background: transparent;
+  z-index: 2;
+}
+#loadingBar .progress {
+  background-color: var(--sh-accent);
+}
+
+/* 狭い画面(Chrome の段階的な省略に合わせる) */
+@media (max-width: 1180px) {
+  .sh-chip-label {
+    display: none;
+  }
+  .sh-chip-btn {
+    padding: 0;
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 50%;
+    justify-content: center;
+    margin-inline-end: 0;
+  }
+  .sh-chip-icon .sh-icon {
+    width: 20px;
+    height: 20px;
+  }
+}
+@media (max-width: 900px) {
+  .sh-annot-part {
+    display: none !important;
+  }
+}
+/* ボタンが増えて右側が中央に重なるときの詰め方(ui/toolbar.js の fitToWidth) */
+#shToolbar.sh-fit-1 #shOpenNative .sh-chip-label,
+#shToolbar.sh-fit-2 .sh-chip-label {
+  display: none;
+}
+#shToolbar.sh-fit-1 #shOpenNative,
+#shToolbar.sh-fit-2 .sh-chip-btn {
+  padding: 0;
+  width: 36px;
+  height: 36px;
+  justify-content: center;
+  margin-inline-end: 0;
+  border-radius: 50%;
+}
+#shToolbar.sh-fit-1 #shOpenNative {
+  border: none;
+}
+#shToolbar.sh-fit-3 .sh-annot-part {
+  display: none !important;
+}
+#shToolbar.sh-fit-4 #shZoomInput {
+  display: none;
+}
+@media (max-width: 680px) {
+  .sh-title,
+  #shZoomInput {
+    display: none;
+  }
+}
+@media (max-width: 560px) {
+  #shFit,
+  #shViewMode,
+  .sh-center > .sh-sep {
+    display: none;
+  }
+}
+@media (max-width: 440px) {
+  .sh-center {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * サイドバー
+ * ------------------------------------------------------------------------- */
+#shSidebar {
+  position: absolute;
+  top: var(--sh-toolbar-h);
+  bottom: 0;
+  inset-inline-start: 0;
+  width: var(--sh-sidebar-w);
+  display: flex;
+  background: var(--sh-side-bg);
+  color: var(--sh-side-fg);
+  border-inline-end: 1px solid var(--sh-side-border);
+  box-sizing: border-box;
+  z-index: 20;
+  transform: translateX(-100%);
+  visibility: hidden;
+  transition: transform 200ms cubic-bezier(0.6, 0, 0, 1), visibility 200ms;
+}
+#outerContainer.viewsManagerOpen #shSidebar {
+  transform: none;
+  visibility: visible;
+  transition: transform 250ms cubic-bezier(0.6, 0, 0, 1), visibility 250ms;
+}
+
+#shSidebarTabs {
+  width: 64px;
+  min-width: 64px;
+  display: flex;
+  flex-direction: column;
+}
+#shSidebar.sh-no-tabs #shSidebarTabs {
+  display: none;
+}
+.sh-tab-wrap {
+  position: relative;
+  height: 36px;
+  margin: 12px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sh-tab-wrap.sh-selected::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 0 4px 4px 0;
+  background: var(--sh-accent);
+}
+.sh-tab-wrap.sh-selected .sh-icon-btn {
+  color: var(--sh-accent);
+}
+
+/* PDF.js のサイドバー本体を、Chrome 風の枠の中に収める */
+#outerContainer #viewsManager {
+  position: relative;
+  inset: auto;
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  height: auto;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  backdrop-filter: none;
+  visibility: visible;
+  transition: none;
+  display: flex;
+  flex-direction: column;
+  /* 幅はサイドバーの枠(左のアイコンの列を除いた残り)に合わせる。PDF.js の最小幅(236px)のままだと、
+     枠から 7px はみ出して、見出しの「選択」ボタンなどの右端が切れていた */
+  --sidebar-width: auto;
+  --sidebar-min-width: 0px;
+  --sidebar-max-width: none;
+  --views-text-color: var(--sh-side-fg);
+}
+#outerContainer #viewsManager[hidden] {
+  display: flex !important; /* 閉じるアニメーションの間も中身を見せる */
+}
+/* PDF.js は開いたサイドバーを 8px 右へずらす(浮かんだ枠のため)が、ここでは枠の中にぴったり収める */
+#outerContainer.viewsManagerOpen #shSidebar #viewsManager {
+  inset-inline-start: 0;
+}
+#viewsManagerHeader,
+#viewsManagerStatus,
+#viewsManagerResizer {
+  display: none !important;
+}
+#outerContainer #viewsManagerContent {
+  flex: 1 1 0;
+  overflow: auto;
+  width: 100%;
+}
+
+/* サムネイル(Chrome: 幅108px、選択中は青い枠、それ以外は少し淡く)
+   PDF.js 側の指定(入れ子のID指定)より優先させるため、IDを重ねて指定している */
+#outerContainer #viewsManager #viewsManagerContent #thumbnailsView {
+  --thumbnail-width: 108px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  padding: 0 0 24px;
+}
+#outerContainer #viewsManager #viewsManagerContent #thumbnailsView > .thumbnail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: auto;
+  padding-top: 24px;
+  padding-bottom: 22px;
+  gap: 0;
+  scroll-margin-top: 24px;
+}
+#outerContainer #viewsManager #viewsManagerContent #thumbnailsView > .thumbnail > .thumbnailImageContainer {
+  width: var(--thumbnail-width);
+  border-radius: 0;
+  background: #ffffff;
+  box-shadow: none;
+  outline: none;
+  cursor: pointer;
+}
+#outerContainer #viewsManager #viewsManagerContent #thumbnailsView > .thumbnail > .thumbnailImageContainer img {
+  border-radius: 0;
+  opacity: 0.5;
+}
+#outerContainer #viewsManager #viewsManagerContent #thumbnailsView > .thumbnail > .thumbnailImageContainer:hover img {
+  opacity: 0.7;
+}
+#outerContainer #viewsManager #viewsManagerContent #thumbnailsView > .thumbnail > .thumbnailImageContainer[aria-current="page"] {
+  box-shadow: 0 0 0 6px var(--sh-accent);
+}
+#outerContainer #viewsManager #viewsManagerContent #thumbnailsView > .thumbnail > .thumbnailImageContainer[aria-current="page"] img {
+  opacity: 1;
+}
+#outerContainer #viewsManager #viewsManagerContent #thumbnailsView > .thumbnail > .thumbnailImageContainer:focus-visible {
+  box-shadow: 0 0 0 2px var(--sh-accent);
+}
+#outerContainer #viewsManager #viewsManagerContent #thumbnailsView > .thumbnail > .thumbnailImageContainer[aria-current="page"]:focus-visible {
+  box-shadow: 0 0 0 8px var(--sh-accent);
+}
+#outerContainer #viewsManager #viewsManagerContent #thumbnailsView > .thumbnail:not(.isDragging) > .thumbnailImageContainer::after,
+#outerContainer #viewsManager #viewsManagerContent #thumbnailsView > .thumbnail:has([aria-current="page"]):not(.isDragging) > .thumbnailImageContainer::after {
+  position: absolute;
+  top: calc(100% + 12px);
+  bottom: auto;
+  inset-inline-end: 50%;
+  translate: calc(var(--dir-factor) * 50%);
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  outline: none;
+  background: none;
+  color: var(--sh-thumb-label);
+  font: 0.81rem/1 var(--sh-font);
+}
+
+/* しおり(目次)など */
+#outerContainer #outlinesView,
+#outerContainer #attachmentsView,
+#outerContainer #layersView {
+  padding: 8px 8px 24px 0;
+  color: var(--sh-side-fg);
+  font: 13px/1.5 var(--sh-font);
+  --treeitem-color: var(--sh-side-fg);
+  --treeitem-bg-color: transparent;
+  --treeitem-hover-color: var(--sh-side-fg);
+  --treeitem-selected-color: var(--sh-side-fg);
+  --treeitem-hover-bg-color: var(--sh-hover);
+  --treeitem-selected-bg-color: var(--sh-active-bg);
+}
+
+/* ---------------------------------------------------------------------------
+ * ページ表示
+ * ------------------------------------------------------------------------- */
+#outerContainer #mainContainer {
+  inset: 0;
+}
+#outerContainer #viewerContainer {
+  inset: var(--sh-toolbar-h) 0 0 0;
+  background: var(--sh-main-bg);
+}
+#outerContainer.viewsManagerOpen #viewerContainer:not(.pdfPresentationMode) {
+  inset-inline-start: var(--sh-sidebar-w);
+}
+#viewerContainer:not(.pdfPresentationMode) {
+  transition-duration: 200ms;
+}
+
+.pdfViewer {
+  padding-top: 4px;
+}
+.pdfViewer .page {
+  box-shadow: var(--sh-page-shadow);
+}
+.pdfViewer .spread {
+  margin: 0;
+}
+.pdfViewer .spread .page {
+  margin: 0 1px 8px;
+}
+
+/* 製本表示: 単独で並ぶページの隣の空き枠(大きさは JavaScript で隣のページに合わせる) */
+.pdfViewer .sh-ph {
+  --user-unit: 1;
+  --total-scale-factor: calc(var(--scale-factor) * var(--user-unit));
+  --scale-round-x: 1px;
+  --scale-round-y: 1px;
+  display: inline-block;
+  vertical-align: middle;
+  margin: 0 1px 8px;
+  visibility: hidden;
+}
+/* 右綴じ: 見開きの左右を入れ替える。
+   以前は direction: rtl で入れ替えていたが、拡大して見開きが画面より広くなると、左のページが画面の左外に
+   はみ出し、横にスクロールしても見られなかった。並びの順番(order)で入れ替えて、はみ出す分は右に出す */
+.pdfViewer.sh-binding-rtl .spread {
+  display: flex;
+  justify-content: safe center;
+  align-items: center;
+}
+.pdfViewer.sh-binding-rtl .spread > * {
+  flex: none; /* 画面より広くても縮めない(はみ出す分は横にスクロールする) */
+}
+.pdfViewer.sh-binding-rtl .spread > :first-child {
+  order: 2;
+}
+.pdfViewer.sh-binding-rtl .spread > :last-child {
+  order: 1;
+}
+
+/* 検索結果の強調色(Chrome と同じく、一致は黄色・現在の一致は橙色) */
+.textLayer .highlight {
+  --highlight-bg-color: rgb(255 235 59 / 0.5);
+  --highlight-selected-bg-color: rgb(255 150 50 / 0.6);
+}
+/* 現在の一致が検索バーの下に隠れないよう、画面の上から少し下げた位置に表示する */
+.textLayer .highlight.selected {
+  scroll-margin-top: max(120px, 30vh);
+}
+
+/* プレゼンテーション中は独自の部品を隠す */
+.pdfPresentationMode #shToolbar,
+.pdfPresentationMode #shSidebar {
+  display: none;
+}
+
+/* ---------------------------------------------------------------------------
+ * 検索バー(Chrome の検索ボックス風)
+ * ------------------------------------------------------------------------- */
+#outerContainer #findbar {
+  position: absolute;
+  top: calc(var(--sh-toolbar-h) + 8px);
+  inset-inline-end: 24px;
+  inset-inline-start: auto;
+  left: auto;
+  z-index: 40;
+  width: 420px;
+  max-width: calc(100% - 48px);
+  min-width: 0;
+  height: auto;
+  margin: 0;
+  padding: 6px 6px 6px 14px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: var(--sh-findbar-bg);
+  color: var(--sh-findbar-fg);
+  border: none;
+  border-radius: 8px;
+  box-shadow: var(--sh-menu-shadow);
+  font: 13px var(--sh-font);
+}
+#outerContainer #findbar.hidden {
+  display: none !important;
+}
+#outerContainer #findbar::before,
+#outerContainer #findbar::after {
+  display: none;
+}
+#findbar .sh-find-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+#outerContainer #findbar #findInput {
+  flex: 1 1 auto;
+  min-width: 60px;
+  width: 0;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: 13px var(--sh-font);
+  padding: 0;
+  outline: none;
+  box-shadow: none;
+}
+#outerContainer #findbar #findInput[data-status="notFound"] {
+  color: var(--sh-find-error);
+  background: transparent;
+}
+#findbar #findResultsCount {
+  font-size: 12px;
+  color: var(--sh-muted);
+  white-space: nowrap;
+  margin: 0 6px;
+  padding: 0;
+  background: none;
+}
+.sh-find-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--sh-menu-sep);
+  margin: 0 4px;
+}
+#findbar .sh-icon-btn {
+  width: 30px;
+  height: 30px;
+  color: var(--sh-findbar-fg);
+}
+#findbar .sh-icon-btn .sh-icon {
+  width: 18px;
+  height: 18px;
+}
+#findbar .sh-find-msg {
+  font-size: 12px;
+  color: var(--sh-muted);
+  padding: 0 0 2px;
+  min-height: 0;
+}
+#findbar .sh-find-msg:empty {
+  display: none;
+}
+#findbar #findMsg[data-status="notFound"] {
+  color: var(--sh-find-error);
+}
+.sh-find-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 12px;
+  padding: 6px 4px 4px 0;
+  font-size: 12px;
+}
+.sh-find-options label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+/* ---------------------------------------------------------------------------
+ * メニュー・吹き出し
+ * ------------------------------------------------------------------------- */
+#shPopupLayer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1000;
+}
+.sh-popup {
+  position: fixed;
+  pointer-events: auto;
+  background: var(--sh-menu-bg);
+  color: var(--sh-menu-fg);
+  border-radius: 4px;
+  box-shadow: var(--sh-menu-shadow);
+  font: 13px var(--sh-font);
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+.sh-menu {
+  min-width: 220px;
+  padding: 8px 0;
+}
+.sh-menu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 32px;
+  padding: 0 16px 0 12px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.sh-menu-item:hover,
+.sh-menu-item:focus-visible {
+  background: var(--sh-menu-hover);
+  outline: none;
+}
+.sh-menu-item:disabled {
+  opacity: 0.38;
+  cursor: default;
+  background: transparent;
+}
+.sh-menu-check {
+  width: 16px;
+  height: 16px;
+  margin-inline-end: 12px;
+  display: inline-flex;
+  flex: none;
+}
+.sh-menu-check .sh-icon {
+  width: 16px;
+  height: 16px;
+}
+.sh-menu-icon {
+  display: inline-flex;
+  margin-inline-end: 12px;
+  color: var(--sh-muted);
+  flex: none;
+}
+.sh-menu-icon .sh-icon {
+  width: 18px;
+  height: 18px;
+}
+.sh-menu-label {
+  flex: 1;
+  white-space: nowrap;
+}
+.sh-menu-shortcut {
+  margin-inline-start: 24px;
+  color: var(--sh-muted);
+  font-size: 12px;
+}
+.sh-menu-sep {
+  border-top: 1px solid var(--sh-menu-sep);
+  margin: 8px 0;
+}
+.sh-menu-header {
+  padding: 8px 16px 4px 40px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--sh-muted);
+}
+
+/* 注釈ツールの設定パネル(注釈モードの間だけ右側に表示) */
+.sh-popover {
+  padding: 12px;
+  width: 260px;
+}
+#shAnnotPanel {
+  position: absolute;
+  top: var(--sh-toolbar-h);
+  bottom: 0;
+  inset-inline-end: 0;
+  width: 264px;
+  box-sizing: border-box;
+  padding: 4px 16px 16px;
+  overflow-y: auto;
+  background: var(--sh-side-bg);
+  color: var(--sh-side-fg);
+  border-inline-start: 1px solid var(--sh-side-border);
+  z-index: 20;
+  font: 13px var(--sh-font);
+  --sh-swatch-gap: var(--sh-side-bg);
+}
+#outerContainer.sh-annot-open #viewerContainer:not(.pdfPresentationMode) {
+  inset-inline-end: 264px;
+}
+.sh-annot-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 4px -8px 8px 0;
+}
+.sh-annot-head h2 {
+  font-size: 14px;
+  font-weight: 500;
+  margin: 0;
+}
+.sh-annot-section h3 {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--sh-muted);
+  margin: 16px 0 8px;
+}
+.sh-annot-section .sh-select {
+  width: 100%;
+  padding: 6px 8px;
+}
+.sh-annot-tools {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.sh-annot-tool {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 4px 6px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: 12px var(--sh-font);
+  cursor: pointer;
+}
+.sh-annot-tool:hover {
+  background: var(--sh-hover);
+}
+.sh-annot-tool.sh-selected {
+  background: var(--sh-active-bg);
+  color: var(--sh-pressed-icon);
+}
+.sh-annot-tool .sh-icon {
+  width: 24px;
+  height: 24px;
+}
+.sh-swatches {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  margin-top: 8px;
+}
+.sh-swatch {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid rgba(128, 128, 128, 0.5);
+  background: var(--swatch);
+  cursor: pointer;
+  justify-self: center;
+  padding: 0;
+}
+.sh-swatch[aria-checked="true"] {
+  box-shadow: 0 0 0 2px var(--sh-swatch-gap, var(--sh-menu-bg)), 0 0 0 4px var(--sh-accent);
+}
+.sh-sizes {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+}
+.sh-size {
+  width: 40px;
+  height: 36px;
+  border: none;
+  border-radius: 18px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sh-size:hover {
+  background: var(--sh-hover);
+}
+.sh-size[aria-checked="true"] {
+  background: var(--sh-active-bg);
+}
+.sh-size-dot {
+  width: var(--dot);
+  height: var(--dot);
+  border-radius: 50%;
+  background: var(--dot-color, currentColor);
+}
+.sh-annot-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.sh-annot-note {
+  margin: 10px 2px 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--sh-muted);
+}
+
+/* 消しゴム使用中 */
+body.sh-erasing #viewer,
+body.sh-erasing .annotationEditorLayer,
+body.sh-erasing .annotationEditorLayer * {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M9 20 3.5 14.5a1.5 1.5 0 0 1 0-2.1l8.9-8.9a1.5 1.5 0 0 1 2.1 0l5 5a1.5 1.5 0 0 1 0 2.1L12.6 18' fill='%23fff' stroke='%23202124' stroke-width='1.5'/%3E%3Cpath d='M7 10.9 13.1 17' stroke='%23202124' stroke-width='1.5'/%3E%3Cpath d='M9 20h11' stroke='%23202124' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") 4 20, crosshair !important;
+}
+body.sh-erasing .textLayer {
+  pointer-events: none !important;
+}
+
+/* ---------------------------------------------------------------------------
+ * 中央パネル(PDF未選択・エラー)
+ * ------------------------------------------------------------------------- */
+.sh-panel-host {
+  position: absolute;
+  inset: var(--sh-toolbar-h) 0 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  background: var(--sh-main-bg);
+  z-index: 5;
+}
+.sh-panel {
+  max-width: 560px;
+  margin: 24px;
+  padding: 32px 36px;
+  background: var(--sh-panel-bg);
+  color: var(--sh-panel-fg);
+  border-radius: 12px;
+  box-shadow: var(--sh-menu-shadow);
+  text-align: center;
+}
+.sh-panel h1 {
+  font-size: 20px;
+  font-weight: 500;
+  margin: 12px 0 8px;
+}
+.sh-panel p {
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--sh-panel-fg2);
+  margin: 8px 0;
+}
+.sh-panel-icon {
+  display: flex;
+  justify-content: center;
+  color: var(--sh-accent);
+}
+.sh-panel-icon .sh-icon {
+  width: 48px;
+  height: 48px;
+}
+.sh-panel-icon-error {
+  color: #f28b82;
+}
+:root[data-theme="light"] .sh-panel-icon-error {
+  color: #c5221f;
+}
+.sh-panel-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 20px !important;
+}
+.sh-panel-note {
+  font-size: 12px !important;
+  color: var(--sh-muted) !important;
+}
+#shError .sh-panel {
+  text-align: start;
+}
+#shError .sh-panel-icon {
+  justify-content: flex-start;
+}
+#shError .sh-panel-buttons {
+  justify-content: flex-start;
+}
+.sh-steps {
+  margin: 12px 0;
+  padding-inline-start: 1.4em;
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--sh-panel-fg2);
+}
+.sh-error-details {
+  margin-top: 16px;
+  font-size: 12px;
+  color: var(--sh-muted);
+}
+.sh-error-details pre {
+  white-space: pre-wrap;
+  word-break: break-all;
+  font: 12px ui-monospace, Menlo, Consolas, monospace;
+  margin: 8px 0 0;
+}
+body.sh-has-error #viewerContainer {
+  visibility: hidden;
+}
+
+/* ---------------------------------------------------------------------------
+ * ドラッグ&ドロップ・通知・速度ログ
+ * ------------------------------------------------------------------------- */
+#shDropOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(32, 33, 36, 0.55);
+  pointer-events: none;
+}
+.sh-drop-box {
+  padding: 40px 56px;
+  border: 2px dashed var(--sh-accent);
+  border-radius: 16px;
+  background: var(--sh-panel-bg);
+  color: var(--sh-panel-fg);
+  font: 500 16px var(--sh-font);
+}
+
+#shToastHost {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  z-index: 2000;
+  pointer-events: none;
+}
+.sh-toast {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: var(--sh-toast-bg);
+  color: var(--sh-toast-fg);
+  font: 13px/1.5 var(--sh-font);
+  box-shadow: var(--sh-menu-shadow);
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.2s, transform 0.2s;
+  pointer-events: auto;
+}
+.sh-toast.sh-show {
+  opacity: 1;
+  transform: none;
+}
+.sh-toast-error {
+  border-inline-start: 4px solid #f28b82;
+}
+.sh-toast-action {
+  border: none;
+  background: none;
+  color: var(--sh-toast-action);
+  font: 500 13px var(--sh-font);
+  cursor: pointer;
+  padding: 0;
+}
+
+#shPerfPanel {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 1500;
+  min-width: 300px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--sh-menu-bg);
+  color: var(--sh-menu-fg);
+  box-shadow: var(--sh-menu-shadow);
+  font: 12px/1.5 var(--sh-font);
+}
+#shPerfPanel .sh-perf-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+#shPerfPanel .sh-perf-head button {
+  border: none;
+  background: none;
+  color: inherit;
+  font-size: 16px;
+  cursor: pointer;
+}
+#shPerfPanel table {
+  border-collapse: collapse;
+  width: 100%;
+}
+#shPerfPanel td {
+  padding: 1px 4px;
+}
+#shPerfPanel td:nth-child(n + 2) {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+  color: var(--sh-muted);
+}
+#shPerfPanel .sh-perf-foot {
+  margin-top: 6px;
+  color: var(--sh-muted);
+}
+
+/* 印刷準備ダイアログに足した案内 */
+.sh-print-note {
+  font-size: 12px;
+  margin: 8px 0 0;
+  opacity: 0.8;
+}
+#printServiceDialog .buttonRow {
+  gap: 8px;
+}
+
+/* ダイアログの文字 */
+#dialogContainer dialog {
+  font-family: var(--sh-font);
+}
+
+/* ---------------------------------------------------------------------------
+ * フェーズ2: AI用コピー・ページ収集
+ * ------------------------------------------------------------------------- */
+
+/* 小さめのボタン */
+.sh-icon-btn.sh-small {
+  width: 32px;
+  height: 32px;
+}
+.sh-icon-btn.sh-small .sh-icon {
+  width: 18px;
+  height: 18px;
+}
+.sh-btn-small {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 16px;
+  font-size: 13px;
+}
+.sh-btn-text {
+  border-color: transparent;
+}
+.sh-btn-danger-text {
+  color: var(--sh-find-error);
+}
+.sh-btn-danger {
+  background: #d93025;
+  color: #ffffff;
+  border-color: transparent;
+}
+.sh-btn-danger:hover {
+  background: #c5221f;
+}
+.sh-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+  background: transparent;
+  filter: none;
+  box-shadow: none;
+}
+.sh-btn-primary:disabled {
+  background: var(--sh-btn-primary-bg);
+}
+
+/* ツールバーの件数バッジ */
+.sh-badge-host {
+  position: relative;
+}
+.sh-badge {
+  position: absolute;
+  top: 1px;
+  inset-inline-end: -1px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: 9px;
+  background: var(--sh-accent);
+  color: var(--sh-btn-primary-fg);
+  font: 600 10.5px/17px var(--sh-font);
+  text-align: center;
+  pointer-events: none;
+  border: 1.5px solid var(--sh-toolbar-bg);
+}
+
+/* 右クリックメニュー */
+.sh-context-anchor {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+.sh-context-menu .sh-menu-item:disabled .sh-menu-label {
+  font-size: 11.5px;
+}
+
+/* サムネイルの複数選択 */
+#outerContainer #viewsManager #viewsManagerContent #thumbnailsView > .thumbnail.sh-thumb-selected > .thumbnailImageContainer {
+  box-shadow: 0 0 0 3px var(--sh-side-bg), 0 0 0 6px var(--sh-pressed-icon);
+}
+#outerContainer #viewsManager #viewsManagerContent #thumbnailsView > .thumbnail.sh-thumb-selected > .thumbnailImageContainer img {
+  opacity: 1;
+}
+/* 選択の状態では、どのページも同じ濃さで見せる(選んだかどうかは丸と枠で分かる) */
+#outerContainer #viewsManager.sh-select-mode #viewsManagerContent #thumbnailsView > .thumbnail > .thumbnailImageContainer img {
+  opacity: 0.85;
+}
+#outerContainer #viewsManager.sh-select-mode #viewsManagerContent #thumbnailsView > .thumbnail.sh-thumb-selected > .thumbnailImageContainer img {
+  opacity: 1;
+}
+
+/* PDF.js のページ整理のチェックボックスは使わない(削除のときに裏で操作する) */
+#outerContainer #viewsManager #viewsManagerContent #thumbnailsView > .thumbnail > input[type="checkbox"] {
+  display: none !important;
+}
+
+/* サムネイルの左上の丸(選択)と右上の ✕(削除) */
+#outerContainer #viewsManager #viewsManagerContent #thumbnailsView > .thumbnail > :is(.sh-thumb-check, .sh-thumb-del) {
+  position: absolute;
+  top: 12px;
+  z-index: 3;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  margin: 0;
+  border-radius: 50%;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+#outerContainer #viewsManager #viewsManagerContent #thumbnailsView > .thumbnail > .sh-thumb-check {
+  inset-inline-start: calc(50% - var(--thumbnail-width, 108px) / 2 - 12px);
+  border: 2px solid #ffffff;
+  background: rgba(32, 33, 36, 0.55);
+  color: transparent;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+#outerContainer #viewsManager #viewsManagerContent #thumbnailsView > .thumbnail > .sh-thumb-check:hover {
+  background: rgba(32, 33, 36, 0.75);
+  color: rgba(255, 255, 255, 0.6);
+}
+#outerContainer #viewsManager #viewsManagerContent #thumbnailsView > .thumbnail.sh-thumb-selected > .sh-thumb-check {
+  background: var(--sh-btn-primary-bg);
+  border-color: var(--sh-btn-primary-bg);
+  color: var(--sh-btn-primary-fg);
+}
+#outerContainer #viewsManager #viewsManagerContent #thumbnailsView > .thumbnail > .sh-thumb-check .sh-icon {
+  width: 18px;
+  height: 18px;
+}
+#outerContainer #viewsManager #viewsManagerContent #thumbnailsView > .thumbnail > .sh-thumb-del {
+  inset-inline-end: calc(50% - var(--thumbnail-width, 108px) / 2 - 12px);
+  border: 2px solid #ffffff;
+  background: rgba(32, 33, 36, 0.8);
+  color: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+#outerContainer #viewsManager #viewsManagerContent #thumbnailsView > .thumbnail > .sh-thumb-del:hover {
+  background: #d93025;
+}
+#outerContainer #viewsManager #viewsManagerContent #thumbnailsView > .thumbnail > .sh-thumb-del .sh-icon {
+  width: 14px;
+  height: 14px;
+}
+/* 丸: マウスを置いたとき・選択の状態・選んだページ。✕: マウスを置いたとき(選択の状態では出さない)
+   キーボードで移ってきたときも出す(マウスで押したあとのフォーカスでは出さない) */
+#outerContainer #viewsManager #viewsManagerContent #thumbnailsView > .thumbnail:is(:hover, .sh-thumb-selected, :has(> .thumbnailImageContainer:focus-visible)) > .sh-thumb-check,
+#outerContainer #viewsManager.sh-select-mode #viewsManagerContent #thumbnailsView > .thumbnail > .sh-thumb-check {
+  display: flex;
+}
+#outerContainer #viewsManager:not(.sh-select-mode) #viewsManagerContent #thumbnailsView > .thumbnail:is(:hover, :has(> .thumbnailImageContainer:focus-visible)) > .sh-thumb-del:not([hidden]) {
+  display: flex;
+}
+#outerContainer #viewsManager.sh-select-mode #viewsManagerContent #thumbnailsView > .thumbnail > .thumbnailImageContainer {
+  cursor: default;
+}
+
+/* サムネイルの見出し(ページ数と「選択」) */
+#shThumbHeader {
+  display: none;
+  flex: none;
+  align-self: stretch;
+  align-items: center;
+  height: 48px;
+  padding: 0 8px 0 16px;
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--sh-side-border);
+  color: var(--sh-side-fg);
+  font: 13px var(--sh-font);
+}
+#viewsManager.sh-view-thumbs #shThumbHeader {
+  display: flex;
+}
+.sh-thumb-header-normal,
+.sh-thumb-header-select {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+.sh-thumb-header-select,
+#shThumbHeader.sh-selecting .sh-thumb-header-normal {
+  display: none;
+}
+#shThumbHeader.sh-selecting .sh-thumb-header-select {
+  display: flex;
+}
+.sh-thumb-header-title {
+  flex: 1;
+  min-width: 0;
+  color: var(--sh-muted);
+}
+.sh-thumb-header-count {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#shThumbHeader .sh-btn {
+  flex: none;
+  padding: 0 10px;
+}
+#shThumbHeader .sh-btn-text {
+  color: var(--sh-btn-fg);
+}
+.sh-chip-btn.sh-chip-small {
+  height: 30px;
+  padding: 0 12px 0 8px;
+  margin: 0;
+  color: var(--sh-side-fg);
+  font-size: 12.5px;
+}
+.sh-chip-btn.sh-chip-small .sh-chip-icon {
+  color: var(--sh-side-fg);
+}
+.sh-chip-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+  background: transparent;
+}
+
+/* ページを削除した直後の「元に戻す」 */
+.sh-thumb-undo {
+  display: flex;
+  align-self: stretch;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex: none;
+  box-sizing: border-box;
+  padding: 6px 6px 6px 16px;
+  border-bottom: 1px solid var(--sh-side-border);
+  background: var(--sh-active-bg);
+  color: var(--sh-side-fg);
+  font: 13px var(--sh-font);
+}
+.sh-thumb-undo[hidden] {
+  display: none;
+}
+.sh-thumb-undo .sh-btn-text {
+  color: var(--sh-btn-fg);
+  flex: none;
+}
+
+.sh-thumb-select-bar {
+  display: flex;
+  align-self: stretch;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 6px 4px 6px 12px;
+  border-top: 1px solid var(--sh-side-border);
+  background: var(--sh-side-bg);
+  color: var(--sh-side-fg);
+  font: 13px var(--sh-font);
+  flex: none;
+}
+.sh-thumb-select-bar[hidden] {
+  display: none;
+}
+.sh-thumb-select-buttons {
+  display: flex;
+  gap: 2px;
+}
+.sh-thumb-select-bar .sh-icon-btn {
+  color: var(--sh-side-fg);
+  width: 30px;
+  height: 30px;
+}
+.sh-thumb-select-bar .sh-icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+#shThumbSelectText {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sh-thumb-select-buttons {
+  flex: none;
+}
+
+/* ページ収集のパネル */
+#shCollectPanel {
+  position: absolute;
+  top: var(--sh-toolbar-h);
+  bottom: 0;
+  inset-inline-end: 0;
+  width: 300px;
+  box-sizing: border-box;
+  padding: 4px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  background: var(--sh-side-bg);
+  color: var(--sh-side-fg);
+  border-inline-start: 1px solid var(--sh-side-border);
+  z-index: 20;
+  font: 13px var(--sh-font);
+}
+#shCollectPanel[hidden] {
+  display: none;
+}
+#outerContainer.sh-collect-open #viewerContainer:not(.pdfPresentationMode) {
+  inset-inline-end: 300px;
+}
+.sh-collect-count {
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--sh-muted);
+  margin-inline-start: 4px;
+}
+#shCollectPanel h3 {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--sh-muted);
+  margin: 10px 0 8px;
+}
+.sh-collect-add {
+  flex: none;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--sh-side-border);
+}
+.sh-collect-range {
+  display: flex;
+  gap: 8px;
+}
+.sh-collect-range input {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  box-sizing: border-box;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--sh-input-bg);
+  color: inherit;
+  font: 13px var(--sh-font);
+}
+.sh-collect-range input:focus {
+  outline: none;
+  border-color: var(--sh-accent);
+}
+.sh-collect-range input:disabled {
+  opacity: 0.5;
+}
+#shCollectAddAll {
+  margin: 6px 0 0 -12px;
+}
+.sh-collect-error {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--sh-find-error);
+}
+.sh-collect-help {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--sh-muted);
+}
+.sh-collect-list-title {
+  flex: none;
+}
+.sh-collect-empty {
+  flex: none;
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--sh-muted);
+}
+.sh-collect-empty[hidden] {
+  display: none;
+}
+.sh-collect-list {
+  flex: 1 1 auto;
+  min-height: 60px;
+  overflow-y: auto;
+  list-style: none;
+  margin: 0 -10px;
+  padding: 0 2px;
+}
+.sh-collect-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px 6px 2px;
+  border-radius: 8px;
+}
+.sh-collect-list li:hover,
+.sh-collect-list li:focus-within {
+  background: var(--sh-hover);
+}
+.sh-collect-list li.sh-dragging {
+  opacity: 0.4;
+}
+.sh-collect-handle {
+  flex: none;
+  color: var(--sh-muted);
+  cursor: grab;
+}
+.sh-collect-handle .sh-icon {
+  width: 16px;
+  height: 16px;
+}
+.sh-collect-thumb {
+  flex: none;
+  width: 56px;
+  min-height: 40px;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px var(--sh-side-border);
+}
+.sh-collect-thumb img {
+  display: block;
+  width: 56px;
+}
+.sh-collect-thumb[data-pending] {
+  height: 72px;
+}
+.sh-collect-thumb[data-pending] img {
+  display: none;
+}
+.sh-collect-text {
+  flex: 1;
+  min-width: 0;
+}
+.sh-collect-page {
+  font-weight: 500;
+}
+.sh-collect-name {
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--sh-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sh-collect-buttons {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+}
+.sh-collect-buttons .sh-icon-btn {
+  width: 28px;
+  height: 28px;
+  color: var(--sh-side-fg);
+}
+.sh-collect-buttons .sh-icon-btn .sh-icon {
+  width: 16px;
+  height: 16px;
+}
+.sh-collect-buttons .sh-icon-btn:disabled {
+  color: var(--sh-icon-disabled);
+}
+.sh-collect-foot {
+  flex: none;
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--sh-side-border);
+}
+.sh-collect-usage {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  color: var(--sh-muted);
+}
+.sh-collect-usage.sh-over {
+  color: var(--sh-find-error);
+}
+.sh-collect-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.sh-collect-list-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sh-collect-list-head #shCollectClear {
+  margin-inline-end: -12px;
+}
+
+/* 確認ダイアログ */
+.sh-dialog {
+  border: none;
+  border-radius: 12px;
+  padding: 20px 24px 16px;
+  width: min(440px, calc(100vw - 48px));
+  background: var(--sh-panel-bg);
+  color: var(--sh-panel-fg);
+  box-shadow: var(--sh-menu-shadow);
+  font: 14px/1.6 var(--sh-font);
+}
+.sh-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}
+.sh-dialog h2 {
+  font-size: 16px;
+  font-weight: 500;
+  margin: 0 0 8px;
+}
+.sh-dialog p {
+  margin: 0 0 16px;
+  color: var(--sh-panel-fg2);
+  white-space: pre-line;
+}
+.sh-dialog-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ---------------------------------------------------------------------------
+ * フェーズ3: ページ役割・製本用PDF出力
+ * ------------------------------------------------------------------------- */
+
+:root {
+  --sh-role-cover: #1a73e8;
+  --sh-role-back: #188038;
+  --sh-role-obi: #e37400;
+  --sh-role-obiFront: #d01884;
+  --sh-role-obiBack: #9334e6;
+}
+
+/* サムネイルの役割バッジ */
+#outerContainer #viewsManager #viewsManagerContent #thumbnailsView > .thumbnail {
+  position: relative;
+}
+.sh-role-badge {
+  position: absolute;
+  /* サムネイルの左下(左上は選択の丸、右上は削除の ✕ を出すため) */
+  bottom: 28px;
+  inset-inline-start: calc(50% - var(--thumbnail-width, 108px) / 2 + 4px);
+  z-index: 2;
+  padding: 1px 7px;
+  border-radius: 9px;
+  background: var(--sh-role-cover);
+  color: #ffffff;
+  font: 600 11px/16px var(--sh-font);
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 0 0 2px var(--sh-side-bg);
+}
+.sh-role-badge[data-role="back"] {
+  background: var(--sh-role-back);
+}
+.sh-role-badge[data-role="obi"] {
+  background: var(--sh-role-obi);
+}
+.sh-role-badge[data-role="obiFront"] {
+  background: var(--sh-role-obiFront);
+}
+.sh-role-badge[data-role="obiBack"] {
+  background: var(--sh-role-obiBack);
+}
+
+/* ページ役割のパネル */
+#shRolesPanel {
+  position: absolute;
+  top: var(--sh-toolbar-h);
+  bottom: 0;
+  inset-inline-end: 0;
+  width: 300px;
+  box-sizing: border-box;
+  padding: 4px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  background: var(--sh-side-bg);
+  color: var(--sh-side-fg);
+  border-inline-start: 1px solid var(--sh-side-border);
+  z-index: 20;
+  font: 13px var(--sh-font);
+}
+#shRolesPanel[hidden] {
+  display: none;
+}
+#outerContainer.sh-roles-open #viewerContainer:not(.pdfPresentationMode) {
+  inset-inline-end: 300px;
+}
+.sh-roles-status {
+  margin: 6px 0 4px;
+  font-size: 11.5px;
+  color: var(--sh-muted);
+}
+.sh-roles-body {
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+.sh-role-section {
+  padding: 8px 0;
+  border-top: 1px solid var(--sh-side-border);
+}
+.sh-role-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sh-role-head h3 {
+  flex: 1;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+}
+.sh-role-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--sh-role-cover);
+}
+.sh-role-dot[data-role="back"] {
+  background: var(--sh-role-back);
+}
+.sh-role-dot[data-role="obi"] {
+  background: var(--sh-role-obi);
+}
+.sh-role-dot[data-role="obiFront"] {
+  background: var(--sh-role-obiFront);
+}
+.sh-role-dot[data-role="obiBack"] {
+  background: var(--sh-role-obiBack);
+}
+.sh-role-add {
+  margin-inline-end: -8px;
+}
+.sh-role-pages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 2px 18px;
+}
+.sh-role-none {
+  font-size: 12px;
+  color: var(--sh-muted);
+}
+.sh-role-chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--sh-side-border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.sh-role-chip button {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: 12px var(--sh-font);
+  cursor: pointer;
+  height: 26px;
+}
+.sh-role-chip-go {
+  padding: 0 4px 0 10px;
+}
+.sh-role-chip-del {
+  width: 24px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.sh-role-chip-del .sh-icon {
+  width: 14px;
+  height: 14px;
+}
+.sh-role-chip button:hover {
+  background: var(--sh-hover);
+}
+
+/* 製本用PDF出力のダイアログ */
+.sh-bind-dialog {
+  width: min(760px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  padding: 0;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+}
+.sh-bind-dialog[open] {
+  display: flex;
+}
+.sh-bind-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 6px 24px;
+}
+.sh-bind-head h2 {
+  margin: 0;
+}
+.sh-bind-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+.sh-bind-main[hidden] {
+  display: none;
+}
+.sh-bind-scroll {
+  overflow-y: auto;
+  padding: 0 24px 8px;
+  min-height: 0;
+}
+.sh-bind-dialog h3 {
+  font-size: 13px;
+  font-weight: 500;
+  margin: 16px 0 8px;
+  color: var(--sh-panel-fg2);
+}
+.sh-dialog p.sh-bind-summary {
+  margin: 4px 0 12px;
+  color: var(--sh-panel-fg);
+  white-space: pre-line;
+}
+.sh-bind-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 12px;
+  align-items: center;
+  max-width: 460px;
+}
+.sh-bind-grid .sh-select,
+.sh-bind-field .sh-select {
+  padding: 6px 8px;
+  border: 1px solid var(--sh-btn-border);
+  background: transparent;
+  color: inherit;
+}
+.sh-bind-grid .sh-select:disabled {
+  opacity: 0.7;
+}
+.sh-dialog p.sh-bind-roles-note {
+  margin: 8px 0 4px;
+  font-size: 12.5px;
+  color: var(--sh-panel-fg2);
+}
+.sh-link-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--sh-btn-fg);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.sh-bind-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+  font-weight: 500;
+}
+.sh-bind-check input,
+.sh-bind-field input[type="radio"],
+.sh-bind-field input[type="checkbox"] {
+  accent-color: var(--sh-btn-primary-bg);
+}
+.sh-dialog p.sh-bind-warn {
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, #f9ab00 16%, transparent);
+  color: var(--sh-panel-fg);
+  font-size: 12.5px;
+}
+.sh-bind-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 2px;
+}
+.sh-bind-page {
+  width: 50px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.sh-bind-thumb {
+  width: 46px;
+  background: #ffffff center / cover no-repeat;
+  box-shadow: 0 0 0 1px rgba(128, 128, 128, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #80868b;
+  font-size: 10px;
+}
+.sh-bind-page.sh-blank .sh-bind-thumb {
+  background: repeating-linear-gradient(135deg, #ffffff 0 6px, #f1f3f4 6px 12px);
+  box-shadow: 0 0 0 1.5px #f9ab00;
+}
+.sh-bind-page.sh-cover .sh-bind-thumb {
+  box-shadow: 0 0 0 2px var(--sh-role-cover);
+}
+.sh-bind-label {
+  font-size: 10.5px;
+  color: var(--sh-panel-fg2);
+  white-space: nowrap;
+  max-width: 54px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sh-bind-page.sh-blank .sh-bind-label {
+  color: #b06000;
+}
+.sh-bind-sheets {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  font-size: 12px;
+}
+.sh-bind-sheet {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.sh-bind-sheet-no {
+  width: 46px;
+  color: var(--sh-panel-fg2);
+}
+.sh-bind-side {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.sh-bind-side-label {
+  color: var(--sh-panel-fg2);
+}
+.sh-bind-pair {
+  display: inline-flex;
+  border: 1px solid rgba(128, 128, 128, 0.6);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.sh-bind-mini {
+  min-width: 34px;
+  padding: 2px 4px;
+  text-align: center;
+  background: #ffffff;
+  color: #202124;
+  font-variant-numeric: tabular-nums;
+}
+.sh-bind-mini + .sh-bind-mini {
+  border-inline-start: 1px dashed rgba(128, 128, 128, 0.8);
+}
+.sh-bind-mini.sh-blank {
+  color: #b06000;
+  background: #fef7e0;
+}
+.sh-bind-details {
+  margin: 16px 0 4px;
+  border-top: 1px solid var(--sh-menu-sep);
+  padding-top: 8px;
+}
+.sh-bind-details summary {
+  cursor: pointer;
+  font-weight: 500;
+  padding: 4px 0;
+}
+.sh-bind-field {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--sh-menu-sep);
+  font-size: 13px;
+}
+.sh-bind-field[hidden] {
+  display: none;
+}
+.sh-bind-field-label {
+  color: var(--sh-panel-fg2);
+  padding-top: 2px;
+}
+.sh-bind-field-control label {
+  display: block;
+  margin: 2px 0;
+}
+.sh-bind-uses {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin-top: 8px;
+}
+.sh-bind-uses-title {
+  color: var(--sh-panel-fg2);
+}
+.sh-bind-field-control .sh-bind-uses label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+.sh-bind-uses label[hidden] {
+  display: none;
+}
+.sh-select.sh-select-small {
+  font-size: 12.5px;
+  padding: 3px 4px;
+}
+.sh-bind-input {
+  height: 28px;
+  box-sizing: border-box;
+  padding: 0 8px;
+  border: 1px solid var(--sh-btn-border);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: 13px var(--sh-font);
+  min-width: 240px;
+}
+.sh-bind-input.sh-short {
+  min-width: 90px;
+  width: 110px;
+}
+.sh-bind-names label {
+  margin: 4px 0;
+}
+.sh-dialog p.sh-bind-help {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  color: var(--sh-muted);
+}
+.sh-bind-foot {
+  padding: 10px 24px 16px;
+  border-top: 1px solid var(--sh-menu-sep);
+}
+.sh-dialog p.sh-bind-files,
+.sh-dialog p.sh-bind-progress {
+  margin: 0 0 8px;
+  font-size: 12.5px;
+}
+.sh-dialog p.sh-bind-progress:empty {
+  display: none;
+}
+.sh-bind-result {
+  padding: 4px 24px 18px;
+  overflow-y: auto;
+}
+.sh-bind-result[hidden] {
+  display: none;
+}
+.sh-dialog p.sh-bind-done {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--sh-panel-fg);
+  margin: 4px 0 8px;
+}
+.sh-bind-result-files,
+.sh-bind-guide {
+  margin: 0 0 12px;
+  padding-inline-start: 1.3em;
+  line-height: 1.8;
+}
+.sh-bind-guide li.sh-note {
+  list-style: none;
+  margin-inline-start: -1.3em;
+  margin-top: 8px;
+  color: var(--sh-panel-fg2);
+}
+
+/* 製本用PDF出力: 表紙・帯のページの指定 */
+.sh-bind-roles {
+  margin: 4px 0 14px;
+  padding: 10px 12px 2px;
+  border: 1px solid var(--sh-btn-border);
+  border-radius: 8px;
+}
+.sh-bind-roles-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.sh-bind-dialog .sh-bind-roles-head h3 {
+  margin: 0;
+}
+.sh-bind-roles .sh-bind-grid {
+  margin-bottom: 6px;
+}

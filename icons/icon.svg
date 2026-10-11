@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- 製本ビューアのアイコン: 開いた本(見開き) -->
+  <rect x="4" y="4" width="120" height="120" rx="26" fill="#d93025"/>
+  <path d="M64 34 C52 26 36 24 20 27 V96 C36 93 52 95 64 103 Z" fill="#ffffff"/>
+  <path d="M64 34 C76 26 92 24 108 27 V96 C92 93 76 95 64 103 Z" fill="#fde7e5"/>
+  <path d="M64 34 V103" stroke="#a52714" stroke-width="3" stroke-linecap="round"/>
+  <path d="M30 44 H54 M30 54 H54 M30 64 H50 M74 44 H98 M74 54 H98 M74 64 H94" stroke="#d93025" stroke-width="4" stroke-linecap="round" opacity="0.55"/>
+</svg>

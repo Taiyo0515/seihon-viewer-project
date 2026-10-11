@@ -1,0 +1,495 @@
+/* 詳細設定・初回案内ページの共通スタイル(Chrome の設定画面に近い見た目) */
+
+:root,
+:root[data-theme="light"] {
+  --bg: #f8f9fa;
+  --card: #ffffff;
+  --fg: #1f1f1f;
+  --fg2: #444746;
+  --muted: #5f6368;
+  --border: #e0e2e5;
+  --accent: #0b57d0;
+  --accent-fg: #ffffff;
+  --ok: #188038;
+  --warn: #b06000;
+  --danger: #c5221f;
+  --input-bg: #ffffff;
+  --shadow: 0 1px 2px rgba(60, 64, 67, 0.15), 0 1px 3px 1px rgba(60, 64, 67, 0.08);
+}
+:root[data-theme="dark"] {
+  --bg: #202124;
+  --card: #292a2d;
+  --fg: #e8eaed;
+  --fg2: #bdc1c6;
+  --muted: #9aa0a6;
+  --border: #3c4043;
+  --accent: #8ab4f8;
+  --accent-fg: #202124;
+  --ok: #81c995;
+  --warn: #fdd663;
+  --danger: #f28b82;
+  --input-bg: #202124;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px 1px rgba(0, 0, 0, 0.15);
+}
+
+* {
+  box-sizing: border-box;
+}
+[hidden] {
+  display: none !important;
+}
+html {
+  background: var(--bg);
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px/1.7 system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Sans", "Hiragino Kaku Gothic ProN",
+    "Yu Gothic UI", Meiryo, sans-serif;
+}
+a {
+  color: var(--accent);
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 28px 24px 8px;
+}
+.page-header h1 {
+  font-size: 22px;
+  font-weight: 500;
+  margin: 0;
+}
+.page-header .sub {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+main {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 8px 24px 48px;
+}
+
+.card {
+  background: var(--card);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 8px 24px 16px;
+  margin: 16px 0;
+}
+.card h2 {
+  font-size: 16px;
+  font-weight: 500;
+  margin: 12px 0 4px;
+}
+.row {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 16px;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+}
+.card h2 + .row {
+  border-top: none;
+}
+.label {
+  font-weight: 500;
+  padding-top: 2px;
+}
+.control {
+  min-width: 0;
+}
+.radios label,
+label.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 2px 0;
+  cursor: pointer;
+}
+.radios input,
+label.check input {
+  margin-top: 5px;
+  accent-color: var(--accent);
+}
+.default-mark {
+  margin-inline-start: 6px;
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 11px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  align-self: center;
+  white-space: nowrap;
+}
+.help {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+textarea {
+  width: 100%;
+  max-width: 480px;
+  font: 13px/1.6 ui-monospace, Menlo, Consolas, monospace;
+  color: var(--fg);
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+textarea:disabled {
+  opacity: 0.5;
+}
+textarea:focus-visible,
+.btn:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 17px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--accent);
+  font: 500 13px system-ui, sans-serif;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.btn.primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: transparent;
+}
+.btn.danger {
+  color: var(--danger);
+}
+.btn.small {
+  height: 28px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+
+.status {
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+.status.ok {
+  color: var(--ok);
+}
+.status.warn {
+  color: var(--warn);
+}
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.perf-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.perf-table th,
+.perf-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: start;
+  white-space: nowrap;
+}
+.perf-table td.name {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.perf-table td.num {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+.perf-table td.empty {
+  color: var(--muted);
+  text-align: center;
+}
+.perf-table tr:last-child td {
+  border-bottom: none;
+}
+
+dl.about {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 4px 16px;
+  margin: 12px 0;
+}
+dl.about dt {
+  color: var(--muted);
+}
+dl.about dd {
+  margin: 0;
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  padding: 10px 18px;
+  border-radius: 8px;
+  background: var(--fg);
+  color: var(--bg);
+  font-size: 13px;
+  box-shadow: var(--shadow);
+}
+
+/* 初回案内 */
+.check-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0;
+}
+.check-list li {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 8px;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+}
+.check-list li:first-child {
+  border-top: none;
+}
+.check-list .mark {
+  font-size: 18px;
+  line-height: 1.4;
+}
+.check-list .mark.ok {
+  color: var(--ok);
+}
+.check-list .mark.warn {
+  color: var(--warn);
+}
+.check-list h3 {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 500;
+}
+.check-list p {
+  margin: 4px 0 0;
+  color: var(--fg2);
+}
+ol.steps {
+  padding-inline-start: 1.4em;
+}
+ol.steps li {
+  margin: 4px 0;
+}
+.how-to {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px;
+  margin: 12px 0;
+}
+.how-to div {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.how-to h3 {
+  font-size: 14px;
+  margin: 0 0 4px;
+  font-weight: 500;
+}
+.how-to p {
+  margin: 0;
+  color: var(--fg2);
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+}
+
+/* 数値入力を文中に置く */
+.inline-input {
+  align-items: center;
+}
+.inline-input input[type="number"] {
+  width: 84px;
+  margin: 0 4px;
+  padding: 3px 6px;
+  font: 13px system-ui, sans-serif;
+  color: var(--fg);
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+div.inline-input {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.shortcut-view {
+  display: inline-block;
+  min-width: 120px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--input-bg);
+  font: 13px ui-monospace, Menlo, Consolas, monospace;
+}
+.shortcut-view.capturing {
+  outline: 2px solid var(--accent);
+}
+
+.select,
+.text-input {
+  padding: 4px 8px;
+  font: 13px system-ui, sans-serif;
+  color: var(--fg);
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.inline-input .text-input {
+  width: 110px;
+  margin: 0 2px;
+}
+
+/* 目次(詳細設定。画面の上に固定) */
+.toc {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 10px 24px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.toc a {
+  padding: 2px 10px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  color: var(--fg2);
+  font-size: 12.5px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.toc a:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.toc a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.card {
+  /* 目次(2段になることがある)の下に見出しが隠れないように */
+  scroll-margin-top: 100px;
+}
+@media (max-width: 640px) {
+  .toc {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 8px 16px;
+  }
+  .card {
+    scroll-margin-top: 56px;
+  }
+}
+
+/* 帯の役割の使い道 */
+.use-grid {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 220px);
+  align-items: center;
+  gap: 6px 12px;
+}
+.default-mark-block {
+  display: inline-block;
+  margin: 8px 0 0;
+}
+
+/* 書き出し・読み込み */
+.backup-preview {
+  margin: 10px 0 0;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 5%, var(--card));
+}
+.backup-preview-title {
+  margin: 0 0 4px;
+  font-weight: 500;
+}
+.backup-preview-list {
+  margin: 0 0 8px;
+  padding-inline-start: 1.3em;
+  color: var(--fg2);
+  font-size: 13px;
+}
+.backup-preview-list li {
+  margin: 2px 0;
+}
+.status.error {
+  color: var(--danger);
+}
+code {
+  font: 12px ui-monospace, Menlo, Consolas, monospace;
+  padding: 0 3px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+}
+
+/* 保存しているページ役割 */
+.roles-table td.roles {
+  white-space: normal;
+  min-width: 140px;
+}
+.roles-table td.name {
+  max-width: 240px;
+}
+.roles-table td.act {
+  text-align: end;
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

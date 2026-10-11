@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark light" />
+    <title>製本ビューア - はじめに</title>
+    <link rel="icon" type="image/png" href="/icons/icon32.png" />
+    <link rel="stylesheet" href="../common/page.css" />
+    <script src="welcome.js" type="module"></script>
+  </head>
+  <body>
+    <header class="page-header">
+      <img src="/icons/icon128.png" alt="" width="56" height="56" />
+      <div>
+        <h1>製本ビューアへようこそ</h1>
+        <p class="sub">インストールありがとうございます。最初に、次の設定を確認してください(1〜2分で終わります)。</p>
+      </div>
+    </header>
+
+    <main>
+      <section class="card" aria-labelledby="sec-check">
+        <h2 id="sec-check">はじめに確認すること</h2>
+        <ul class="check-list">
+          <li id="checkChrome">
+            <span class="mark">…</span>
+            <div>
+              <h3>Chrome のバージョン</h3>
+              <p class="detail">確認中…</p>
+            </div>
+          </li>
+          <li id="checkFile">
+            <span class="mark">…</span>
+            <div>
+              <h3>パソコン内のPDF(file://)を開くための許可</h3>
+              <p class="detail">確認中…</p>
+              <ol class="steps" hidden>
+                <li>下の「拡張機能の設定を開く」を押します。</li>
+                <li>「ファイルの URL へのアクセスを許可する」をオンにします。</li>
+                <li>オンにすると拡張機能が再読み込みされ、このページは閉じます(もう一度開くには、拡張機能のアイコンを右クリック →「使い方と初期設定の確認」)。</li>
+              </ol>
+              <p class="buttons" hidden><button type="button" class="btn primary" id="openExtSettings">拡張機能の設定を開く</button></p>
+            </div>
+          </li>
+          <li id="checkPdfSetting">
+            <span class="mark warn">!</span>
+            <div>
+              <h3>Chrome の「PDF ドキュメント」の設定</h3>
+              <p>
+                Chrome の設定で、PDF の扱いが「<b>PDF をダウンロードする</b>」になっていると、PDF がビューアで開かず保存されてしまいます。
+                「<b>Chrome で PDF を開く</b>」になっていることを確認してください(ここからは自動で確認できないため、目で確認をお願いします)。
+              </p>
+              <p class="buttons"><button type="button" class="btn" id="openPdfSettings">Chrome の PDF 設定を開く</button></p>
+            </div>
+          </li>
+        </ul>
+      </section>
+
+      <section class="card" aria-labelledby="sec-try">
+        <h2 id="sec-try">試してみる</h2>
+        <p>同梱のサンプル(12ページ)を製本表示で開きます。表紙(1ページ目)が右側に単独で、2ページ目以降が見開きで表示されれば正常です。</p>
+        <p class="buttons"><a class="btn primary" id="openSample" href="#">サンプルPDFを開く</a></p>
+      </section>
+
+      <section class="card" aria-labelledby="sec-how">
+        <h2 id="sec-how">使い方</h2>
+        <div class="how-to">
+          <div>
+            <h3>PDFを開く</h3>
+            <p>Webサイトや手元のPDFを開くと、自動で製本ビューアに切り替わります。ビューアにファイルをドラッグ&amp;ドロップしても開けます。</p>
+          </div>
+          <div>
+            <h3>製本表示</h3>
+            <p>ツールバーの本のアイコンで「製本表示 / 見開き / 単ページ」と、綴じ方向(左綴じ・右綴じ)を切り替えます。</p>
+          </div>
+          <div>
+            <h3>Chrome 標準で開く</h3>
+            <p>ツールバー右側の「Chrome標準で開く」で、同じPDFを Chrome 標準のビューアで開きます。戻るときは拡張機能のアイコンを押します。</p>
+          </div>
+          <div>
+            <h3>AI用にコピー</h3>
+            <p>ページを右クリック →「AI用にコピー」(Ctrl+Shift+C)で、ページが高解像度の画像としてコピーされます。AI のチャット欄にそのまま貼り付けられます。</p>
+          </div>
+          <div>
+            <h3>ページ収集</h3>
+            <p>右クリック →「収集に追加」で、いろいろな PDF のページを溜めておけます。ツールバーの収集ボタンから、まとめて1つの PDF に書き出せます。</p>
+          </div>
+          <div>
+            <h3>製本用PDF出力</h3>
+            <p>ツールバーの本と矢印のアイコンで、中綴じの本を印刷するための PDF(白紙の挿入・面付け)を作れます。表紙や帯のページは、出力の画面の「表紙・帯のページ」か、サイドバーの「選択」から指定します。</p>
+          </div>
+          <div>
+            <h3>ページの削除と保存</h3>
+            <p>☰ のサイドバーで、サムネイルの右上の ✕ でページを削除、「選択」でまとめて削除・役割の指定ができます。編集すると「保存」ボタンが出て、保存先を選んで新しい PDF として保存します(元のファイルは上書きしません)。</p>
+          </div>
+          <div>
+            <h3>設定を移す</h3>
+            <p>詳細設定の「設定の書き出し・読み込み」で、設定とページ役割をファイルに書き出し、別のパソコンや入れ直した製本ビューアに読み込めます。</p>
+          </div>
+          <div>
+            <h3>ショートカット</h3>
+            <p>Ctrl+F 検索 / Ctrl+P 印刷 / Ctrl+S 保存 / Ctrl+O ファイルを開く / Ctrl+[ ] 回転 / Ctrl+\ 幅・ページに合わせる / Ctrl+Shift+C AI用にコピー / 右綴じでは ← が次のページ</p>
+          </div>
+        </div>
+        <p class="buttons">
+          <button type="button" class="btn" id="openOptions">詳細設定を開く</button>
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark light" />
+    <title>製本ビューア - 詳細設定</title>
+    <link rel="icon" type="image/png" href="/icons/icon32.png" />
+    <link rel="stylesheet" href="../common/page.css" />
+    <script src="options.js" type="module"></script>
+  </head>
+  <body>
+    <header class="page-header">
+      <img src="/icons/icon48.png" alt="" width="32" height="32" />
+      <div>
+        <h1>製本ビューア 詳細設定</h1>
+        <p class="sub">変更はすぐに保存され、次に開くPDFから反映されます(テーマと綴じ方向は開いているビューアにもすぐ反映)。</p>
+      </div>
+    </header>
+
+    <nav class="toc" aria-label="設定の目次">
+      <a href="#sec-launch">起動</a>
+      <a href="#sec-view">表示</a>
+      <a href="#sec-ai">AI用コピー</a>
+      <a href="#sec-collect">ページ収集</a>
+      <a href="#sec-bind">製本用PDF出力</a>
+      <a href="#sec-guard">強制ダウンロード対策</a>
+      <a href="#sec-perf">速度ログ</a>
+      <a href="#sec-data">保存しているデータ</a>
+      <a href="#sec-backup">書き出し・読み込み</a>
+      <a href="#sec-about">この拡張について</a>
+    </nav>
+
+    <main>
+      <section class="card" aria-labelledby="sec-launch">
+        <h2 id="sec-launch">起動</h2>
+        <div class="row">
+          <div class="label">起動方式</div>
+          <div class="control radios">
+            <label><input type="radio" name="launchMode" value="auto" /> PDFを開くと自動で製本ビューアで開く<span class="default-mark">初期値</span></label>
+            <label><input type="radio" name="launchMode" value="manual" /> ボタンを押したときだけ製本ビューアで開く(普段は Chrome 標準)</label>
+            <p class="help">「ボタン」は、拡張機能のアイコン、または右クリックメニューの「製本ビューアで開く」です。</p>
+          </div>
+        </div>
+        <div class="row">
+          <label class="label" for="autoExcludeSites">自動切り替えしないサイト</label>
+          <div class="control">
+            <textarea id="autoExcludeSites" rows="3" placeholder="例: example.com&#10;docs.example.jp" spellcheck="false"></textarea>
+            <p class="help">1行に1サイト。ここに書いたサイト(とそのサブドメイン)のPDFは Chrome 標準ビューアで開きます。</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">パソコン内のPDF</div>
+          <div class="control">
+            <label class="check"><input type="checkbox" id="openLocalFiles" /> ローカルファイル(file://)のPDFも製本ビューアで開く<span class="default-mark">初期値</span></label>
+            <p class="status" id="fileAccessStatus">確認中…</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="sec-view">
+        <h2 id="sec-view">表示</h2>
+        <div class="row">
+          <div class="label">開いたときの表示</div>
+          <div class="control radios">
+            <label><input type="radio" name="initialView" value="book" /> 製本表示(表紙のみ単独、2ページ目以降は見開き)<span class="default-mark">初期値</span></label>
+            <label><input type="radio" name="initialView" value="spread" /> 通常の見開き(1-2、3-4…)</label>
+            <label><input type="radio" name="initialView" value="single" /> 単ページ(Chrome 標準と同じ縦1列)</label>
+            <p class="help">表示中のPDFは、ツールバーの本のアイコンからいつでも切り替えられます。</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">綴じ方向</div>
+          <div class="control radios">
+            <label><input type="radio" name="bindingDirection" value="ltr" /> 左綴じ(表紙は右側。横書きの本・一般的な数学書と同じ向き)<span class="default-mark">初期値</span></label>
+            <label><input type="radio" name="bindingDirection" value="rtl" /> 右綴じ(表紙は左側。縦書きの本・漫画と同じ向き)</label>
+            <p class="help">右綴じでは、← キーで次のページ、→ キーで前のページへ進みます(本をめくる向きと同じ)。</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">表示位置</div>
+          <div class="control">
+            <label class="check"><input type="checkbox" id="restorePosition" /> 同じPDFを再び開いたとき、前回見ていたページから表示する<span class="default-mark">初期値</span></label>
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">テーマ</div>
+          <div class="control radios">
+            <label><input type="radio" name="theme" value="system" /> システムに従う<span class="default-mark">初期値</span></label>
+            <label><input type="radio" name="theme" value="light" /> ライト</label>
+            <label><input type="radio" name="theme" value="dark" /> ダーク(Chrome 標準ビューアと同じ配色)</label>
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">印刷の画質</div>
+          <div class="control radios">
+            <label><input type="radio" name="printQuality" value="auto" /> 自動(50ページまでは高画質、それより多いときは標準)<span class="default-mark">初期値</span></label>
+            <label><input type="radio" name="printQuality" value="standard" /> 標準(150dpi。速く、大きな PDF でも止まりにくい)</label>
+            <label><input type="radio" name="printQuality" value="high" /> 高画質(300dpi。文字がくっきりするが、印刷の準備に時間とメモリを使う)</label>
+            <p class="help">製本ビューアの印刷は、ページを画像にしてから印刷します。もっとくっきり印刷したいときは、⋮ メニューの「Chrome標準ビューアで開いて印刷」を使ってください。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="sec-ai">
+        <h2 id="sec-ai">AI用コピー</h2>
+        <div class="row">
+          <div class="label">1ページのとき</div>
+          <div class="control radios">
+            <label><input type="radio" name="aiCopySingle" value="clipboard-png" /> PNG 画像をクリップボードへ(AI のチャット欄に貼り付けられる)<span class="default-mark">初期値</span></label>
+            <label><input type="radio" name="aiCopySingle" value="file-pdf" /> PDF をファイルに保存(元のテキスト・ベクターのまま)</label>
+            <label><input type="radio" name="aiCopySingle" value="file-png" /> PNG をファイルに保存</label>
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">複数ページのとき</div>
+          <div class="control radios">
+            <label><input type="radio" name="aiCopyMulti" value="pdf" /> 1つの PDF としてファイルに保存<span class="default-mark">初期値</span></label>
+            <label><input type="radio" name="aiCopyMulti" value="zip" /> PNG 画像をまとめて ZIP で保存</label>
+            <p class="help">Chrome のクリップボードには画像を1枚しか入れられないため、複数ページはファイルに保存します。サムネイルを Ctrl+クリックで複数選んだときと、ページ収集の書き出しで使います。</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">PNG の解像度</div>
+          <div class="control radios">
+            <label class="inline-input"><input type="radio" name="pngMode" value="longside" /> 長辺を <input type="number" id="pngLongSide" min="800" max="12000" step="100" /> ピクセルにする<span class="default-mark">初期値 2400</span></label>
+            <label class="inline-input"><input type="radio" name="pngMode" value="scale" /> 倍率 <input type="number" id="pngScale" min="1" max="8" step="0.5" /> 倍(1倍 = ビューアの100%表示 = 96dpi)</label>
+            <p class="help">
+              PNG は劣化しない形式(可逆圧縮)で作ります。長辺 2400 ピクセルは A4 で約 205dpi、A5・B5 で約 240〜290dpi で、小さな文字も潰れません。
+              大きくするほど文字はくっきりしますが、画像のファイルも大きくなり、AI のサービスによっては縮められたり受け付けられなかったりします。
+              クリップボードに入れられなかったときは、自動で解像度を下げて再挑戦し、それでも駄目なら PNG ファイルとして保存して知らせます。
+            </p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">ショートカット</div>
+          <div class="control">
+            <div class="shortcut-row">
+              <kbd id="aiCopyShortcutView" class="shortcut-view"></kbd>
+              <button type="button" class="btn small" id="aiCopyShortcutChange">変更…</button>
+              <button type="button" class="btn small" id="aiCopyShortcutReset">初期値に戻す</button>
+            </div>
+            <p class="status" id="aiCopyShortcutStatus" hidden></p>
+            <p class="help">ビューアで押すと、マウスの下のページ(サムネイルを複数選んでいるときは選んだページ)を AI 用にコピーします。Ctrl または Alt を含む組み合わせ、または F キーを登録できます。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="sec-collect">
+        <h2 id="sec-collect">ページ収集</h2>
+        <div class="row">
+          <div class="label">書き出し後</div>
+          <div class="control">
+            <label class="check"><input type="checkbox" id="collectClearAfterExport" /> 書き出したら、収集を自動で空にする</label>
+            <p class="help">初期値はオフ(書き出した後も収集は残ります)。</p>
+          </div>
+        </div>
+        <div class="row">
+          <label class="label" for="collectLimitMB">保存の上限</label>
+          <div class="control">
+            <div class="inline-input"><input type="number" id="collectLimitMB" min="50" max="20000" step="50" /> MB<span class="default-mark">初期値 1024 MB</span></div>
+            <p class="help">収集には、ページの元になった PDF も保存します(同じ PDF は1回だけ)。上限を超えて追加しようとすると確認します。</p>
+            <p class="status" id="collectUsage">確認中…</p>
+            <p class="buttons"><button type="button" class="btn small danger" id="collectClear">収集を空にする</button></p>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="sec-bind">
+        <h2 id="sec-bind">製本用PDF出力</h2>
+        <p class="help">ここで決めた内容は、製本用PDF出力の画面を開いたときの初期値になります(画面の「詳細設定」で、その回だけ変えることもできます)。</p>
+        <div class="row">
+          <div class="label">白紙を入れる位置</div>
+          <div class="control radios">
+            <label><input type="radio" name="bindBlankPosition" value="beforeBack" /> 裏表紙の直前<span class="default-mark">初期値</span></label>
+            <label><input type="radio" name="bindBlankPosition" value="afterCover" /> 表紙の直後</label>
+            <label><input type="radio" name="bindBlankPosition" value="custom" /> 毎回指定する(任意のページの間。複数の場所に分けられる)</label>
+            <p class="help">本体(表紙+本文+裏表紙)のページ数が4の倍数になるよう、0〜3枚の白紙を入れます。</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">面付け</div>
+          <div class="control">
+            <label class="check"><input type="checkbox" id="bindImpose" /> 面付けする(中綴じ用。用紙1枚の表裏に4ページ)<span class="default-mark">初期値</span></label>
+            <p class="help">オフにすると、白紙を入れた読む順の PDF を出力します(並べ替えはプリンターの小冊子印刷に任せます)。</p>
+          </div>
+        </div>
+        <div class="row">
+          <label class="label" for="bindPaper">用紙</label>
+          <div class="control">
+            <select id="bindPaper" class="select">
+              <option value="auto">自動(元のページから推定)</option>
+              <option value="A3">A3 横</option>
+              <option value="A4">A4 横</option>
+              <option value="A5">A5 横</option>
+              <option value="B4">B4 横(JIS)</option>
+              <option value="B5">B5 横(JIS)</option>
+              <option value="Letter">レター 横</option>
+              <option value="Tabloid">タブロイド 横</option>
+              <option value="double">元のページ2枚分</option>
+            </select>
+            <span class="default-mark">初期値 自動</span>
+            <p class="help">自動では、元のページ2枚を横に並べて収まる用紙を選びます(A5 の本なら A4 横、B5 の本なら B4 横)。</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">両面の綴じ方向</div>
+          <div class="control radios">
+            <label><input type="radio" name="bindDuplex" value="short" /> 短辺とじ(横向きの用紙に合う設定)<span class="default-mark">初期値</span></label>
+            <label><input type="radio" name="bindDuplex" value="long" /> 長辺とじ(裏面を上下逆に作ります。プリンターが長辺とじしかできない場合)</label>
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">大きさがそろっていないとき</div>
+          <div class="control radios">
+            <label><input type="radio" name="bindSizeRef" value="mode" /> 最も多い大きさに合わせる<span class="default-mark">初期値</span></label>
+            <label><input type="radio" name="bindSizeRef" value="first" /> 最初のページに合わせる</label>
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">帯の出力</div>
+          <div class="control radios">
+            <label><input type="radio" name="bindObiOutput" value="separate" /> 別の PDF にする<span class="default-mark">初期値</span></label>
+            <label><input type="radio" name="bindObiOutput" value="append" /> 本体の PDF の後ろに入れる(面付けはしない)</label>
+            <label><input type="radio" name="bindObiOutput" value="none" /> 出力しない</label>
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">帯の役割の使い道</div>
+          <div class="control">
+            <div class="use-grid">
+              <label for="bindUseObiFront">帯表紙</label>
+              <select id="bindUseObiFront" class="select" data-role-use>
+                <option value="obi">帯として出力</option>
+                <option value="cover">表紙の候補にする</option>
+                <option value="back">裏表紙の候補にする</option>
+                <option value="none">出力しない</option>
+              </select>
+              <label for="bindUseObi">帯</label>
+              <select id="bindUseObi" class="select" data-role-use>
+                <option value="obi">帯として出力</option>
+                <option value="cover">表紙の候補にする</option>
+                <option value="back">裏表紙の候補にする</option>
+                <option value="none">出力しない</option>
+              </select>
+              <label for="bindUseObiBack">帯裏表紙</label>
+              <select id="bindUseObiBack" class="select" data-role-use>
+                <option value="obi">帯として出力</option>
+                <option value="cover">表紙の候補にする</option>
+                <option value="back">裏表紙の候補にする</option>
+                <option value="none">出力しない</option>
+              </select>
+            </div>
+            <span class="default-mark default-mark-block">初期値 すべて「帯として出力」</span>
+            <p class="help">
+              「帯」「帯表紙」「帯裏表紙」の役割を付けたページを、製本用PDF出力でどう使うかを決めます。
+              初期値では本体には入れず、帯の PDF(上の「帯の出力」)にまとめます。
+              たとえば、帯の付いたカラーの表紙を本の表紙として使う場合は「帯表紙」を「表紙の候補にする」にすると、
+              出力の画面の「表紙・帯のページ」の「表紙」(または「裏表紙」)の欄で、候補として使われます。出力の画面で、その回だけ変えることもできます。
+            </p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">出力ファイル名</div>
+          <div class="control">
+            <div class="inline-input">元名<input type="text" id="bindNameSuffix" class="text-input" maxlength="30" />.pdf / 元名<span id="bindNameSuffixEcho"></span>_面付け.pdf</div>
+            <div class="inline-input">元名<input type="text" id="bindObiSuffix" class="text-input" maxlength="30" />.pdf(帯)</div>
+            <p class="help">同じ名前のファイルがあるときは「名前 (1).pdf」のように別の名前で保存します(上書きしません)。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="sec-guard">
+        <h2 id="sec-guard">強制ダウンロード対策</h2>
+        <div class="row">
+          <div class="label">対策</div>
+          <div class="control">
+            <label class="check"><input type="checkbox" id="guardEnabled" /> 「表示せずダウンロード」させるサイトのPDFも、ビューアで表示する<span class="default-mark">初期値</span></label>
+            <p class="help">
+              PDFと判断できるもの(ファイル名やURLが .pdf、または種類が PDF)に限って、ダウンロード指示を外して表示します。
+              PDFと判断できないものには触れません。POST の応答として返るPDFは対象外です。
+            </p>
+          </div>
+        </div>
+        <div class="row">
+          <label class="label" for="guardExcludeSites">対策の対象外にするサイト</label>
+          <div class="control">
+            <textarea id="guardExcludeSites" rows="3" placeholder="例: bank.example.com" spellcheck="false"></textarea>
+            <p class="help">1行に1サイト。ここに書いたサイトでは、サイトの指示どおりダウンロードさせます。</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">保存された元のファイル</div>
+          <div class="control radios">
+            <label><input type="radio" name="guardOriginalFile" value="keep" /> 残す<span class="default-mark">初期値</span></label>
+            <label><input type="radio" name="guardOriginalFile" value="delete" /> 削除する(ビューアで開いた後、ダウンロードしたファイルと履歴を消す)</label>
+            <p class="help">
+              それでもダウンロードが始まった場合(blob: の URL、ページのスクリプトによる保存など)、PDF なら保存されたファイルを製本ビューアで開きます(第3層)。
+              パソコン内のファイルを開くため「ファイルの URL へのアクセス」の許可が必要です。Alt+クリックなど自分で保存した PDF は開きません。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="sec-perf">
+        <h2 id="sec-perf">速度ログ</h2>
+        <div class="row">
+          <div class="label">速度ログ</div>
+          <div class="control">
+            <label class="check"><input type="checkbox" id="perfLog" /> PDFを開くたびに、最初のページが表示されるまでの時間を記録する</label>
+            <p class="help">オンにすると、ビューアの右下に計測結果が表示され、下の一覧に保存されます(この拡張の中にだけ保存。外部には送りません)。</p>
+          </div>
+        </div>
+        <div class="row" id="perfLogRow">
+          <div class="label">記録</div>
+          <div class="control">
+            <div class="table-wrap">
+              <table class="perf-table">
+                <thead><tr><th>日時</th><th>PDF</th><th>ページ数</th><th>サイズ</th><th>最初のページまで</th></tr></thead>
+                <tbody id="perfLogBody"><tr><td colspan="5" class="empty">まだ記録はありません</td></tr></tbody>
+              </table>
+            </div>
+            <p class="buttons">
+              <button type="button" class="btn" id="perfCopy">記録をコピー</button>
+              <button type="button" class="btn" id="perfClear">記録を消す</button>
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="sec-data">
+        <h2 id="sec-data">保存しているデータ</h2>
+        <div class="row">
+          <div class="label">ページ役割</div>
+          <div class="control">
+            <p class="status" id="rolesSummary">確認中…</p>
+            <div class="table-wrap" id="rolesTableWrap" hidden>
+              <table class="perf-table roles-table">
+                <thead><tr><th>PDF</th><th>ページ数</th><th>役割</th><th>更新日時</th><th><span class="visually-hidden">操作</span></th></tr></thead>
+                <tbody id="rolesBody"></tbody>
+              </table>
+            </div>
+            <p class="help">
+              ページ役割は、PDF の内容で見分けて PDF ごとに保存しています(同じ PDF を別の場所から開いても元に戻ります)。
+              消した役割は元に戻せません(下の「設定の書き出し」で書き出したファイルがあれば、読み込みで戻せます)。
+            </p>
+            <p class="buttons"><button type="button" class="btn small danger" id="rolesClearAll">ページ役割をすべて消す</button></p>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="sec-backup">
+        <h2 id="sec-backup">設定の書き出し・読み込み</h2>
+        <div class="row">
+          <div class="label">書き出し</div>
+          <div class="control">
+            <label class="check"><input type="checkbox" id="backupIncludeSettings" checked /> 詳細設定(このページのすべての項目)</label>
+            <label class="check"><input type="checkbox" id="backupIncludeRoles" checked /> <span>ページ役割(<span id="backupRolesCount">0</span> 件の PDF)</span></label>
+            <p class="buttons"><button type="button" class="btn primary" id="backupExport">ファイルに書き出す</button></p>
+            <p class="help">
+              JSON 形式のファイル(<code>製本ビューアの設定_日時.json</code>)を、Chrome のダウンロード先のフォルダに保存します。
+              収集したページと元の PDF、速度ログは含めません。
+            </p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">読み込み</div>
+          <div class="control">
+            <p class="buttons">
+              <button type="button" class="btn" id="backupImportPick">ファイルを選んで読み込む…</button>
+              <input type="file" id="backupImportFile" accept=".json,application/json" hidden />
+            </p>
+            <div id="backupPreview" class="backup-preview" hidden>
+              <p class="backup-preview-title" id="backupPreviewTitle"></p>
+              <ul class="backup-preview-list" id="backupPreviewList"></ul>
+              <label class="check"><input type="checkbox" id="importSettings" /> 詳細設定を読み込む(ファイルにある項目を置き換えます)</label>
+              <label class="check"><input type="checkbox" id="importRoles" /> ページ役割を読み込む(同じ PDF の役割は置き換え、ほかの PDF の役割は残します)</label>
+              <p class="buttons">
+                <button type="button" class="btn primary" id="backupImportApply">読み込む</button>
+                <button type="button" class="btn" id="backupImportCancel">やめる</button>
+              </p>
+            </div>
+            <p class="status" id="backupStatus" hidden></p>
+            <p class="help">別のパソコンの Chrome や、入れ直した製本ビューアに、設定とページ役割を移すときに使います。読み込む前に、何が変わるかを確認できます。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="sec-about">
+        <h2 id="sec-about">この拡張について</h2>
+        <dl class="about">
+          <dt>バージョン</dt><dd id="aboutVersion">-</dd>
+          <dt>PDF表示エンジン</dt><dd>PDF.js 6.4.299(Mozilla、Apache License 2.0、拡張内に同梱)</dd>
+          <dt>PDF加工</dt><dd>pdf-lib 1.17.1(MIT License、拡張内に同梱)</dd>
+          <dt>保存場所</dt><dd>設定・速度ログは chrome.storage、収集したページと元の PDF・ページ役割はこの拡張の中のデータベース(IndexedDB)。拡張機能を削除すると消えます。</dd>
+          <dt>通信</dt><dd>外部サーバーへの送信・解析・広告・更新確認は一切行いません。</dd>
+          <dt>状態</dt><dd id="aboutStatus">-</dd>
+        </dl>
+        <p class="buttons">
+          <a class="btn" href="../welcome/welcome.html" target="_blank">使い方と初期設定の確認</a>
+          <a class="btn" href="../THIRD_PARTY_NOTICES.txt" target="_blank">ライセンス表記</a>
+          <button type="button" class="btn danger" id="resetAll">すべて初期値に戻す</button>
+        </p>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  </body>
+</html>

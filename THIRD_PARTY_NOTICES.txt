@@ -1,0 +1,188 @@
+﻿製本ビューア ― 同梱しているソフトウェアと素材のライセンス表記
+====================================================================
+
+この拡張機能には、次の第三者のソフトウェア・素材が含まれています。
+それぞれの著作権は各権利者に帰属し、各ライセンスの条件に従って同梱しています。
+ライセンスの全文は、表の「全文」に書いたファイルにあります(拡張機能のフォルダ内)。
+
+--------------------------------------------------------------------
+1. PDF.js
+--------------------------------------------------------------------
+  バージョン : 6.4.299(legacy ビルド、ビルド番号 d0991a0d5)
+  入手元     : https://github.com/mozilla/pdf.js/releases/tag/v6.4.299
+               (pdfjs-6.4.299-legacy-dist.zip)
+  著作権     : Copyright 2012 Mozilla Foundation
+  ライセンス : Apache License, Version 2.0
+  全文       : pdfjs/LICENSE
+  同梱範囲   : pdfjs/build/pdf.mjs, pdfjs/build/pdf.worker.mjs,
+               pdfjs/web/viewer.mjs, pdfjs/web/viewer.css, pdfjs/web/images/
+               (以上は配布物のまま無改変)
+               pdfjs/web/locale/ は日本語(ja/viewer.ftl、無改変)のみを残し、
+               locale.json を日本語だけの一覧に書き換えています。
+               使わない部品(デバッグ用ファイル、ソースマップ、PDF 内の
+               JavaScript を実行する部品 pdf.sandbox.mjs と QuickJS、
+               日本語以外の翻訳、見本の PDF)は削除しています。
+  変更       : viewer/viewer.html は PDF.js の web/viewer.html をもとに、
+               ツールバー・サイドバー・検索バーを Chrome 風に組み替えたものです
+               (Apache License 2.0 第4条に基づく変更の表示)。
+
+  PDF.js の配布物には、さらに次の素材が含まれています。
+
+  1-1. Adobe CMap(文字コード対応表)
+       場所       : pdfjs/web/cmaps/
+       著作権     : Copyright 1990-2009 Adobe Systems Incorporated.
+       ライセンス : BSD 3-Clause License
+       全文       : pdfjs/web/cmaps/LICENSE
+
+  1-2. 標準14フォントの代替フォント(Foxit)
+       場所       : pdfjs/web/standard_fonts/Foxit*.pfb
+       著作権     : Copyright 2014 PDFium Authors
+       ライセンス : BSD 3-Clause License
+       全文       : pdfjs/web/standard_fonts/LICENSE_FOXIT
+
+  1-3. Liberation フォント
+       場所       : pdfjs/web/standard_fonts/Liberation*.ttf
+       著作権     : Copyright 2007-2011 Red Hat, Inc.
+       ライセンス : GNU General Public License v2(フォント例外条項付き)
+       全文       : pdfjs/web/standard_fonts/LICENSE_LIBERATION
+       備考       : フォントは無改変で同梱しています。PDF の表示に使うだけで、
+                    表示・保存した文書が GPL の対象になることはありません
+                    (ライセンスの例外条項 (a))。
+
+  1-4. OpenJPEG(JPEG 2000 画像の展開、WebAssembly)
+       場所       : pdfjs/web/wasm/openjpeg.wasm, openjpeg_nowasm_fallback.js
+       ライセンス : BSD 2-Clause License(OpenJPEG 本体と Mozilla の組み込み部分)
+       全文       : pdfjs/web/wasm/LICENSE_OPENJPEG,
+                    pdfjs/web/wasm/LICENSE_PDFJS_OPENJPEG
+
+  1-5. JBIG2 デコーダ(PDFium 由来、WebAssembly)
+       場所       : pdfjs/web/wasm/jbig2.wasm, jbig2_nowasm_fallback.js
+       著作権     : Copyright 2014 The PDFium Authors / Mozilla Foundation
+       ライセンス : BSD 3-Clause License および Apache License, Version 2.0
+       全文       : pdfjs/web/wasm/LICENSE_JBIG2,
+                    pdfjs/web/wasm/LICENSE_PDFJS_JBIG2
+
+  1-6. qcms(カラーマネジメント、WebAssembly)
+       場所       : pdfjs/web/wasm/qcms_bg.wasm
+       著作権     : Copyright (C) 2009-2024 Mozilla Corporation,
+                    Copyright (C) 1998-2007 Marti Maria
+       ライセンス : MIT License
+       全文       : pdfjs/web/wasm/LICENSE_QCMS,
+                    pdfjs/web/wasm/LICENSE_PDFJS_QCMS
+
+  1-7. ICC プロファイル(CGATS001Compat-v2-micro)
+       場所       : pdfjs/web/iccs/CGATS001Compat-v2-micro.icc
+       ライセンス : CC0 1.0 Universal(パブリックドメイン)
+       全文       : pdfjs/web/iccs/LICENSE
+
+--------------------------------------------------------------------
+2. Material Symbols(アイコンの図形データ)
+--------------------------------------------------------------------
+  使用箇所   : viewer/icons.js(ツールバー・メニューのアイコン)
+  著作権     : Copyright Google LLC
+  ライセンス : Apache License, Version 2.0
+  全文       : pdfjs/LICENSE(PDF.js と同じ Apache License 2.0 の全文)
+  備考       : Chrome 標準 PDF ビューアと同じアイコンにするため、Chromium の
+               PDF ビューアが使っている図形データ(下記3)を利用しています。
+
+--------------------------------------------------------------------
+3. Chromium(Chrome 標準 PDF ビューアの配色・寸法・アイコンの参照元)
+--------------------------------------------------------------------
+  参照箇所   : viewer/seihon.css の配色・寸法の値、viewer/icons.js のアイコン
+               (Chromium の chrome/browser/resources/pdf/ に含まれる値)
+  著作権     : Copyright 2015 The Chromium Authors
+  ライセンス : BSD 3-Clause License(全文は下記)
+
+  Copyright 2015 The Chromium Authors
+
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions are
+  met:
+
+     * Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+     * Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following disclaimer
+  in the documentation and/or other materials provided with the
+  distribution.
+     * Neither the name of Google LLC nor the names of its
+  contributors may be used to endorse or promote products derived from
+  this software without specific prior written permission.
+
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+  A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+  OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+  LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+  DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+--------------------------------------------------------------------
+4. pdf-lib
+--------------------------------------------------------------------
+  バージョン : 1.17.1(配布物 dist/pdf-lib.esm.min.js を無改変で同梱)
+  入手元     : https://www.npmjs.com/package/pdf-lib
+  場所       : lib/pdf-lib.esm.min.js
+  著作権     : Copyright (c) 2019 Andrew Dillon
+  ライセンス : MIT License
+  全文       : lib/LICENSE_PDF_LIB.md
+  用途       : PDF の加工(フェーズ2ではページの抜き出しの予備、フェーズ3で
+               製本用 PDF の作成に使用)
+
+  pdf-lib の配布物には、次のものが含まれています。
+
+  4-1. tslib(TypeScript の補助関数)
+       著作権     : Copyright (c) Microsoft Corporation
+       ライセンス : Apache License, Version 2.0(全文: pdfjs/LICENSE と同じ)
+
+  4-2. pako 1.0.11(圧縮・展開)
+       著作権     : Copyright (C) 2014-2017 by Vitaly Puzrin and Andrei Tuputcyn
+       ライセンス : MIT License および zlib License
+         (zlib License)
+         This software is provided 'as-is', without any express or implied
+         warranty. In no event will the authors be held liable for any damages
+         arising from the use of this software. Permission is granted to anyone
+         to use this software for any purpose, including commercial
+         applications, and to alter it and redistribute it freely, subject to
+         the following restrictions: 1. The origin of this software must not be
+         misrepresented; you must not claim that you wrote the original
+         software. If you use this software in a product, an acknowledgment in
+         the product documentation would be appreciated but is not required.
+         2. Altered source versions must be plainly marked as such, and must
+         not be misrepresented as being the original software. 3. This notice
+         may not be removed or altered from any source distribution.
+
+  4-3. @pdf-lib/standard-fonts 1.0.0(標準14フォントの寸法情報)
+       著作権     : Copyright (c) 2018 Andrew Dillon
+       ライセンス : MIT License
+       備考       : Adobe Systems Incorporated の Core 14 AFM(フォントの寸法情報)
+                    を元にしています。
+
+  4-4. @pdf-lib/upng 1.0.1(PNG の読み込み)
+       著作権     : Copyright (c) 2017 Photopea
+       ライセンス : MIT License
+
+  MIT License(上記の MIT License の本文)
+    Permission is hereby granted, free of charge, to any person obtaining a
+    copy of this software and associated documentation files (the
+    "Software"), to deal in the Software without restriction, including
+    without limitation the rights to use, copy, modify, merge, publish,
+    distribute, sublicense, and/or sell copies of the Software, and to permit
+    persons to whom the Software is furnished to do so, subject to the
+    following conditions: The above copyright notice and this permission
+    notice shall be included in all copies or substantial portions of the
+    Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+    EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+    NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+    DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+    OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+    USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+--------------------------------------------------------------------
+製本ビューア自体のコード(上記以外のファイル)は、個人利用のために
+作成したものです。
