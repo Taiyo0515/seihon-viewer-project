@@ -76,6 +76,9 @@ export const ICONS = {
   // ---- 0.2: 綴じ方向(左綴じ = 綴じ目が左、→ の向きに読み進める / 右綴じ = 綴じ目が右、← の向き)・元の場所 ----
   "bind-ltr": s('<rect x="5.5" y="3.5" width="13" height="17" rx="1.5"/><path d="M8.5 3.5v17" stroke-width="2.6"/><path d="M11.5 12h4.5M14 9.5l2.5 2.5-2.5 2.5"/>'),
   "bind-rtl": s('<rect x="5.5" y="3.5" width="13" height="17" rx="1.5"/><path d="M15.5 3.5v17" stroke-width="2.6"/><path d="M12.5 12H8M10 9.5 7.5 12l2.5 2.5"/>'),
+  // 0.3 スキャンの整え: 見開きを真ん中で分ける / ばらした冊子を並べ替える
+  "scan-split": s('<rect x="2.5" y="5.5" width="19" height="13" rx="1.2"/><path d="M12 3.5v17" stroke-dasharray="2.2 1.8"/><path d="M5.5 9.5h3.5M5.5 12h3.5M15 9.5h3.5M15 12h3.5"/>'),
+  "scan-booklet": s('<path d="M4.5 4.5h7v15h-7z"/><path d="M12.5 4.5h7v15h-7z"/><path d="M8 9.5v5M6.5 11l1.5-1.5 1.5 1.5M16 9.5v5M14.5 13l1.5 1.5 1.5-1.5"/>'),
   "link": s('<path d="M10 13.5a4 4 0 0 0 5.66.34l2.83-2.83a4 4 0 0 0-5.66-5.66l-1.4 1.4"/><path d="M14 10.5a4 4 0 0 0-5.66-.34l-2.83 2.83a4 4 0 0 0 5.66 5.66l1.4-1.4"/>'),
   "arrow-drop-down": s('<path d="m8 10 4 4 4-4"/>'),
   "file-pdf": s('<path d="M6 3.5h8l4 4v13H6z"/><path d="M14 3.5v4h4"/><path d="M8.5 13h7M8.5 16h5"/>'),

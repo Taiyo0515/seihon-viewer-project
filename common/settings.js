@@ -108,6 +108,16 @@ export const DEFAULT_SETTINGS = Object.freeze({
   /** 付属の出力ファイル名に付ける言葉(元名_付属.pdf) */
   bindObiSuffix: "_付属",
 
+  // ---- スキャンの整え(0.3) ----
+  /**
+   * スキャンした見開き(本・ノートを開いてスキャンしたもの)を開いたとき:
+   * "auto" 自動で1ページずつに分けて表示する / "ask" ツールバーのボタンで知らせる / "off" 何もしない
+   * (ばらした冊子の並べ替えは、いつもボタンを押してから。PDF ごとに選んだ整え方は覚えておく)
+   */
+  scanArrange: "auto",
+  /** 見開きを分けるとき、スキャンで入った余分なふち(余白・影・本の縁・ごみ)を除いて、ページの大きさをそろえる */
+  scanTrim: true,
+
   // ---- 速度 ----
   /** 速度ログ(画面右下の計測表示とログの保存) */
   perfLog: false,
@@ -153,6 +163,8 @@ export const SETTING_LABELS = Object.freeze({
   bindUseBookmark: "しおりの使い道",
   bindNameSuffix: "出力ファイル名(本体)",
   bindObiSuffix: "出力ファイル名(付属)",
+  scanArrange: "スキャンした見開き",
+  scanTrim: "スキャンの余白を除く",
   perfLog: "速度ログ",
 });
 
@@ -179,6 +191,7 @@ const ENUMS = {
   bindUseFlapFront: ["obi", "cover", "back", "none"],
   bindUseFlapBack: ["obi", "cover", "back", "none"],
   bindUseBookmark: ["obi", "cover", "back", "none"],
+  scanArrange: ["auto", "ask", "off"],
 };
 
 /** 数値設定の範囲(範囲外は初期値に戻す) */

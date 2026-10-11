@@ -26,6 +26,8 @@ export class DocSource {
     /** パスワードを入力して開いた文書 */
     this.passwordDocs = new WeakSet();
     this.loadingNeedsPassword = false;
+    /** 次に開く文書の指紋(内容から計算せずに決めておくもの。整えたスキャンの PDF など) */
+    this.nextKey = null;
 
     // パスワード入力画面が出たかどうかを記録する(パスワード付きの PDF は、復号した写しを保存するため)
     const prompt = app.passwordPrompt;
@@ -41,19 +43,36 @@ export class DocSource {
         this.passwordDocs.add(app.pdfDocument);
       }
       this.loadingNeedsPassword = false;
+      // ほかの部品(ページ役割など)より先に、決めておいた指紋を登録する
+      if (this.nextKey && app.pdfDocument) {
+        this.keys.set(app.pdfDocument, Promise.resolve(this.nextKey));
+      }
+      this.nextKey = null;
     });
+  }
+
+  /**
+   * 次に開く文書の指紋を、先に決めておく(0.3: 整えたスキャンの PDF)。
+   * 整えた PDF は、同じ元の PDF・同じ整え方なら同じ指紋にして、ページ役割などを次に開いたときも使えるようにする。
+   */
+  presetNextKey(key) {
+    this.nextKey = key || null;
   }
 
   /** 新しい文書を開き始めるときに呼ぶ */
   resetForOpen() {
     this.loadingNeedsPassword = false;
+    this.nextKey = null;
   }
 
   /** 書き出すファイルの名前の元(拡張子なし) */
   baseName() {
     const current = this.getCurrent();
     let name = "";
-    if (current.kind === "file" && current.name) {
+    if (current.arranged?.fileName) {
+      // 整えたスキャンの PDF(元の名前_分割.pdf など)
+      name = current.arranged.fileName;
+    } else if (current.kind === "file" && current.name) {
       name = current.name;
     } else {
       name = this.app._docFilename || "";

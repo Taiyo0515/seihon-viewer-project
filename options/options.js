@@ -42,8 +42,9 @@ const RADIO_SETTINGS = [
   "bindDuplex",
   "bindSizeRef",
   "bindObiOutput",
+  "scanArrange",
 ];
-const CHECK_SETTINGS = ["openLocalFiles", "restorePosition", "guardEnabled", "perfLog", "collectClearAfterExport", "bindImpose"];
+const CHECK_SETTINGS = ["openLocalFiles", "restorePosition", "guardEnabled", "perfLog", "collectClearAfterExport", "bindImpose", "scanTrim"];
 const SELECT_SETTINGS = [
   "bindPaper",
   "bindUseObiFront",
@@ -642,6 +643,29 @@ async function renderStatus() {
   }
 }
 
+// ---- スキャンの整え(0.3): PDF ごとに覚えている整え方 ------------------------------
+const SCAN_CHOICES_KEY = "scanChoices";
+
+async function renderScanChoices() {
+  let count = 0;
+  try {
+    const items = await chrome.storage.local.get(SCAN_CHOICES_KEY);
+    count = Object.keys(items[SCAN_CHOICES_KEY] || {}).length;
+  } catch {}
+  $("scanChoicesStatus").textContent = count ? `${count} 件の PDF の整え方を覚えています。` : "覚えている整え方はありません。";
+  $("clearScanChoices").disabled = !count;
+}
+
+function bindScanChoices() {
+  $("clearScanChoices").addEventListener("click", async () => {
+    if (!confirm("PDF ごとに覚えている整え方を消しますか?(次に開いたときは、上の設定のとおりに表示します)")) {
+      return;
+    }
+    await chrome.storage.local.remove(SCAN_CHOICES_KEY);
+    toast("覚えている整え方を消しました");
+  });
+}
+
 // ---- 起動 -------------------------------------------------------------------
 const settings = await loadSettings();
 render(settings);
@@ -650,6 +674,8 @@ renderStatus();
 renderCollectUsage();
 renderRoles();
 renderHelper();
+renderScanChoices();
+bindScanChoices();
 onDataChanged(({ kind }) => {
   if (kind === "collection") {
     renderCollectUsage();
@@ -666,5 +692,8 @@ onSettingsChanged(next => {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && changes.perfLogs) {
     renderPerfLogs(changes.perfLogs.newValue || []);
+  }
+  if (area === "local" && changes[SCAN_CHOICES_KEY]) {
+    renderScanChoices();
   }
 });

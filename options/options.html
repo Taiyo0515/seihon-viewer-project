@@ -108,6 +108,37 @@
         </div>
       </section>
 
+      <section class="card" aria-labelledby="sec-scan">
+        <h2 id="sec-scan">スキャンの整え</h2>
+        <div class="row">
+          <div class="label">スキャンした見開き</div>
+          <div class="control radios">
+            <label><input type="radio" name="scanArrange" value="auto" /> 自動で1ページずつに分けて表示する<span class="default-mark">初期値</span></label>
+            <label><input type="radio" name="scanArrange" value="ask" /> 分けるかどうか聞く(ツールバーに「見開きを分ける」のボタンを出す)</label>
+            <label><input type="radio" name="scanArrange" value="off" /> 何もしない(⋮ メニューの「スキャンを整える…」からは使えます)</label>
+            <p class="help">
+              本・ノートを開いてプリンター(コピー機)でスキャンした PDF を開くと、ノド(綴じ目)の位置で1ページずつに分けて表示します。
+              ばらした中綴じの冊子を両面スキャンした PDF は、ツールバーの「冊子を並べ替える」で、表紙から裏表紙の順に並べ替えられます。
+              画像は作り直さないので、画質は元のままです。元の PDF のファイルは変えません。
+            </p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">余白</div>
+          <div class="control">
+            <label class="check"><input type="checkbox" id="scanTrim" /> 見開きを分けるとき、スキャンで入った余分なふち(余白・影・本の縁・ごみ)を除いて、ページの大きさをそろえる<span class="default-mark">初期値</span></label>
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">PDF ごとの整え方</div>
+          <div class="control">
+            <p class="help">PDF ごとに選んだ整え方(「元に戻す」を選んだことも含む)を覚えておき、次に開いたときも同じように表示します。</p>
+            <p class="status" id="scanChoicesStatus"></p>
+            <button type="button" class="btn" id="clearScanChoices">覚えている整え方を消す</button>
+          </div>
+        </div>
+      </section>
+
       <section class="card" aria-labelledby="sec-copy">
         <h2 id="sec-copy">コピー・画像</h2>
         <p class="help">右クリックの「コピー」、ショートカット、サムネイルを選んでのコピー、ページ収集の「PDF としてコピー」「画像としてコピー」の動きを決めます。</p>

@@ -28,6 +28,8 @@ import { ViewerContextMenu, shortcutLabel } from "./ui/context-menu.js";
 import { EmptyState, ErrorPanel, Toast, setupDropZone } from "./ui/panels.js";
 import { PopupMenu } from "./ui/popup.js";
 import { RolesPanel } from "./ui/roles-panel.js";
+import { ScanArranger } from "./scan/scan-arranger.js";
+import { ScanChip, ScanDialog } from "./ui/scan-ui.js";
 import { SidebarTabs } from "./ui/sidebar.js";
 import { SourceMenu } from "./ui/source-menu.js";
 import { ThumbSelection } from "./ui/thumb-select.js";
@@ -88,6 +90,21 @@ const collection = new Collection({
 const pageRoles = new PageRoles({ app, docSource, toast });
 // ---- 0.1: ページの削除と保存 ----
 const pageEditor = new PageEditor({ app, toast, docSource, roles: pageRoles });
+// ---- 0.3: スキャンの整え(見開きの分割・余白の除去・冊子の並べ替え) ----
+const scanArranger = new ScanArranger({
+  app,
+  toast,
+  docSource,
+  pageEditor,
+  getSettings,
+  getCurrent: () => current,
+  getDirection: () => book.direction,
+  openDocument: args => app.open(args),
+  book,
+});
+const scanDialog = new ScanDialog({ arranger: scanArranger });
+scanArranger.openDialog = () => scanDialog.open();
+new ScanChip({ arranger: scanArranger, dialog: scanDialog, toolbar });
 let rolesPanel = null;
 let bindDialog = null;
 
@@ -215,9 +232,17 @@ function sanitizeViewHistory() {
 {
   const originalOpen = app.open.bind(app);
   app.open = async args => {
-    // 編集して保存していない PDF を閉じる前に確かめる
-    if (app.pdfDocument && !(await pageEditor.guard("別の PDF を開く"))) {
-      return undefined;
+    // 製本ビューアが自分で開く文書(0.3: 整えたスキャンの PDF・元のスキャンに戻すとき)。出どころは元の文書のものを引き継ぐ
+    const special = args?.seihon || null;
+    if (special) {
+      delete args.seihon;
+    }
+    // 編集して保存していない PDF を閉じる前に確かめる(自分で開くときは、呼ぶ側で確かめている)
+    if (app.pdfDocument && !special && !(await pageEditor.guard("別の PDF を開く"))) {
+      return false;
+    }
+    if (!special) {
+      scanArranger.beforeUserOpen();
     }
     // いまの文書は閉じるので、編集の状態(「保存」ボタンなど)も消す
     pageEditor.resetFor(null);
@@ -225,11 +250,20 @@ function sanitizeViewHistory() {
     emptyState.hide();
     toolbar.setLoading(true);
     docSource.resetForOpen();
+    if (special?.key) {
+      docSource.presetNextKey(special.key);
+    }
     thumbSelection.clear();
     annotations.reset();
     sidebarTabs.reset();
     budget.reset();
-    if (args.url && String(args.url).startsWith("blob:")) {
+    if (special) {
+      current = { ...special.current };
+      delete current.arranged;
+      if (special.arranged) {
+        current.arranged = special.arranged;
+      }
+    } else if (args.url && String(args.url).startsWith("blob:")) {
       let name = args.originalUrl || "";
       try {
         name = decodeURIComponent(name);
@@ -245,10 +279,11 @@ function sanitizeViewHistory() {
     sanitizeViewHistory();
     book.applyInitialOptions(book.mode || settings.initialView, book.direction);
     try {
-      return await originalOpen(args);
+      await originalOpen(args);
+      return true;
     } catch (reason) {
       showLoadError(reason);
-      return undefined;
+      return false;
     }
   };
 }
@@ -438,6 +473,19 @@ function showFileAccessHelp(fileUrl) {
 // Chrome 標準ビューアで開く
 // ---------------------------------------------------------------------------
 async function openNative() {
+  if (current.arranged && app.pdfDocument) {
+    // 整えたスキャンの PDF: 同じ内容を新しいタブの Chrome 標準ビューアで開く(このタブはそのまま)
+    if (pageEditor.dirty || hasEdits()) {
+      await openEditedInNative();
+      return;
+    }
+    const data = await app.pdfDocument.getData();
+    const url = URL.createObjectURL(new Blob([data], { type: "application/pdf" }));
+    window.open(url, "_blank");
+    setTimeout(() => URL.revokeObjectURL(url), 120000);
+    toast.show("整えた PDF を、新しいタブの Chrome 標準ビューアで開きました", { duration: 5000 });
+    return;
+  }
   if (current.kind === "url" && /^(https?|file):/i.test(current.url || "")) {
     // このタブを Chrome 標準ビューアに切り替える(編集した内容は持っていけない)
     if (!(await pageEditor.guard("Chrome標準ビューアに切り替える"))) {
@@ -482,10 +530,24 @@ document.getElementById("shOpenNative").addEventListener("click", () => openNati
 const downloadButton = document.getElementById("shDownload");
 const downloadMenu = new PopupMenu({
   anchor: downloadButton,
-  items: () => [
-    { label: "編集した内容を含めて保存…", hint: "保存先を選んで、新しい PDF として保存します", onSelect: () => pageEditor.save() },
-    { label: "元のPDFを保存(編集は含めない)", onSelect: () => app.download() },
-  ],
+  items: () => {
+    const items = [];
+    if (hasEdits()) {
+      items.push({ label: "編集した内容を含めて保存…", hint: "保存先を選んで、新しい PDF として保存します", onSelect: () => pageEditor.save() });
+    }
+    if (current.arranged) {
+      // 0.3: 整えたスキャンの PDF を表示しているとき
+      items.push({
+        label: hasEdits() ? "整えた PDF を保存(編集は含めない)…" : "整えた PDF を保存…",
+        hint: "スキャンを分けた・並べ替えた PDF を、保存先を選んで保存します(画質は元のまま)",
+        onSelect: () => scanArranger.saveArranged(),
+      });
+      items.push({ label: "元の PDF を保存(整える前のスキャン)", onSelect: () => scanArranger.saveOriginal() });
+    } else {
+      items.push({ label: "元のPDFを保存(編集は含めない)", onSelect: () => app.download() });
+    }
+    return items;
+  },
 });
 /** 元の PDF から変えたところがある(ページの削除・書き込み・フォームの入力。保存したかどうかは問わない) */
 function hasEdits() {
@@ -496,7 +558,7 @@ downloadButton.addEventListener("click", () => {
   if (!app.pdfDocument) {
     return;
   }
-  if (hasEdits()) {
+  if (hasEdits() || current.arranged) {
     downloadMenu.toggle();
   } else {
     app.download(); // 元のPDFをそのまま保存(再生成しない)
@@ -527,7 +589,7 @@ window.addEventListener(
     e.stopImmediatePropagation();
     if (pageEditor.dirty) {
       pageEditor.save();
-    } else if (hasEdits()) {
+    } else if (hasEdits() || current.arranged) {
       downloadMenu.open();
     } else {
       app.download();
@@ -657,8 +719,13 @@ app.eventBus.on("pagesedited", () => updatePrintResolution());
 async function openNativeForPrint() {
   // ページを削除したり書き込んだりしていれば、その内容を反映した PDF を新しいタブの Chrome 標準ビューアで開く
   // (元の PDF に切り替えると、削除したページも印刷され、書き込みは印刷されないため)
-  if (app.pdfDocument && hasEdits()) {
-    await openEditedInNative();
+  if (app.pdfDocument && (hasEdits() || current.arranged)) {
+    if (hasEdits()) {
+      await openEditedInNative();
+    } else {
+      await openNative();
+      toast.show("開いたタブで Ctrl+P を押して印刷してください。", { duration: 6000 });
+    }
     return;
   }
   if (current.kind === "url") {
@@ -713,6 +780,8 @@ bindDirButton.addEventListener("click", () => {
 function changeDirection(direction) {
   book.setDirection(direction);
   saveSettings({ bindingDirection: direction }).catch(() => {});
+  // 0.3: スキャンを整えて表示していれば、新しい綴じ方向で並べ直す
+  scanArranger.onDirectionChanged(direction);
 }
 
 function updateViewButtons() {
@@ -773,6 +842,13 @@ const moreMenu = new PopupMenu({
       { label: `ページ収集を表示(${collection.count}ページ)`, icon: "collect", onSelect: () => collectPanel.open() },
       { separator: true },
       { label: "製本用PDF出力…", icon: "bind-output", disabled: !hasDoc, onSelect: () => bindDialog.open() },
+      {
+        label: "スキャンを整える(見開きの分割・冊子の並べ替え)…",
+        icon: "scan-split",
+        disabled: !hasDoc || !scanArranger.base,
+        hint: "スキャンした見開きを1ページずつに分けたり、ばらした冊子を表紙から順に並べ替えたりします(画質は元のまま)",
+        onSelect: () => scanDialog.open(),
+      },
       {
         label: "ページを選ぶ(削除・カバーや帯などの指定)",
         icon: "select",
@@ -1021,6 +1097,8 @@ window.__seihonViewer = {
   thumbSelection,
   pageRoles,
   sourceMenu,
+  scanArranger,
+  scanDialog,
   rolesPanel,
   bindDialog,
   pageEditor,

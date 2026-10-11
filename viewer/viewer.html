@@ -79,6 +79,9 @@
         </div>
 
         <div class="sh-end">
+          <button id="shScan" class="sh-chip-btn sh-scan-btn" type="button" aria-haspopup="menu" aria-expanded="false" hidden>
+            <span class="sh-chip-icon" data-icon="scan-split"></span><span class="sh-chip-label" id="shScanLabel">見開きを分ける</span>
+          </button>
           <button id="shSaveEdits" class="sh-chip-btn sh-save-btn" type="button" title="編集した内容(ページの削除・書き込みなど)を、保存先を選んで新しい PDF として保存します (Ctrl+S)" aria-label="編集した内容を保存" hidden>
             <span class="sh-chip-icon" data-icon="save"></span><span class="sh-chip-label">保存</span>
           </button>
@@ -1367,6 +1370,57 @@
           <button id="shRolesOutput" class="sh-btn sh-btn-primary sh-btn-small" type="button">製本用PDF出力…</button>
         </div>
       </aside>
+
+      <!-- スキャンを整えるダイアログ(0.3) -->
+      <dialog id="shScanDialog" class="sh-dialog sh-bind-dialog sh-scan-dialog" aria-labelledby="shScanTitle">
+        <div class="sh-bind-head">
+          <h2 id="shScanTitle">スキャンを整える</h2>
+          <button id="shScanClose" class="sh-icon-btn" type="button" title="閉じる" aria-label="閉じる" data-icon="close"></button>
+        </div>
+        <div class="sh-bind-main">
+          <div class="sh-bind-scroll">
+            <fieldset class="sh-scan-modes">
+              <legend>整え方</legend>
+              <label class="sh-scan-mode"><input type="radio" name="shScanMode" value="spread" />
+                <span><b>見開きを1ページずつに分ける</b><span class="sh-scan-note">本・ノートを開いてスキャンしたもの。ノド(綴じ目)の位置で分けます</span></span></label>
+              <label class="sh-scan-mode"><input type="radio" name="shScanMode" value="booklet" />
+                <span><b>冊子の順に並べ替える</b><span class="sh-scan-note">中綴じの冊子をばらして、両面スキャンしたもの。真ん中で分けて、表紙から裏表紙の順に並べます</span></span></label>
+              <label class="sh-scan-mode"><input type="radio" name="shScanMode" value="none" />
+                <span><b>元のまま</b><span class="sh-scan-note">スキャンしたページをそのまま表示します</span></span></label>
+            </fieldset>
+            <label class="sh-bind-check"><input type="checkbox" id="shScanTrim" /> 余白を除く(スキャンで入った余分なふち・影・本の縁やごみを切り取り、全部のページを同じ大きさにそろえる)</label>
+            <div class="sh-bind-field">
+              <div class="sh-bind-field-label">綴じ方向</div>
+              <div class="sh-bind-field-control">
+                <label><input type="radio" name="shScanDirection" value="ltr" /> 左綴じ(横書き。左のページが先・表紙が右)</label>
+                <label><input type="radio" name="shScanDirection" value="rtl" /> 右綴じ(縦書き・漫画。右のページが先・表紙が左)</label>
+              </div>
+            </div>
+            <div id="shScanBookletOptions" class="sh-bind-field" hidden>
+              <div class="sh-bind-field-label">スキャンした順</div>
+              <div class="sh-bind-field-control">
+                <label><input type="radio" name="shScanSheetOrder" value="outer" /> 外側の紙(表紙が載った紙)から</label>
+                <label><input type="radio" name="shScanSheetOrder" value="inner" /> 内側の紙(真ん中の紙)から</label>
+                <label><input type="checkbox" id="shScanFirstInner" /> 1枚ごとに、内側の面(表紙の無い側)を先にスキャンした</label>
+                <label><input type="checkbox" id="shScanFlipBacks" /> 後からスキャンした面が上下逆さまになっている</label>
+                <p class="sh-bind-help">プレビューで、1ページ目が表紙になっているか確かめてください。並びがおかしいときは、上の「綴じ方向」とここを変えてみてください。</p>
+              </div>
+            </div>
+            <p id="shScanSummary" class="sh-bind-summary"></p>
+            <p id="shScanMessage" class="sh-bind-warn" role="status" hidden></p>
+            <h3>プレビュー(読む順)</h3>
+            <div id="shScanPreview" class="sh-scan-preview" aria-label="整えたページの並び"></div>
+            <p class="sh-bind-help">画像は作り直さないので、画質は元のままです。元の PDF のファイルは変えません(整えた PDF は、ツールバーのボタンの「整えた PDF を保存」で別のファイルとして保存できます)。</p>
+          </div>
+          <div class="sh-bind-foot">
+            <p id="shScanProgress" class="sh-bind-progress" role="status"></p>
+            <div class="sh-dialog-buttons">
+              <button id="shScanCancel" class="sh-btn" type="button">キャンセル</button>
+              <button id="shScanApply" class="sh-btn sh-btn-primary" type="button">この方法で表示</button>
+            </div>
+          </div>
+        </div>
+      </dialog>
 
       <!-- 製本用PDF出力のダイアログ -->
       <dialog id="shBindDialog" class="sh-dialog sh-bind-dialog" aria-labelledby="shBindTitle">
