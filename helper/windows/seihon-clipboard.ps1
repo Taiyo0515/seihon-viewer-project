@@ -1,12 +1,21 @@
 # Seihon Viewer - clipboard helper for Windows (Chrome native messaging host)
 #
-# The Seihon Viewer extension saves a PDF or images in the Downloads folder and sends their paths here.
-# This script puts those files on the clipboard (like "Copy" in Explorer), so they can be pasted as files.
-# It only reads one message from Chrome, sets the clipboard and exits. It does not use the network.
+# The Seihon Viewer extension sends the data of a PDF or images. This script saves them in the
+# "Downloads" folder (sub folder given by the extension) and puts the files on the clipboard
+# (like "Copy" in Explorer), so they can be pasted as files. Existing files are never overwritten.
+# Saving does not go through Chrome downloads, so Chrome's "Ask where to save" setting does not apply.
+# It does not use the network.
 #
-# Message (UTF-8 JSON with a 4-byte length):  {"type":"ping"}  or  {"type":"copy-files","paths":["C:\\...\\a.pdf"]}
+# Messages (UTF-8 JSON with a 4-byte length):
+#   {"type":"ping"}
+#   {"type":"begin","root":"...","folder":"","files":[{"name":"a.pdf","size":123}]}
+#   {"type":"chunk","index":0,"data":"<base64>"}   (file contents, in order; each message is small)
+#   {"type":"finish"}                               (close the files and put them on the clipboard)
+#   {"type":"copy-files","paths":["C:\\...\\a.pdf"]}
+#   {"type":"reveal","path":"C:\\...\\a.pdf"}       (open the folder in Explorer)
 
 $ErrorActionPreference = 'Stop'
+$Version = 2
 $stdin = [Console]::OpenStandardInput()
 $stdout = [Console]::OpenStandardOutput()
 
@@ -21,6 +30,17 @@ function Read-Exact([int]$count) {
   return ,$buffer
 }
 
+function Read-Message {
+  $header = Read-Exact 4
+  if ($null -eq $header) { return $null }
+  $length = [BitConverter]::ToInt32($header, 0)
+  if ($length -le 0 -or $length -gt 67108864) { throw 'bad-length' }
+  $body = Read-Exact $length
+  if ($null -eq $body) { return $null }
+  # Messages are kept under 2 MB by the extension (ConvertFrom-Json limit of Windows PowerShell 5.1)
+  return [Text.Encoding]::UTF8.GetString($body) | ConvertFrom-Json
+}
+
 function Write-Message($obj) {
   $json = ConvertTo-Json -InputObject $obj -Compress -Depth 4
   $bytes = [Text.Encoding]::UTF8.GetBytes($json)
@@ -28,6 +48,45 @@ function Write-Message($obj) {
   $stdout.Write($length, 0, 4)
   $stdout.Write($bytes, 0, $bytes.Length)
   $stdout.Flush()
+}
+
+function Get-DownloadsDir {
+  try {
+    $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders'
+    $value = (Get-ItemProperty -LiteralPath $key -ErrorAction Stop).'{374DE290-123F-4565-9164-39C4925E467B}'
+    if ($value) {
+      $path = [Environment]::ExpandEnvironmentVariables($value)
+      if (Test-Path -LiteralPath $path -PathType Container) { return $path }
+    }
+  } catch {}
+  $userHome = [Environment]::GetFolderPath('UserProfile')
+  if ($userHome) {
+    $path = Join-Path $userHome 'Downloads'
+    if (Test-Path -LiteralPath $path -PathType Container) { return $path }
+    return $userHome
+  }
+  return [IO.Path]::GetTempPath()
+}
+
+function Get-SafeName([string]$name) {
+  # No path separators or reserved characters: files always stay in the folder
+  $n = ($name -replace '[\\/:*?"<>|\x00-\x1f]', '_').Trim().TrimEnd('.').TrimStart('.')
+  if ($n.Length -gt 150) { $n = $n.Substring(0, 150) }
+  if (-not $n) { $n = 'file' }
+  return $n
+}
+
+function Get-UniquePath([string]$dir, [string]$name) {
+  $path = Join-Path $dir $name
+  if (-not (Test-Path -LiteralPath $path)) { return $path }
+  $stem = [IO.Path]::GetFileNameWithoutExtension($name)
+  $ext = [IO.Path]::GetExtension($name)
+  $n = 1
+  while ($true) {
+    $path = Join-Path $dir ('{0} ({1}){2}' -f $stem, $n, $ext)
+    if (-not (Test-Path -LiteralPath $path)) { return $path }
+    $n++
+  }
 }
 
 function Set-ClipboardFiles([string[]]$paths) {
@@ -39,44 +98,83 @@ function Set-ClipboardFiles([string[]]$paths) {
   # Paste in Explorer = copy (not move)
   $effect = New-Object System.IO.MemoryStream (, [byte[]](5, 0, 0, 0))
   $data.SetData('Preferred DropEffect', $effect)
-  # true: keep the data on the clipboard after this script exits (retry 10 times if another app holds the clipboard)
+  # true: keep the data on the clipboard after this script exits (retry if another app holds the clipboard)
   [System.Windows.Forms.Clipboard]::SetDataObject($data, $true, 10, 100)
 }
 
-try {
-  $header = Read-Exact 4
-  if ($null -eq $header) { exit 0 }
-  $length = [BitConverter]::ToInt32($header, 0)
-  if ($length -le 0 -or $length -gt 1048576) {
-    Write-Message @{ ok = $false; error = 'bad-length' }
-    exit 1
+function Copy-Files($paths) {
+  $found = @()
+  foreach ($p in @($paths)) {
+    if (($p -is [string]) -and [System.IO.File]::Exists($p)) { $found += [System.IO.Path]::GetFullPath($p) }
   }
-  $body = Read-Exact $length
-  if ($null -eq $body) { exit 1 }
-  $message = [Text.Encoding]::UTF8.GetString($body) | ConvertFrom-Json
-  switch ($message.type) {
-    'ping' {
-      Write-Message @{ ok = $true; version = 1; os = 'windows' }
-    }
-    'copy-files' {
-      $paths = @()
-      foreach ($p in @($message.paths)) {
-        if (($p -is [string]) -and [System.IO.File]::Exists($p)) {
-          $paths += [System.IO.Path]::GetFullPath($p)
-        }
+  if ($found.Count -eq 0) { return @{ ok = $false; error = 'not-found' } }
+  if ($env:SEIHON_HELPER_TEST) { return @{ ok = $true; count = $found.Count; test = $true; paths = $found } }
+  Set-ClipboardFiles $found
+  return @{ ok = $true; count = $found.Count; paths = $found }
+}
+
+$session = @{ paths = @(); sizes = @() }
+
+function Start-Session($message) {
+  $files = @($message.files)
+  if ($files.Count -eq 0) { return @{ ok = $false; error = 'no-files' } }
+  $root = Get-SafeName ([string]$message.root)
+  $dir = Join-Path (Get-DownloadsDir) $root
+  [void][IO.Directory]::CreateDirectory($dir)
+  if ($message.folder) {
+    $dir = Get-UniquePath $dir (Get-SafeName ([string]$message.folder))
+    [void][IO.Directory]::CreateDirectory($dir)
+  }
+  $session.paths = @()
+  $session.sizes = @()
+  foreach ($f in $files) {
+    $path = Get-UniquePath $dir (Get-SafeName ([string]$f.name))
+    [IO.File]::WriteAllBytes($path, [byte[]]@())
+    $session.paths += $path
+    $session.sizes += [int64]$f.size
+  }
+  return @{ ok = $true; paths = $session.paths; dir = $dir }
+}
+
+function Add-Chunk($message) {
+  $index = [int]$message.index
+  if ($index -lt 0 -or $index -ge $session.paths.Count) { return @{ ok = $false; error = 'bad-index' } }
+  $bytes = [Convert]::FromBase64String([string]$message.data)
+  $stream = [IO.File]::Open($session.paths[$index], [IO.FileMode]::Append, [IO.FileAccess]::Write)
+  try { $stream.Write($bytes, 0, $bytes.Length) } finally { $stream.Close() }
+  return @{ ok = $true }
+}
+
+function Complete-Session {
+  for ($i = 0; $i -lt $session.paths.Count; $i++) {
+    if ((Get-Item -LiteralPath $session.paths[$i]).Length -ne $session.sizes[$i]) { return @{ ok = $false; error = 'size-mismatch' } }
+  }
+  return Copy-Files $session.paths
+}
+
+function Show-InFolder($path) {
+  if (-not (($path -is [string]) -and (Test-Path -LiteralPath $path))) { return @{ ok = $false; error = 'not-found' } }
+  if ($env:SEIHON_HELPER_TEST) { return @{ ok = $true; test = $true } }
+  Start-Process -FilePath 'explorer.exe' -ArgumentList ('/select,"{0}"' -f $path)
+  return @{ ok = $true }
+}
+
+try {
+  while ($true) {
+    $message = Read-Message
+    if ($null -eq $message) { break }
+    try {
+      switch ($message.type) {
+        'ping' { Write-Message @{ ok = $true; version = $Version; os = 'windows'; dir = (Get-DownloadsDir) } }
+        'begin' { Write-Message (Start-Session $message) }
+        'chunk' { Write-Message (Add-Chunk $message) }
+        'finish' { Write-Message (Complete-Session) }
+        'copy-files' { Write-Message (Copy-Files $message.paths) }
+        'reveal' { Write-Message (Show-InFolder $message.path) }
+        default { Write-Message @{ ok = $false; error = 'unknown-type' } }
       }
-      if ($paths.Count -eq 0) {
-        Write-Message @{ ok = $false; error = 'not-found' }
-      } elseif ($env:SEIHON_HELPER_TEST) {
-        # Test mode (does not touch the clipboard)
-        Write-Message @{ ok = $true; count = $paths.Count; test = $true; paths = $paths }
-      } else {
-        Set-ClipboardFiles $paths
-        Write-Message @{ ok = $true; count = $paths.Count }
-      }
-    }
-    default {
-      Write-Message @{ ok = $false; error = 'unknown-type' }
+    } catch {
+      Write-Message @{ ok = $false; error = [string]$_.Exception.Message }
     }
   }
 } catch {

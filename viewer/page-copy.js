@@ -10,7 +10,7 @@
  */
 
 import { createZip, sanitizeFileName, saveBlob, timestampForFileName } from "../common/files.js";
-import { copyFilesToClipboard } from "./file-clipboard.js";
+import { copyFilesToClipboard, revealInFolder } from "./file-clipboard.js";
 import { pageImageFile, renderPagePng } from "./image-export.js";
 import { editedDocumentBytes, extractPagesToPdf, loadPdfFromBytes } from "./page-export.js";
 import { sourceIndex, viewPageCount } from "./page-map.js";
@@ -417,7 +417,10 @@ export class PageCopy {
 
   /** ファイルのコピーの結果を知らせる */
   reportCopy(result, { what, fileName, many = false }) {
-    const openFolder = { label: "フォルダを開く", onClick: () => chrome.downloads.show(result.ids[0]) };
+    const openFolder = {
+      label: "フォルダを開く",
+      onClick: () => (result.via === "helper" ? revealInFolder(result.paths[0]) : chrome.downloads.show(result.ids[0])),
+    };
     const helperInfo = {
       label: "補助プログラムについて",
       onClick: () => chrome.tabs.create({ url: chrome.runtime.getURL("options/options.html#sec-copy") }),

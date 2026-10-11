@@ -200,15 +200,15 @@ li{margin:6px 0} .exp{color:#5f6368;font-size:13px}
 
 <h2>ページ役割・製本用PDF出力(フェーズ3)</h2>
 <ol>
-<li><a href="/pdf/book-10.pdf">10ページのPDF</a><div class="exp">期待: 製本用PDF出力で白紙2枚が裏表紙の直前に入り、12ページになる</div></li>
+<li><a href="/pdf/book-10.pdf">10ページのPDF</a><div class="exp">期待: 製本用PDF出力で白紙2枚が最後のページ(カバーの裏表紙)の直前に入り、12ページになる</div></li>
 <li><a href="/pdf/book-8.pdf">8ページのPDF</a><div class="exp">期待: 白紙は入らない。面付けは (8,1)(2,7)(6,3)(4,5)、右綴じでは左右が入れ替わる</div></li>
 <li><a href="/pdf/mixed-8.pdf">表紙・裏表紙だけ大きさの違う8ページのPDF</a><div class="exp">期待: 製本用PDF出力の画面に「ページの大きさがそろっていません」と出る</div></li>
 <li><a href="/pdf/b5-12.pdf">B5 の本(12ページ)</a><div class="exp">期待: 用紙が自動で「B4 横」になる</div></li>
 </ol>
 
-<h2>AI用コピー・ページ収集(フェーズ2)</h2>
+<h2>コピー・ページ収集(フェーズ2)</h2>
 <ol>
-<li><a href="/paste.html">貼り付けの試験ページ(AIのチャット欄の代わり)</a><div class="exp">期待: ビューアでページを右クリック →「AI用にコピー」のあと、ここに Ctrl+V で画像が貼り付けられる</div></li>
+<li><a href="/paste.html">貼り付けの試験ページ(チャット欄の代わり)</a><div class="exp">期待: ビューアでページを右クリック →「コピー」のあと、ここに Ctrl+V で画像が貼り付けられる</div></li>
 <li><a href="/pdf/book-8.pdf">8ページのPDF</a> と <a href="/pdf/sample.pdf">12ページのPDF</a><div class="exp">期待: 両方からページを収集に追加し、まとめて1つのPDFに書き出せる</div></li>
 </ol>
 
@@ -223,8 +223,16 @@ li{margin:6px 0} .exp{color:#5f6368;font-size:13px}
 <ol>
 <li><a href="/pdf/sample.pdf">12ページのPDF</a><div class="exp">期待: 印刷ボタンで印刷画面のプレビューに12ページ並ぶ。サムネイルの ✕ で削除すると、印刷・保存も残したページだけになる。「元に戻す」で戻る</div></li>
 <li><a href="/pdf/mixed-8.pdf">ページの大きさがそろっていない8ページのPDF</a><div class="exp">期待: 「幅に合わせる」「ページに合わせる」で、どの見開きも画面に収まる(横のスクロールバーが出ない)。右綴じで拡大しても、左のページの端まで横にスクロールできる</div></li>
-<li><a href="/pdf/book-10.pdf">10ページのPDF</a><div class="exp">期待: サイドバーの「選択」でページを選び、操作バーのラベルのボタンでまとめて役割を付けられる。製本用PDF出力の「表紙・帯のページ」で、全部のページから表紙・帯を選べる</div></li>
+<li><a href="/pdf/book-10.pdf">10ページのPDF</a><div class="exp">期待: サイドバーの「選択」でページを選び、操作バーのラベルのボタンでまとめて役割を付けられる。製本用PDF出力の「カバー・表紙・帯などのページ」で、全部のページから選べる</div></li>
 <li><a href="/pdf/form.pdf">フォームの PDF</a><div class="exp">期待: 入力したあと「保存」で保存先を選ぶ画面が出る(名前は form_編集済み.pdf)。保存しないで別の PDF を開こうとすると「変更を保存しますか?」が出る。⋮ →「PDFを閉じる」でも同じ画面が出て、「保存しない」でタブが閉じる</div></li>
+</ol>
+
+<h2>1.2 の確認(最高画質・コピー・表示モード・ページに合わせる・役割・元の場所)</h2>
+<ol>
+<li><a href="/pdf/scan-ocr.pdf">OCR の文字が入ったスキャンの PDF(3ページ)</a><div class="exp">期待: 印刷 → 印刷画面で「PDF に保存」した PDF でも、文字を検索・選択できる(OCR の文字が残る)。右クリック →「画像として保存」で、元の JPEG(.jpg)がそのまま保存される</div></li>
+<li><a href="/pdf/book-8.pdf">8ページのPDF</a><div class="exp">期待: 表示モードのボタンを押すたびに 単ページ → 製本表示 → 見開き と切り替わる。その右のボタンで左綴じ・右綴じが切り替わる。ページとページの間を見ているときに「ページに合わせる」を押すと、いちばん大きく見えている見開きが画面の真ん中にちょうど収まる</div></li>
+<li><a href="/pdf/book-10.pdf">10ページのPDF</a><div class="exp">期待: 右クリック →「ページ役割」に、カバーの表紙・カバーの裏表紙・表紙・裏表紙・帯・表紙の折り返し・裏表紙の折り返し・しおり が並ぶ。製本用PDF出力の画面で、帯は何ページでも選べる。カバー以外の役割のページは「_付属.pdf」に出力される</div></li>
+<li><a href="/pdf/sample.pdf">12ページのPDF</a><div class="exp">期待: タイトルの右のボタンで、このリンク・表示中のページへのリンクをコピーできる。ページ収集に入れて「PDF としてコピー」「画像としてコピー」を押すと、ファイルが保存されて、クリップボードに入る(補助プログラムが無いときは、ファイルの場所が入る)</div></li>
 </ol>
 
 <h2>速度確認用</h2>
@@ -481,12 +489,12 @@ class Handler(BaseHTTPRequestHandler):
         return self._not_found()
 
 
-PASTE_HTML = """<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>貼り付けの試験(AIのチャット欄の代わり)</title>
+PASTE_HTML = """<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>貼り付けの試験(チャット欄の代わり)</title>
 <style>body{font-family:system-ui,sans-serif;margin:24px;max-width:900px}
 #box{border:2px dashed #8ab4f8;border-radius:12px;min-height:120px;padding:12px;outline:none}
 #box:focus{border-style:solid} #log{color:#5f6368;font-size:14px} img{max-width:100%;border:1px solid #ccc;margin-top:8px}</style></head>
 <body><h1>貼り付けの試験</h1>
-<p>AI のチャット欄の代わりです。製本ビューアで「AI用にコピー」をしてから、下の枠をクリックして Ctrl+V(Mac は ⌘+V)で貼り付けてください。
+<p>チャット欄の代わりです。製本ビューアで「コピー」をしてから、下の枠をクリックして Ctrl+V(Mac は ⌘+V)で貼り付けてください。
 画像として貼り付けられれば、種類と大きさが表示されます。</p>
 <div id="box" contenteditable="true" aria-label="ここに貼り付け"></div>
 <p id="log">まだ貼り付けられていません</p>
@@ -497,8 +505,15 @@ const box = document.getElementById('box');
 box.addEventListener('paste', e => {
   const files = [...(e.clipboardData?.files || [])];
   e.preventDefault();
-  if (!files.length) { document.getElementById('log').textContent = '画像ではありませんでした(文字: ' + (e.clipboardData.getData('text/plain') || '').slice(0, 40) + ')'; window.__pasted = { files: [] }; return; }
+  if (!files.length) { document.getElementById('log').textContent = 'ファイル・画像ではありませんでした(文字: ' + (e.clipboardData.getData('text/plain') || '').slice(0, 80) + ')'; window.__pasted = { files: [] }; return; }
   const f = files[0];
+  if (files.length > 1 || !f.type.startsWith('image/')) {
+    // 「PDF としてコピー」「画像としてコピー」(補助プログラムあり)で貼り付けたファイル
+    document.getElementById('log').textContent = files.length + ' 個のファイルが貼り付けられました: ' + files.map(x => x.name + '(' + (x.type || '種類不明') + '、' + Math.round(x.size / 1024) + ' KB)').join('、');
+    window.__pasted = { files: files.map(x => ({ name: x.name, type: x.type, size: x.size })) };
+    document.getElementById('preview').textContent = '';
+    return;
+  }
   const url = URL.createObjectURL(f);
   const img = new Image();
   img.onload = () => {

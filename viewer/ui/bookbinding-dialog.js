@@ -9,7 +9,7 @@ import { sanitizeFileName, saveBlob } from "../../common/files.js";
 import { ACCESSORY_ROLES, ROLE_USES, ROLE_USE_LABEL, imposition, parseBlankPositions, planBook, referenceSize, resolvePaper, roleUseFromSettings, useOfRole } from "../bookbinding.js";
 import { buildBookbindingFiles, pageDisplaySizes } from "../bookbinding-export.js";
 import { sourceIndex, viewPageCount } from "../page-map.js";
-import { ROLE_LABEL, ROLE_SHORT } from "../roles.js";
+import { ROLE_LABEL } from "../roles.js";
 
 const $ = id => document.getElementById(id);
 const THUMB_W = 46;
@@ -554,11 +554,8 @@ export class BookbindingDialog {
     if (item.kind === "blank") {
       return { text: "白紙", sub: "" };
     }
-    let sub = "";
-    if (item.part === "cover" || item.part === "back") {
-      const role = this.roles.viewMap().get(item.pageIndex);
-      sub = role ? ROLE_SHORT[role] : item.part === "cover" ? "最初" : "最後";
-    }
+    // 本の最初・最後のページ(カバーの表紙・裏表紙など)
+    const sub = item.part === "cover" ? "最初" : item.part === "back" ? "最後" : "";
     return { text: String(item.pageIndex + 1), sub };
   }
 
