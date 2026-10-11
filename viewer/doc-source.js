@@ -147,7 +147,7 @@ export class DocSource {
  * PDF.js のページ抽出は、1つの文書だけから抜き出すと元の暗号化をそのまま引き継ぐため、
  * いったん空白の1ページを足して「結合」として書き出し(暗号化されない)、その1ページを除いて書き出し直す。
  */
-async function decryptedCopy(doc) {
+export async function decryptedCopy(doc) {
   const merged = await doc.extractPages([{ document: null }, { document: blankPdfBytes() }]);
   if (!merged?.length) {
     return null;

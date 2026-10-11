@@ -76,6 +76,8 @@ export class CollectPanel {
     });
     document.getElementById("shCollectExportPdf").addEventListener("click", () => this.collection.exportAll("pdf"));
     document.getElementById("shCollectExportZip").addEventListener("click", () => this.collection.exportAll("zip"));
+    document.getElementById("shCollectCopyPdf").addEventListener("click", () => this.collection.copyAll("pdf"));
+    document.getElementById("shCollectCopyImages").addEventListener("click", () => this.collection.copyAll("images"));
     document.getElementById("shCollectClear").addEventListener("click", async () => {
       if (!this.collection.count) {
         return;
@@ -213,7 +215,7 @@ export class CollectPanel {
     }
     this.countEl.textContent = count ? `${count}ページ` : "";
     this.empty.hidden = count > 0;
-    for (const id of ["shCollectExportPdf", "shCollectExportZip", "shCollectClear"]) {
+    for (const id of ["shCollectExportPdf", "shCollectExportZip", "shCollectCopyPdf", "shCollectCopyImages", "shCollectClear"]) {
       document.getElementById(id).disabled = count === 0;
     }
     this.renderList();

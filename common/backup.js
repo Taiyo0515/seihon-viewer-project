@@ -22,7 +22,7 @@ export const BACKUP_VERSION = 1;
 /** 読み込むファイルの大きさの上限(役割が数万件あっても数 MB に収まる) */
 export const BACKUP_MAX_BYTES = 20 * 1024 * 1024;
 
-const ROLE_IDS = new Set(["cover", "back", "obi", "obiFront", "obiBack"]);
+const ROLE_IDS = new Set(["cover", "back", "obi", "obiFront", "obiBack", "flapFront", "flapBack", "bookmark"]);
 const PDF_KEY = /^sha256:[0-9a-f]{64}:\d+$/;
 
 /**

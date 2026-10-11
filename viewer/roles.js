@@ -1,5 +1,14 @@
 /**
- * ページ役割(表紙・裏表紙・帯・帯表紙・帯裏表紙)。
+ * ページ役割(カバーの表紙・カバーの裏表紙・表紙・裏表紙・帯・表紙の折り返し・裏表紙の折り返し・しおり)。
+ *
+ * 0.2 で名前を変えた(保存してある役割の id は 0.1 までと同じなので、付けた役割はそのまま引き継がれる):
+ *   cover   表紙     → カバーの表紙(本の最初のページ)
+ *   back    裏表紙   → カバーの裏表紙(本の最後のページ)
+ *   obiFront 帯表紙  → 表紙
+ *   obiBack 帯裏表紙 → 裏表紙
+ *   obi     帯       → 帯(製本用PDF出力の画面で、複数のページを選べる)
+ * 0.2 で追加: flapFront 表紙の折り返し / flapBack 裏表紙の折り返し / bookmark しおり
+ * カバー以外の役割のページは「付属」として、本体とは別に出力する(使い道は設定で変えられる)。
  *
  * - 1ページに付けられる役割は1つ。同じ役割を複数のページに付けられる(表紙の候補が2枚ある場合など)。
  * - PDF ごとに保存し、同じ PDF を再び開くと復元する。PDF は URL ではなく内容の指紋で見分ける。
@@ -12,14 +21,18 @@ import { deleteRoles, getRoles, onDataChanged, putRoles } from "../common/db.js"
 import { sourceIndex, viewPageCount, viewPageNumber } from "./page-map.js";
 
 export const ROLES = Object.freeze([
-  { id: "cover", label: "表紙", short: "表紙" },
-  { id: "back", label: "裏表紙", short: "裏表紙" },
+  { id: "cover", label: "カバーの表紙", short: "カバー表" },
+  { id: "back", label: "カバーの裏表紙", short: "カバー裏" },
+  { id: "obiFront", label: "表紙", short: "表紙" },
+  { id: "obiBack", label: "裏表紙", short: "裏表紙" },
   { id: "obi", label: "帯", short: "帯" },
-  { id: "obiFront", label: "帯表紙", short: "帯表" },
-  { id: "obiBack", label: "帯裏表紙", short: "帯裏" },
+  { id: "flapFront", label: "表紙の折り返し", short: "表折返" },
+  { id: "flapBack", label: "裏表紙の折り返し", short: "裏折返" },
+  { id: "bookmark", label: "しおり", short: "しおり" },
 ]);
 
 export const ROLE_LABEL = Object.freeze(Object.fromEntries(ROLES.map(r => [r.id, r.label])));
+export const ROLE_SHORT = Object.freeze(Object.fromEntries(ROLES.map(r => [r.id, r.short])));
 
 export class PageRoles {
   /**
@@ -334,7 +347,7 @@ export class PageRoles {
         thumb.prepend(badge);
       }
       badge.dataset.role = role;
-      badge.textContent = ROLE_LABEL[role];
+      badge.textContent = ROLE_SHORT[role];
       badge.title = `ページ役割: ${ROLE_LABEL[role]}`;
     }
   }

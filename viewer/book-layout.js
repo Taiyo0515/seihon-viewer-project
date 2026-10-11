@@ -56,16 +56,16 @@ function preferCurrentPageInSpreads(viewer) {
 const PRESET_SCALES = new Set(["auto", "page-fit", "page-width", "page-height"]);
 
 /**
- * 「幅に合わせる」「ページに合わせる」「自動」を、いちばん幅の広い見開き(単ページの表示では、いちばん幅の広いページ)に合わせる。
+ * 「幅に合わせる」「自動」を、いちばん幅の広い見開き(単ページの表示では、いちばん幅の広いページ)に合わせる。
+ * 「ページに合わせる」は、いまのページの見開き(単ページの表示では、いまのページ)がちょうど収まるようにする(0.2)。
  *
  * PDF.js は見開きでも「いま表示しているページの幅 × 2」に合わせるため、
  * ページの幅がそろっていない PDF(スキャンした本など)や、表紙だけ大きさが違う PDF では、
  * 幅に合わせても見開きが画面からはみ出し、横にずれて見えた。
  * ここでは全部の見開き(単独のページは隣の空き枠を含めた幅)のうち、いちばん広いものが収まる倍率にする。
- * 高さも、いちばん高いページが収まるようにする(「ページに合わせる」)。
  *
  * PDF.js の倍率の計算は「いまのページの幅・高さ」を1回だけ読むので、その1回だけ、
- * いちばん広い見開きの半分の幅(と、いちばん高いページの高さ)を返すようにして計算させる。
+ * 合わせたい見開きの半分の幅(と高さ)を返すようにして計算させる。
  */
 function fitWidestSpread(viewer) {
   if (!viewer || viewer.seihonFitPatched) {
@@ -84,7 +84,7 @@ function fitWidestSpread(viewer) {
       return desc.get.call(this);
     },
     set(value) {
-      const restore = PRESET_SCALES.has(value) ? shimCurrentPageSize(this) : null;
+      const restore = PRESET_SCALES.has(value) ? shimCurrentPageSize(this, value) : null;
       try {
         desc.set.call(this, value);
       } finally {
@@ -96,9 +96,12 @@ function fitWidestSpread(viewer) {
 
 /**
  * 倍率を計算するときの「いまのページの幅・高さ」の読み出しを1回だけ差し替える。
- * 見開き: いちばん広い見開きの半分の幅と、いちばん高いページの高さ / 単ページ: いちばん幅の広いページの幅
+ * 幅に合わせる・自動:
+ *   見開き: いちばん広い見開きの半分の幅と、いちばん高いページの高さ / 単ページ: いちばん幅の広いページの幅
+ * ページに合わせる:
+ *   見開き: いまのページの見開きの半分の幅と、その見開きでいちばん高いページの高さ / 単ページ: いまのページのまま
  */
-function shimCurrentPageSize(viewer) {
+function shimCurrentPageSize(viewer, value) {
   if (!viewer.pdfDocument || viewer.scrollMode !== SCROLL_VERTICAL || viewer.isInPresentationMode) {
     return null;
   }
@@ -128,6 +131,9 @@ function shimCurrentPageSize(viewer) {
     }
   };
   if (viewer.spreadMode === 0) {
+    if (value === "page-fit") {
+      return null; // いまのページがちょうど収まる(PDF.js の計算のまま)
+    }
     // 単ページ: Chrome 標準ビューアと同じく、いちばん幅の広いページに合わせる(高さは今のページのまま)
     const widest = Math.max(...pages.map(w));
     if (!(widest > 0) || Math.abs(widest - w(current)) < 0.5) {
@@ -137,6 +143,7 @@ function shimCurrentPageSize(viewer) {
     return restore;
   }
   const parity = viewer.spreadMode - 1; // PDF.js の見開きの区切り方と同じ
+  const onlyCurrent = value === "page-fit";
   let widest = 0;
   let tallest = 0;
   let group = [];
@@ -144,13 +151,16 @@ function shimCurrentPageSize(viewer) {
     if (!group.length) {
       return;
     }
-    let width = group.reduce((sum, pv) => sum + w(pv), 0);
-    if (group.length === 1) {
-      // 単独のページの隣には、隣のページと同じ大きさの空き枠を入れている(製本表示)
-      const i = pages.indexOf(group[0]);
-      width += w(pages[i === 0 ? 1 : i - 1] || group[0]);
+    if (!onlyCurrent || group.includes(current)) {
+      let width = group.reduce((sum, pv) => sum + w(pv), 0);
+      if (group.length === 1) {
+        // 単独のページの隣には、隣のページと同じ大きさの空き枠を入れている(製本表示)
+        const i = pages.indexOf(group[0]);
+        width += w(pages[i === 0 ? 1 : i - 1] || group[0]);
+      }
+      widest = Math.max(widest, width);
+      tallest = Math.max(tallest, ...group.map(h));
     }
-    widest = Math.max(widest, width);
     group = [];
   };
   for (let i = 0; i < pages.length; i++) {
@@ -158,7 +168,6 @@ function shimCurrentPageSize(viewer) {
       flush();
     }
     group.push(pages[i]);
-    tallest = Math.max(tallest, h(pages[i]));
   }
   flush();
   if (!(widest > 0) || !(tallest > 0)) {
@@ -208,6 +217,104 @@ export class BookLayout {
     bus.on("rotationchanging", () => setTimeout(() => this.refit(), 0));
   }
 
+  /**
+   * 「ページに合わせる」(0.2): いちばん大きく見えているページ(見開きの表示では、その見開き)を、
+   * 画面にちょうど収まる大きさにして、画面の真ん中に表示する。
+   * ページとページの間を見ているときに押しても、中途半端な位置のままにならない。
+   * @returns {number|null} 真ん中に表示したページ
+   */
+  fitPageCentered() {
+    const viewer = this.app.pdfViewer;
+    if (!viewer?.pdfDocument || !viewer.pagesCount) {
+      return null;
+    }
+    const target = this.mostVisiblePage();
+    if (target && viewer.currentPageNumber !== target) {
+      // 倍率の計算は「いまのページ」で行われるので、先にいまのページにする(ここではまだ動かさない)
+      viewer._setCurrentPageNumber?.(target, false);
+    }
+    viewer.currentScaleValue = "page-fit";
+    const page = target || viewer.currentPageNumber;
+    this.centerOn(page);
+    // 空き枠の付け直しなどで位置がずれないよう、描き終えた後にもう一度合わせる
+    requestAnimationFrame(() => this.centerOn(page));
+    return page;
+  }
+
+  /**
+   * いちばん大きく見えているページ(画面に占める面積が最も大きいもの)。
+   * 見開きの表示では、見開きごとに見えている面積を合計して比べ、その見開きのうち大きく見えている方のページ。
+   * 同じなら、いまのページを優先する。
+   */
+  mostVisiblePage() {
+    const viewer = this.app.pdfViewer;
+    let visible;
+    try {
+      visible = viewer._getVisiblePages();
+    } catch {
+      return viewer.currentPageNumber;
+    }
+    const views = visible?.views || [];
+    if (!views.length) {
+      return viewer.currentPageNumber;
+    }
+    const current = viewer.currentPageNumber;
+    const areaOf = v => ((v.percent || 0) / 100) * (v.view?.width || 0) * (v.view?.height || 0);
+    const groups = new Map();
+    for (const v of views) {
+      const div = v.view?.div;
+      const key = viewer.spreadMode !== 0 && div?.parentElement?.classList.contains("spread") ? div.parentElement : div || v.id;
+      let g = groups.get(key);
+      if (!g) {
+        g = { area: 0, pages: [] };
+        groups.set(key, g);
+      }
+      g.area += areaOf(v);
+      g.pages.push({ id: v.id, area: areaOf(v) });
+    }
+    let best = null;
+    for (const g of groups.values()) {
+      const hasCurrent = g.pages.some(p => p.id === current);
+      if (!best || g.area > best.area + 0.5 || (Math.abs(g.area - best.area) <= 0.5 && hasCurrent)) {
+        best = { ...g, hasCurrent };
+      }
+    }
+    if (!best) {
+      return current;
+    }
+    if (best.hasCurrent) {
+      return current;
+    }
+    best.pages.sort((a, b) => b.area - a.area || a.id - b.id);
+    return best.pages[0].id;
+  }
+
+  /** ページ(見開きの表示では、その見開き)を画面の真ん中に来るようにスクロールする */
+  centerOn(pageNumber) {
+    const viewer = this.app.pdfViewer;
+    const container = viewer?.container;
+    const div = viewer?.getPageView(pageNumber - 1)?.div;
+    if (!container || !div) {
+      return;
+    }
+    const target = viewer.spreadMode !== 0 && div.parentElement?.classList.contains("spread") ? div.parentElement : div;
+    const c = container.getBoundingClientRect();
+    const r = target.getBoundingClientRect();
+    if (!r.height) {
+      return;
+    }
+    const dy = r.top + r.height / 2 - (c.top + container.clientHeight / 2);
+    if (Math.abs(dy) >= 1) {
+      container.scrollTop += dy;
+    }
+    if (container.scrollWidth > container.clientWidth + 1) {
+      const dx = r.left + r.width / 2 - (c.left + container.clientWidth / 2);
+      if (Math.abs(dx) >= 1) {
+        container.scrollLeft += dx;
+      }
+    }
+  }
+
   /** 「幅に合わせる」「ページに合わせる」「自動」のとき、全部のページの大きさで倍率を計算し直す */
   refit() {
     const viewer = this.app.pdfViewer;
@@ -253,9 +360,11 @@ export class BookLayout {
         viewer.scrollMode = SCROLL_VERTICAL;
       }
       viewer.spreadMode = VIEW_MODES[mode].spreadMode;
-      // 「幅に合わせる」等の指定は見開き幅に合わせて再計算させる
+      // 「幅に合わせる」等の指定は見開き幅に合わせて再計算させる(「ページに合わせる」なら、見ているページを真ん中に)
       const value = viewer.currentScaleValue;
-      if (value && isNaN(Number(value))) {
+      if (value === "page-fit") {
+        this.fitPageCentered();
+      } else if (value && isNaN(Number(value))) {
         viewer.currentScaleValue = value;
       }
     }

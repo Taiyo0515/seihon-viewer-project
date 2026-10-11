@@ -151,7 +151,7 @@ function setMetadata(pdf, title) {
  * @param {"ltr"|"rtl"} o.direction 綴じ方向
  * @param {{width:number,height:number,label:string}} o.paper 用紙(横向き)
  * @param {"short"|"long"} o.duplex 両面の綴じ方向
- * @param {"separate"|"append"|"none"} o.obiOutput 帯の出力
+ * @param {"separate"|"append"|"none"} o.obiOutput 付属の出力
  * @param {{book:string, imposed:string, obi:string}} o.fileNames
  * @param {(message:string) => void} [o.progress]
  * @returns {Promise<Array<{kind:string, fileName:string, bytes:Uint8Array, pages:number}>>}
@@ -163,7 +163,7 @@ export async function buildBookbindingFiles(o) {
   const { PDFDocument, degrees, Duplex, PrintScaling } = lib;
   const files = [];
 
-  // ---- 1. 本体(表紙 + 本文 + 裏表紙)を読む順に並べ、白紙を入れる ----
+  // ---- 1. 本体(最初のページ + 本文 + 最後のページ)を読む順に並べ、白紙を入れる ----
   progress("ページを並べています…");
   const edited = includeEdits ? await editedDocumentBytes(doc) : null;
   const order = plan.sequence.filter(s => s.kind === "page").map(s => s.pageIndex);
@@ -177,10 +177,10 @@ export async function buildBookbindingFiles(o) {
     throw new Error(`ページ数が合いません(${book.getPageCount()} / ${plan.N})`);
   }
 
-  // ---- 帯 ----
+  // ---- 付属(表紙・裏表紙・帯・折り返し・しおり) ----
   let obiPdf = null;
   if (plan.obi.length && obiOutput !== "none") {
-    progress("帯のページを抜き出しています…");
+    progress("付属のページを抜き出しています…");
     obiPdf = await extractInOrder(doc, plan.obi, edited);
   }
 
@@ -269,7 +269,7 @@ export async function buildBookbindingFiles(o) {
     mainKind = "imposed";
   }
 
-  // ---- 3. 帯を本体の後ろに同梱する場合 ----
+  // ---- 3. 付属を本体の後ろに同梱する場合 ----
   if (obiPdf && obiOutput === "append") {
     const copied = await main.copyPages(obiPdf, obiPdf.getPageIndices());
     for (const p of copied) {

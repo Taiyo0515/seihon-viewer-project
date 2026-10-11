@@ -6,17 +6,32 @@
  */
 
 import { sanitizeFileName, saveBlob } from "../../common/files.js";
-import { OBI_ROLES, ROLE_USES, ROLE_USE_LABEL, imposition, parseBlankPositions, planBook, referenceSize, resolvePaper, roleUseFromSettings, useOfRole } from "../bookbinding.js";
+import { ACCESSORY_ROLES, ROLE_USES, ROLE_USE_LABEL, imposition, parseBlankPositions, planBook, referenceSize, resolvePaper, roleUseFromSettings, useOfRole } from "../bookbinding.js";
 import { buildBookbindingFiles, pageDisplaySizes } from "../bookbinding-export.js";
 import { sourceIndex, viewPageCount } from "../page-map.js";
-import { ROLE_LABEL } from "../roles.js";
+import { ROLE_LABEL, ROLE_SHORT } from "../roles.js";
 
 const $ = id => document.getElementById(id);
 const THUMB_W = 46;
-/** 帯の役割 → 使い道を選ぶ欄 */
-const USE_SELECTS = Object.freeze({ obiFront: "shBindUseObiFront", obi: "shBindUseObi", obiBack: "shBindUseObiBack" });
-/** 帯のページを選ぶ欄(1つの役割につき1ページ) */
-const OBI_SELECTS = Object.freeze({ obiFront: "shBindObiFront", obiBack: "shBindObiBack", obi: "shBindObiPage" });
+/** 付属の役割 → 使い道を選ぶ欄 */
+const USE_SELECTS = Object.freeze({
+  obiFront: "shBindUseObiFront",
+  obiBack: "shBindUseObiBack",
+  obi: "shBindUseObi",
+  flapFront: "shBindUseFlapFront",
+  flapBack: "shBindUseFlapBack",
+  bookmark: "shBindUseBookmark",
+});
+/** 付属のページを選ぶ欄(1つの役割につき1ページ。2ページ以上に付いていればそのまま残す選択肢も出す) */
+const OBI_SELECTS = Object.freeze({
+  obiFront: "shBindObiFront",
+  obiBack: "shBindObiBack",
+  flapFront: "shBindFlapFront",
+  flapBack: "shBindFlapBack",
+  bookmark: "shBindBookmark",
+});
+/** 複数のページを選べる役割(帯) */
+const MULTI_ROLE = "obi";
 
 export class BookbindingDialog {
   /**
@@ -35,7 +50,7 @@ export class BookbindingDialog {
     this.sizes = null;
     this.thumbCache = new Map();
     this.busy = false;
-    /** 表紙・裏表紙に使うページ(表示上の 0始まりのページ番号)。null は自動 */
+    /** 本の最初・最後のページ(カバーの表紙・裏表紙)に使うページ(表示上の 0始まりのページ番号)。null は自動 */
     this.coverChoice = null;
     this.backChoice = null;
     this.bind();
@@ -47,12 +62,20 @@ export class BookbindingDialog {
       $(id).addEventListener("input", refresh);
       $(id).addEventListener("change", refresh);
     }
-    // 表紙・裏表紙・帯のページの指定(選んだページに役割を付けて保存する)
+    // カバー・表紙・帯などのページの指定(選んだページに役割を付けて保存する)
     $("shBindCover").addEventListener("change", () => this.onCoverBackChange("cover"));
     $("shBindBack").addEventListener("change", () => this.onCoverBackChange("back"));
     for (const [role, id] of Object.entries(OBI_SELECTS)) {
       $(id).addEventListener("change", () => this.onObiChange(role, $(id).value));
     }
+    // 帯(複数可): 「ページを追加」で選んだページを帯にする。付いているページは × で外す
+    $("shBindObiAdd").addEventListener("change", () => {
+      const value = $("shBindObiAdd").value;
+      $("shBindObiAdd").value = "";
+      if (value !== "") {
+        this.addMulti(Number(value));
+      }
+    });
     // 役割が変わったら(この画面・サイドバー・ほかのタブ)、表示を作り直す
     this.roles.onChange(() => {
       if (this.dialog.open && this.sizes) {
@@ -80,7 +103,7 @@ export class BookbindingDialog {
         opt.textContent = ROLE_USE_LABEL[use];
         select.append(opt);
       }
-      // 使い道が変わると表紙・裏表紙の候補も変わる
+      // 使い道が変わると最初・最後のページの候補も変わる
       select.addEventListener("change", () => {
         this.fillCandidates();
         this.refresh();
@@ -163,6 +186,7 @@ export class BookbindingDialog {
       sel.textContent = "";
       sel.disabled = true;
     }
+    $("shBindObiItems").textContent = "";
     const rolesReady = this.roles.whenLoaded().catch(() => {});
     if (!this.sizes) {
       // 表示しているページ(削除したページを除く)の大きさ。getPage は表示上のページ番号で引く
@@ -172,7 +196,7 @@ export class BookbindingDialog {
       }
       this.sizes = sizes;
     }
-    // 保存済みのページ役割を読み込み終えてから、表紙などを決める
+    // 保存済みのページ役割を読み込み終えてから、最初のページなどを決める
     await rolesReady;
     if (doc !== app.pdfDocument || !this.dialog.open) {
       return;
@@ -192,7 +216,7 @@ export class BookbindingDialog {
     return document.querySelector(`input[name="${name}"]:checked`)?.value;
   }
 
-  /** 帯の役割のページの使い道(画面で選んだもの) */
+  /** 付属の役割のページの使い道(画面で選んだもの) */
   currentRoleUse() {
     const use = {};
     for (const [role, id] of Object.entries(USE_SELECTS)) {
@@ -202,7 +226,7 @@ export class BookbindingDialog {
   }
 
   /**
-   * 表紙・裏表紙・帯のページを選ぶ欄を作る。
+   * カバー・表紙・帯などのページを選ぶ欄を作る。
    * どの欄も全部のページから選べる。役割の付いたページには、名前の後ろに役割を出す。
    */
   fillCandidates() {
@@ -217,7 +241,7 @@ export class BookbindingDialog {
       opt.textContent = `${i + 1}ページ目${role ? `(${ROLE_LABEL[role]})` : ""}${suffix}`;
       return opt;
     };
-    // ---- 表紙・裏表紙: 「自動」+ 全部のページ ----
+    // ---- カバーの表紙・カバーの裏表紙(本の最初・最後のページ): 「自動」+ 全部のページ ----
     const fillCoverBack = (select, target, choice, resolved) => {
       select.textContent = "";
       const auto = document.createElement("option");
@@ -238,7 +262,7 @@ export class BookbindingDialog {
     };
     fillCoverBack($("shBindCover"), "cover", this.coverChoice, plan.cover);
     fillCoverBack($("shBindBack"), "back", this.backChoice, plan.back);
-    // ---- 帯表紙・帯裏表紙・帯: 「なし」+ 全部のページ ----
+    // ---- 表紙・裏表紙・折り返し・しおり: 「なし」+ 全部のページ ----
     for (const [role, id] of Object.entries(OBI_SELECTS)) {
       const select = $(id);
       select.textContent = "";
@@ -260,9 +284,77 @@ export class BookbindingDialog {
       select.value = pages.length > 1 ? "multi" : pages.length === 1 ? String(pages[0]) : "";
       select.disabled = n === 0;
     }
+    // ---- 帯(複数可): 付いているページの一覧 +「ページを追加」 ----
+    this.fillMulti(n, view, pageOption);
   }
 
-  /** 表紙・裏表紙の欄を変えたとき: 選んだページが候補でなければ、そのページにその役割を付ける */
+  /** 帯(複数のページを選べる欄)を作る */
+  fillMulti(n, view, pageOption) {
+    const role = MULTI_ROLE;
+    const label = ROLE_LABEL[role];
+    const pages = [...view.entries()].filter(([, r]) => r === role).map(([i]) => i).sort((a, b) => a - b);
+    const items = $("shBindObiItems");
+    items.textContent = "";
+    if (!pages.length) {
+      const none = document.createElement("span");
+      none.className = "sh-multi-none";
+      none.textContent = "なし";
+      items.append(none);
+    }
+    for (const i of pages) {
+      const chip = document.createElement("span");
+      chip.className = "sh-multi-item";
+      chip.dataset.pageIndex = String(i);
+      const text = document.createElement("span");
+      text.textContent = `${i + 1}ページ目`;
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "sh-multi-del";
+      del.textContent = "×";
+      del.title = `${i + 1}ページ目を「${label}」から外す`;
+      del.setAttribute("aria-label", del.title);
+      del.addEventListener("click", () => this.removeMulti(i));
+      chip.append(text, del);
+      items.append(chip);
+    }
+    const add = $("shBindObiAdd");
+    add.textContent = "";
+    const head = document.createElement("option");
+    head.value = "";
+    head.textContent = pages.length ? "+ ページを追加" : "+ ページを選ぶ";
+    add.append(head);
+    for (let i = 0; i < n; i++) {
+      if (!pages.includes(i)) {
+        add.append(pageOption(i));
+      }
+    }
+    add.value = "";
+    add.disabled = n === 0;
+  }
+
+  /** 帯にページを加える(ほかの役割が付いていれば置き換える) */
+  addMulti(pageIndex) {
+    const n = pageIndex + 1;
+    if (this.coverChoice === pageIndex) {
+      this.coverChoice = null;
+    }
+    if (this.backChoice === pageIndex) {
+      this.backChoice = null;
+    }
+    this.roles.setMany([{ pages: [n], role: MULTI_ROLE }]).then(() => {
+      this.toast.show(`${n}ページ目を「${ROLE_LABEL[MULTI_ROLE]}」にしました`, { duration: 2500 });
+    });
+  }
+
+  /** 帯からページを外す */
+  removeMulti(pageIndex) {
+    const n = pageIndex + 1;
+    this.roles.setMany([{ pages: [n], role: null }]).then(() => {
+      this.toast.show(`${n}ページ目を「${ROLE_LABEL[MULTI_ROLE]}」から外しました`, { duration: 2500 });
+    });
+  }
+
+  /** カバーの表紙・裏表紙の欄を変えたとき: 選んだページが候補でなければ、そのページにその役割を付ける */
   onCoverBackChange(target) {
     const select = $(target === "cover" ? "shBindCover" : "shBindBack");
     const value = select.value;
@@ -284,7 +376,7 @@ export class BookbindingDialog {
     this.refresh();
   }
 
-  /** 帯表紙・帯裏表紙・帯の欄を変えたとき: その役割のページを選んだページだけにする */
+  /** 表紙・裏表紙・折り返し・しおりの欄を変えたとき: その役割のページを選んだページだけにする */
   onObiChange(role, value) {
     if (value === "multi") {
       return;
@@ -299,7 +391,7 @@ export class BookbindingDialog {
       const n = Number(value) + 1;
       if (!current.includes(n)) {
         changes.push({ pages: [n], role });
-        // 表紙・裏表紙に選んでいたページなら、その指定は自動に戻す
+        // 最初・最後のページに選んでいたページなら、その指定は自動に戻す
         if (this.coverChoice === n - 1) {
           this.coverChoice = null;
         }
@@ -346,7 +438,7 @@ export class BookbindingDialog {
   fileNames() {
     const base = sanitizeFileName($("shBindBase").value || this.docSource.baseName());
     const suffix = sanitizeFileName($("shBindSuffix").value, "_製本").replace(/^_?/, "_");
-    const obiSuffix = sanitizeFileName($("shBindObiSuffix").value, "_帯").replace(/^_?/, "_");
+    const obiSuffix = sanitizeFileName($("shBindObiSuffix").value, "_付属").replace(/^_?/, "_");
     return {
       book: `${base}${suffix}.pdf`,
       imposed: `${base}${suffix}_面付け.pdf`,
@@ -381,12 +473,14 @@ export class BookbindingDialog {
       return;
     }
     const parts = [];
+    const view = this.roles.viewMap();
+    const roleNote = (i, auto) => (auto ? "(自動)" : view.get(i) ? `(${ROLE_LABEL[view.get(i)]})` : "");
     if (plan.cover !== null) {
-      parts.push(`表紙: ${plan.cover + 1}ページ目${plan.coverAuto ? "(自動)" : ""}`);
+      parts.push(`最初のページ: ${plan.cover + 1}ページ目${roleNote(plan.cover, plan.coverAuto)}`);
     }
     parts.push(`本文: ${plan.body.length}ページ`);
     if (plan.back !== null) {
-      parts.push(`裏表紙: ${plan.back + 1}ページ目${plan.backAuto ? "(自動)" : ""}`);
+      parts.push(`最後のページ: ${plan.back + 1}ページ目${roleNote(plan.back, plan.backAuto)}`);
     }
     const n0 = plan.N - plan.blanks;
     let summary = `${parts.join(" / ")}\n本体 ${n0}ページ + 白紙 ${plan.blanks}枚 = ${plan.N}ページ`;
@@ -396,10 +490,11 @@ export class BookbindingDialog {
     const obiOutput = this.radio("shBindObiOutput");
     if (plan.obi.length) {
       const how = obiOutput === "separate" ? "別の PDF に出力" : obiOutput === "append" ? "本体の後ろに同梱" : "出力しない";
-      summary += `\n帯: ${plan.obi.length}ページ(${plan.obi.map(i => `${i + 1}`).join("、")}ページ目)→ ${how}`;
+      const kinds = ACCESSORY_ROLES.filter(r => plan.obi.some(i => view.get(i) === r)).map(r => ROLE_LABEL[r]);
+      summary += `\n付属(${kinds.join("・")}): ${plan.obi.length}ページ(${plan.obi.map(i => `${i + 1}`).join("、")}ページ目)→ ${how}`;
     }
     if (plan.omitted.length) {
-      summary += `\n出力しないページ: ${plan.omitted.map(i => `${i + 1}`).join("、")}ページ目(帯の役割の使い道が「出力しない」)`;
+      summary += `\n出力しないページ: ${plan.omitted.map(i => `${i + 1}`).join("、")}ページ目(付属の役割の使い道が「出力しない」)`;
     }
     $("shBindSummary").textContent = summary;
 
@@ -414,15 +509,15 @@ export class BookbindingDialog {
       warnings.push(`ページは ${Math.round(paper.scale * 100)}% の大きさで配置されます(用紙: ${paper.label})。`);
     }
     if (!this.roles.size && this.coverChoice === null && this.backChoice === null) {
-      warnings.push("表紙・裏表紙を指定していないため、1ページ目を表紙、最後のページを裏表紙にします(上の「表紙」「裏表紙」で変えられます)。");
+      warnings.push("カバーの表紙・裏表紙を指定していないため、1ページ目を本の最初のページ、最後のページを本の最後のページにします(上の「カバーの表紙」「カバーの裏表紙」で変えられます)。");
     }
     $("shBindWarnings").hidden = !warnings.length;
     $("shBindWarnings").textContent = warnings.join("\n");
     $("shBindSizeRefRow").hidden = !ref.mixed;
     $("shBindDuplexRow").hidden = !impose;
     $("shBindPaperRow").hidden = !impose;
-    // 帯の欄は、帯の役割のページがあるときだけ出す(使い道の欄も、その PDF にある役割の分だけ)
-    const presentObiRoles = OBI_ROLES.filter(r => this.roles.pages(r).length);
+    // 付属の欄は、付属の役割のページがあるときだけ出す(使い道の欄も、その PDF にある役割の分だけ)
+    const presentObiRoles = ACCESSORY_ROLES.filter(r => this.roles.pages(r).length);
     // 自動の欄の「自動(○ページ目)」を、いまの計画に合わせる
     this.updateAutoLabels(plan);
     $("shBindObiRow").hidden = !presentObiRoles.length;
@@ -459,8 +554,12 @@ export class BookbindingDialog {
     if (item.kind === "blank") {
       return { text: "白紙", sub: "" };
     }
-    const role = item.part === "cover" ? "表紙" : item.part === "back" ? "裏表紙" : "";
-    return { text: String(item.pageIndex + 1), sub: role };
+    let sub = "";
+    if (item.part === "cover" || item.part === "back") {
+      const role = this.roles.viewMap().get(item.pageIndex);
+      sub = role ? ROLE_SHORT[role] : item.part === "cover" ? "最初" : "最後";
+    }
+    return { text: String(item.pageIndex + 1), sub };
   }
 
   renderPreview(plan) {
@@ -644,7 +743,7 @@ export class BookbindingDialog {
           ? `面付け済み(${this.paper.label}、${plan.N / 4}枚の両面 = ${f.pages}面)`
           : f.kind === "book"
             ? `読む順の本体(${plan.N}ページ、白紙 ${plan.blanks}枚を含む)`
-            : `帯(${f.pages}ページ)`;
+            : `付属(${f.pages}ページ)`;
       li.textContent = `${f.fileName} — ${what}`;
       const open = document.createElement("button");
       open.type = "button";

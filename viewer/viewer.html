@@ -261,7 +261,7 @@
           <div id="shThumbHeader" class="sh-thumb-header">
             <div class="sh-thumb-header-normal">
               <span id="shThumbHeaderTitle" class="sh-thumb-header-title"></span>
-              <button id="shThumbSelectMode" class="sh-chip-btn sh-chip-small" type="button" title="ページを選んで、まとめて削除・役割(表紙・帯など)の指定などをします" aria-pressed="false">
+              <button id="shThumbSelectMode" class="sh-chip-btn sh-chip-small" type="button" title="ページを選んで、まとめて削除・役割(カバー・表紙・帯など)の指定などをします" aria-pressed="false">
                 <span class="sh-chip-icon" data-icon="select"></span><span class="sh-chip-label">選択</span>
               </button>
             </div>
@@ -287,8 +287,8 @@
             <span id="shThumbSelectText"></span>
             <span class="sh-thumb-select-buttons">
               <button id="shThumbSelectDelete" class="sh-icon-btn sh-small" type="button" title="選んだページを削除 (Delete)" aria-label="選んだページを削除" data-icon="delete"></button>
-              <button id="shThumbSelectRoles" class="sh-icon-btn sh-small" type="button" title="選んだページに役割(表紙・裏表紙・帯など)を付ける" aria-label="選んだページに役割を付ける" aria-haspopup="menu" data-icon="label"></button>
-              <button id="shThumbSelectCopy" class="sh-icon-btn sh-small" type="button" title="選んだページをAI用にコピー" aria-label="選んだページをAI用にコピー" data-icon="ai-copy"></button>
+              <button id="shThumbSelectRoles" class="sh-icon-btn sh-small" type="button" title="選んだページに役割(カバー・表紙・帯など)を付ける" aria-label="選んだページに役割を付ける" aria-haspopup="menu" data-icon="label"></button>
+              <button id="shThumbSelectCopy" class="sh-icon-btn sh-small" type="button" title="選んだページをコピー" aria-label="選んだページをコピー" data-icon="copy"></button>
               <button id="shThumbSelectCollect" class="sh-icon-btn sh-small" type="button" title="選んだページを収集に追加" aria-label="選んだページを収集に追加" data-icon="collect"></button>
               <button id="shThumbSelectClear" class="sh-icon-btn sh-small" type="button" title="選択を解除 (Esc)" aria-label="選択を解除" data-icon="select-off"></button>
             </span>
@@ -1332,9 +1332,19 @@
         <ol id="shCollectList" class="sh-collect-list" aria-label="収集したページ(ドラッグで並べ替え)"></ol>
         <div class="sh-collect-foot">
           <p id="shCollectUsage" class="sh-collect-usage"></p>
-          <div class="sh-collect-actions">
-            <button id="shCollectExportPdf" class="sh-btn sh-btn-primary sh-btn-small" type="button" title="1つの PDF にまとめて保存(元のテキスト・ベクターのまま)">PDF で書き出し</button>
-            <button id="shCollectExportZip" class="sh-btn sh-btn-small" type="button" title="1ページずつ PNG 画像にして ZIP で保存">PNG(ZIP)</button>
+          <div class="sh-collect-actions-row">
+            <span class="sh-collect-actions-title">コピー</span>
+            <div class="sh-collect-actions">
+              <button id="shCollectCopyPdf" class="sh-btn sh-btn-primary sh-btn-small" type="button" title="1つの PDF にまとめて、ファイルとしてクリップボードに入れます(元の文字・画像のまま。フォルダやチャット欄などに貼り付けられます)">PDF としてコピー</button>
+              <button id="shCollectCopyImages" class="sh-btn sh-btn-small" type="button" title="1ページずつ画像にして、クリップボードに入れます(1ページなら画像そのもの、複数ページなら画像のファイル)">画像としてコピー</button>
+            </div>
+          </div>
+          <div class="sh-collect-actions-row">
+            <span class="sh-collect-actions-title">保存</span>
+            <div class="sh-collect-actions">
+              <button id="shCollectExportPdf" class="sh-btn sh-btn-small" type="button" title="1つの PDF にまとめて保存(元の文字・画像のまま。OCR の文字も残ります)">PDF で保存</button>
+              <button id="shCollectExportZip" class="sh-btn sh-btn-small" type="button" title="1ページずつ画像にして ZIP で保存">画像(ZIP)で保存</button>
+            </div>
           </div>
         </div>
       </aside>
@@ -1347,7 +1357,7 @@
         </div>
         <p class="sh-collect-help">
           ページやサムネイルを右クリック →「ページ役割」でも設定できます。1ページに1つ。同じ役割を複数のページに付けられます
-          (表紙の候補が2枚ある場合など。どれを使うかは製本用PDF出力で選べます)。
+          (カバーの表紙の候補が2枚ある場合や、帯が何枚かある場合など。表紙などの候補のどれを使うかは製本用PDF出力で選べます)。
         </p>
         <p id="shRolesStatus" class="sh-roles-status"></p>
         <div id="shRolesBody" class="sh-roles-body"></div>
@@ -1367,22 +1377,31 @@
             <p id="shBindSummary" class="sh-bind-summary"></p>
             <section class="sh-bind-roles" aria-labelledby="shBindRolesTitle">
               <div class="sh-bind-roles-head">
-                <h3 id="shBindRolesTitle">表紙・帯のページ</h3>
+                <h3 id="shBindRolesTitle">カバー・表紙・帯などのページ</h3>
                 <button id="shBindOpenRoles" type="button" class="sh-link-btn">ページ役割の一覧を開く</button>
               </div>
               <div class="sh-bind-grid">
-                <label for="shBindCover">表紙</label>
+                <label for="shBindCover">カバーの表紙</label>
                 <select id="shBindCover" class="sh-select" data-role="cover"></select>
-                <label for="shBindBack">裏表紙</label>
+                <label for="shBindBack">カバーの裏表紙</label>
                 <select id="shBindBack" class="sh-select" data-role="back"></select>
-                <label for="shBindObiFront">帯表紙</label>
+                <label for="shBindObiFront">表紙</label>
                 <select id="shBindObiFront" class="sh-select" data-role="obiFront"></select>
-                <label for="shBindObiBack">帯裏表紙</label>
+                <label for="shBindObiBack">裏表紙</label>
                 <select id="shBindObiBack" class="sh-select" data-role="obiBack"></select>
-                <label for="shBindObiPage">帯</label>
-                <select id="shBindObiPage" class="sh-select" data-role="obi"></select>
+                <label for="shBindObiAdd" id="shBindObiLabel">帯<span class="sh-bind-multi-mark">(複数可)</span></label>
+                <div id="shBindObiMulti" class="sh-multi" role="group" aria-labelledby="shBindObiLabel" data-role="obi">
+                  <span id="shBindObiItems" class="sh-multi-items"></span>
+                  <select id="shBindObiAdd" class="sh-select sh-multi-add" data-role="obi" aria-label="帯にするページを追加"></select>
+                </div>
+                <label for="shBindBookmark">しおり</label>
+                <select id="shBindBookmark" class="sh-select" data-role="bookmark"></select>
+                <label for="shBindFlapFront">表紙の折り返し</label>
+                <select id="shBindFlapFront" class="sh-select" data-role="flapFront"></select>
+                <label for="shBindFlapBack">裏表紙の折り返し</label>
+                <select id="shBindFlapBack" class="sh-select" data-role="flapBack"></select>
               </div>
-              <p class="sh-bind-help">ページを選ぶと、そのページに役割(表紙・帯など)を付けて保存します。同じ PDF を開き直しても残ります。サイドバー(左上の ☰)の「選択」から、まとめて付けることもできます。</p>
+              <p class="sh-bind-help">「カバーの表紙」「カバーの裏表紙」は、本の最初と最後のページになります。表紙・裏表紙・帯・折り返し・しおりのページは「付属」として、本体とは別に出力します(使い道は下の「詳細設定」で変えられます)。ページを選ぶと、そのページに役割を付けて保存します。同じ PDF を開き直しても残ります。サイドバー(左上の ☰)の「選択」から、まとめて付けることもできます。</p>
             </section>
             <label class="sh-bind-check"><input type="checkbox" id="shBindImpose" /> 面付けする(中綴じ用。用紙1枚の表裏に4ページ)</label>
             <p id="shBindWarnings" class="sh-bind-warn" role="status" hidden></p>
@@ -1397,11 +1416,11 @@
               <div class="sh-bind-field">
                 <div class="sh-bind-field-label">白紙を入れる位置</div>
                 <div class="sh-bind-field-control">
-                  <label><input type="radio" name="shBindBlankMode" value="beforeBack" /> 裏表紙の直前</label>
-                  <label><input type="radio" name="shBindBlankMode" value="afterCover" /> 表紙の直後</label>
+                  <label><input type="radio" name="shBindBlankMode" value="beforeBack" /> 最後のページ(カバーの裏表紙)の直前</label>
+                  <label><input type="radio" name="shBindBlankMode" value="afterCover" /> 最初のページ(カバーの表紙)の直後</label>
                   <label><input type="radio" name="shBindBlankMode" value="custom" /> 指定する:
                     <input type="text" id="shBindBlankAfter" class="sh-bind-input" placeholder="例: 5, 12(5ページ目と12ページ目の後ろ)" autocomplete="off" spellcheck="false" /></label>
-                  <p class="sh-bind-help">何ページ目の後ろに入れるかを、ページ番号(サイドバーのサムネイルの番号)で書きます。複数の場所に分けられます(「5x2」で5ページ目の後ろに2枚)。足りない分は裏表紙の直前に入れます。</p>
+                  <p class="sh-bind-help">何ページ目の後ろに入れるかを、ページ番号(サイドバーのサムネイルの番号)で書きます。複数の場所に分けられます(「5x2」で5ページ目の後ろに2枚)。足りない分は最後のページの直前に入れます。</p>
                 </div>
               </div>
               <div class="sh-bind-field">
@@ -1443,18 +1462,21 @@
                 </div>
               </div>
               <div class="sh-bind-field" id="shBindObiRow">
-                <div class="sh-bind-field-label">帯の出力</div>
+                <div class="sh-bind-field-label">付属の出力</div>
                 <div class="sh-bind-field-control">
                   <label><input type="radio" name="shBindObiOutput" value="separate" /> 別の PDF にする</label>
                   <label><input type="radio" name="shBindObiOutput" value="append" /> 本体の PDF の後ろに入れる(面付けはしない)</label>
                   <label><input type="radio" name="shBindObiOutput" value="none" /> 出力しない</label>
-                  <div class="sh-bind-uses" role="group" aria-label="帯の役割のページの使い道">
+                  <div class="sh-bind-uses" role="group" aria-label="付属の役割のページの使い道">
                     <span class="sh-bind-uses-title">役割ごとの使い道:</span>
-                    <label data-role="obiFront">帯表紙 <select id="shBindUseObiFront" class="sh-select sh-select-small" data-role="obiFront"></select></label>
+                    <label data-role="obiFront">表紙 <select id="shBindUseObiFront" class="sh-select sh-select-small" data-role="obiFront"></select></label>
+                    <label data-role="obiBack">裏表紙 <select id="shBindUseObiBack" class="sh-select sh-select-small" data-role="obiBack"></select></label>
                     <label data-role="obi">帯 <select id="shBindUseObi" class="sh-select sh-select-small" data-role="obi"></select></label>
-                    <label data-role="obiBack">帯裏表紙 <select id="shBindUseObiBack" class="sh-select sh-select-small" data-role="obiBack"></select></label>
+                    <label data-role="flapFront">表紙の折り返し <select id="shBindUseFlapFront" class="sh-select sh-select-small" data-role="flapFront"></select></label>
+                    <label data-role="flapBack">裏表紙の折り返し <select id="shBindUseFlapBack" class="sh-select sh-select-small" data-role="flapBack"></select></label>
+                    <label data-role="bookmark">しおり <select id="shBindUseBookmark" class="sh-select sh-select-small" data-role="bookmark"></select></label>
                   </div>
-                  <p class="sh-bind-help">帯の役割のページは本体に入れず、帯として出力します。「表紙の候補」「裏表紙の候補」にすると、そのページを本の表紙・裏表紙として使います(上の「表紙」「裏表紙」で、候補のどれを使うか選べます)。使い道の初期値は、拡張機能の「詳細設定」で変えられます。</p>
+                  <p class="sh-bind-help">付属(表紙・裏表紙・帯・折り返し・しおり)のページは本体に入れず、付属として出力します。「最初のページの候補」「最後のページの候補」にすると、そのページを本の最初・最後のページとして使います(上の「カバーの表紙」「カバーの裏表紙」の欄で、候補のどれを使うか選べます)。使い道の初期値は、拡張機能の「詳細設定」で変えられます。</p>
                 </div>
               </div>
               <div class="sh-bind-field">
@@ -1462,7 +1484,7 @@
                 <div class="sh-bind-field-control sh-bind-names">
                   <label>元名 <input type="text" id="shBindBase" class="sh-bind-input" autocomplete="off" spellcheck="false" /></label>
                   <label>本体に付ける言葉 <input type="text" id="shBindSuffix" class="sh-bind-input sh-short" autocomplete="off" spellcheck="false" /></label>
-                  <label>帯に付ける言葉 <input type="text" id="shBindObiSuffix" class="sh-bind-input sh-short" autocomplete="off" spellcheck="false" /></label>
+                  <label>付属に付ける言葉 <input type="text" id="shBindObiSuffix" class="sh-bind-input sh-short" autocomplete="off" spellcheck="false" /></label>
                   <p class="sh-bind-help">同じ名前のファイルがあるときは「名前 (1).pdf」のように別の名前で保存します(上書きしません)。</p>
                 </div>
               </div>

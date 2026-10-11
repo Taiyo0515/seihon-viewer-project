@@ -434,7 +434,7 @@ div.inline-input {
 /* 帯の役割の使い道 */
 .use-grid {
   display: grid;
-  grid-template-columns: max-content minmax(0, 220px);
+  grid-template-columns: max-content minmax(0, 330px);
   align-items: center;
   gap: 6px 12px;
 }

@@ -2,18 +2,13 @@
  * ページの書き出しの共通処理。
  *
  *  - PDF の指紋(ファイルサイズ + 内容の SHA-256)
- *  - ページを PNG 画像にする(可逆圧縮。注釈やフォームの入力内容も含め、見えているとおりに)
- *  - ページを PDF として抜き出す(元のテキスト・ベクター・画像をそのまま。再エンコードしない)
+ *  - ページを PDF として抜き出す(元のテキスト・ベクター・画像をそのまま。再エンコードしない。OCR の文字も残る)
+ *  (ページを画像にする処理は image-export.js)
  *
  * PDF の抜き出しには、同梱の PDF.js が持つページ抽出機能(extractPages)を使う。
  * 暗号化された PDF、文書内リンク、しおり、フォントや画像の重複除去にも対応している。
  * まれに PDF.js で抜き出せない文書は、pdf-lib(同梱)で抜き出す。
  */
-
-const PDF_POINTS_TO_CSS = 96 / 72;
-/** 1枚の画像の最大画素数(これを超える指定は自動で縮める。メモリ不足で失敗しないため) */
-const MAX_PIXELS = 64 * 1024 * 1024;
-const MAX_SIDE = 16000;
 
 // ---------------------------------------------------------------------------
 // 指紋
@@ -54,78 +49,6 @@ export function loadPdfFromBytes(bytes) {
     isEvalSupported: false,
     enableXfa: false,
   }).promise;
-}
-
-// ---------------------------------------------------------------------------
-// PNG
-// ---------------------------------------------------------------------------
-
-/**
- * 出力する画像の大きさ(倍率)を決める。
- * @param {{width:number,height:number}} base 倍率 1(72dpi)のときの大きさ
- * @param {{pngMode:string, pngLongSide:number, pngScale:number}} settings
- * @param {number} [shrink] 失敗時の縮小率(1 = そのまま)
- */
-export function computeRenderScale(base, settings, shrink = 1) {
-  let scale;
-  if (settings.pngMode === "scale") {
-    // 倍率 1 = ビューアの 100% 表示(96dpi)と同じ大きさ
-    scale = settings.pngScale * PDF_POINTS_TO_CSS;
-  } else {
-    scale = settings.pngLongSide / Math.max(base.width, base.height);
-  }
-  scale *= shrink;
-  // 上限を超えないように縮める
-  const w = base.width * scale;
-  const h = base.height * scale;
-  const areaLimit = Math.sqrt(MAX_PIXELS / (w * h));
-  const sideLimit = MAX_SIDE / Math.max(w, h);
-  return scale * Math.min(1, areaLimit, sideLimit);
-}
-
-/**
- * ページを PNG にする。
- * @param {PDFDocumentProxy} pdfDoc
- * @param {number} pageNumber 1始まり
- * @param {object} options
- * @param {object} options.settings 設定(pngMode など)
- * @param {number} [options.rotation] 表示上の回転(度)。ページ本来の回転に加える
- * @param {number} [options.shrink] 縮小率
- * @returns {Promise<{blob:Blob,width:number,height:number}>}
- */
-export async function renderPagePng(pdfDoc, pageNumber, { settings, rotation = 0, shrink = 1 }) {
-  const page = await pdfDoc.getPage(pageNumber);
-  const totalRotation = (((page.rotate + rotation) % 360) + 360) % 360;
-  const base = page.getViewport({ scale: 1, rotation: totalRotation });
-  const scale = computeRenderScale(base, settings, shrink);
-  const viewport = page.getViewport({ scale, rotation: totalRotation });
-  const width = Math.max(1, Math.round(viewport.width));
-  const height = Math.max(1, Math.round(viewport.height));
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d", { alpha: false });
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, width, height);
-  try {
-    await page.render({
-      canvas,
-      viewport,
-      // 「印刷」と同じ描き方: フォームの入力内容と、自分で書き込んだ注釈も画像に含める
-      intent: "print",
-      annotationMode: pdfjs().AnnotationMode.ENABLE_STORAGE,
-      background: "#ffffff",
-    }).promise;
-    const blob = await new Promise((resolve, reject) =>
-      canvas.toBlob(b => (b ? resolve(b) : reject(new Error("PNG に変換できませんでした"))), "image/png")
-    );
-    return { blob, width, height };
-  } finally {
-    // 大きな画像のメモリをすぐに解放する
-    canvas.width = 0;
-    canvas.height = 0;
-    page.cleanup();
-  }
 }
 
 // ---------------------------------------------------------------------------

@@ -172,10 +172,10 @@
         <div class="row">
           <div class="label">白紙を入れる位置</div>
           <div class="control radios">
-            <label><input type="radio" name="bindBlankPosition" value="beforeBack" /> 裏表紙の直前<span class="default-mark">初期値</span></label>
-            <label><input type="radio" name="bindBlankPosition" value="afterCover" /> 表紙の直後</label>
+            <label><input type="radio" name="bindBlankPosition" value="beforeBack" /> 最後のページ(カバーの裏表紙)の直前<span class="default-mark">初期値</span></label>
+            <label><input type="radio" name="bindBlankPosition" value="afterCover" /> 最初のページ(カバーの表紙)の直後</label>
             <label><input type="radio" name="bindBlankPosition" value="custom" /> 毎回指定する(任意のページの間。複数の場所に分けられる)</label>
-            <p class="help">本体(表紙+本文+裏表紙)のページ数が4の倍数になるよう、0〜3枚の白紙を入れます。</p>
+            <p class="help">本体(カバーの表紙+本文+カバーの裏表紙)のページ数が4の倍数になるよう、0〜3枚の白紙を入れます。</p>
           </div>
         </div>
         <div class="row">
@@ -218,45 +218,66 @@
           </div>
         </div>
         <div class="row">
-          <div class="label">帯の出力</div>
+          <div class="label">付属の出力</div>
           <div class="control radios">
             <label><input type="radio" name="bindObiOutput" value="separate" /> 別の PDF にする<span class="default-mark">初期値</span></label>
             <label><input type="radio" name="bindObiOutput" value="append" /> 本体の PDF の後ろに入れる(面付けはしない)</label>
             <label><input type="radio" name="bindObiOutput" value="none" /> 出力しない</label>
+            <p class="help">付属は、表紙・裏表紙・帯・表紙の折り返し・裏表紙の折り返し・しおりの役割を付けたページです(カバーの表紙・裏表紙は本体に入ります)。</p>
           </div>
         </div>
         <div class="row">
-          <div class="label">帯の役割の使い道</div>
+          <div class="label">付属の役割の使い道</div>
           <div class="control">
             <div class="use-grid">
-              <label for="bindUseObiFront">帯表紙</label>
+              <label for="bindUseObiFront">表紙</label>
               <select id="bindUseObiFront" class="select" data-role-use>
-                <option value="obi">帯として出力</option>
-                <option value="cover">表紙の候補にする</option>
-                <option value="back">裏表紙の候補にする</option>
+                <option value="obi">付属として出力</option>
+                <option value="cover">最初のページ(カバーの表紙)の候補にする</option>
+                <option value="back">最後のページ(カバーの裏表紙)の候補にする</option>
+                <option value="none">出力しない</option>
+              </select>
+              <label for="bindUseObiBack">裏表紙</label>
+              <select id="bindUseObiBack" class="select" data-role-use>
+                <option value="obi">付属として出力</option>
+                <option value="cover">最初のページ(カバーの表紙)の候補にする</option>
+                <option value="back">最後のページ(カバーの裏表紙)の候補にする</option>
                 <option value="none">出力しない</option>
               </select>
               <label for="bindUseObi">帯</label>
               <select id="bindUseObi" class="select" data-role-use>
-                <option value="obi">帯として出力</option>
-                <option value="cover">表紙の候補にする</option>
-                <option value="back">裏表紙の候補にする</option>
+                <option value="obi">付属として出力</option>
+                <option value="cover">最初のページ(カバーの表紙)の候補にする</option>
+                <option value="back">最後のページ(カバーの裏表紙)の候補にする</option>
                 <option value="none">出力しない</option>
               </select>
-              <label for="bindUseObiBack">帯裏表紙</label>
-              <select id="bindUseObiBack" class="select" data-role-use>
-                <option value="obi">帯として出力</option>
-                <option value="cover">表紙の候補にする</option>
-                <option value="back">裏表紙の候補にする</option>
+              <label for="bindUseFlapFront">表紙の折り返し</label>
+              <select id="bindUseFlapFront" class="select" data-role-use>
+                <option value="obi">付属として出力</option>
+                <option value="cover">最初のページ(カバーの表紙)の候補にする</option>
+                <option value="back">最後のページ(カバーの裏表紙)の候補にする</option>
+                <option value="none">出力しない</option>
+              </select>
+              <label for="bindUseFlapBack">裏表紙の折り返し</label>
+              <select id="bindUseFlapBack" class="select" data-role-use>
+                <option value="obi">付属として出力</option>
+                <option value="cover">最初のページ(カバーの表紙)の候補にする</option>
+                <option value="back">最後のページ(カバーの裏表紙)の候補にする</option>
+                <option value="none">出力しない</option>
+              </select>
+              <label for="bindUseBookmark">しおり</label>
+              <select id="bindUseBookmark" class="select" data-role-use>
+                <option value="obi">付属として出力</option>
+                <option value="cover">最初のページ(カバーの表紙)の候補にする</option>
+                <option value="back">最後のページ(カバーの裏表紙)の候補にする</option>
                 <option value="none">出力しない</option>
               </select>
             </div>
-            <span class="default-mark default-mark-block">初期値 すべて「帯として出力」</span>
+            <span class="default-mark default-mark-block">初期値 すべて「付属として出力」</span>
             <p class="help">
-              「帯」「帯表紙」「帯裏表紙」の役割を付けたページを、製本用PDF出力でどう使うかを決めます。
-              初期値では本体には入れず、帯の PDF(上の「帯の出力」)にまとめます。
-              たとえば、帯の付いたカラーの表紙を本の表紙として使う場合は「帯表紙」を「表紙の候補にする」にすると、
-              出力の画面の「表紙・帯のページ」の「表紙」(または「裏表紙」)の欄で、候補として使われます。出力の画面で、その回だけ変えることもできます。
+              付属の役割を付けたページを、製本用PDF出力でどう使うかを決めます。初期値では本体には入れず、付属の PDF(上の「付属の出力」)にまとめます。
+              たとえば、カバーではなく本の表紙を本の最初のページにしたい場合は、「表紙」を「最初のページ(カバーの表紙)の候補にする」にすると、
+              出力の画面の「カバーの表紙」の欄で候補として使われます。出力の画面で、その回だけ変えることもできます。
             </p>
           </div>
         </div>
@@ -264,7 +285,7 @@
           <div class="label">出力ファイル名</div>
           <div class="control">
             <div class="inline-input">元名<input type="text" id="bindNameSuffix" class="text-input" maxlength="30" />.pdf / 元名<span id="bindNameSuffixEcho"></span>_面付け.pdf</div>
-            <div class="inline-input">元名<input type="text" id="bindObiSuffix" class="text-input" maxlength="30" />.pdf(帯)</div>
+            <div class="inline-input">元名<input type="text" id="bindObiSuffix" class="text-input" maxlength="30" />.pdf(付属)</div>
             <p class="help">同じ名前のファイルがあるときは「名前 (1).pdf」のように別の名前で保存します(上書きしません)。</p>
           </div>
         </div>

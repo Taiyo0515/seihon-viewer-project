@@ -1,8 +1,10 @@
 /**
  * 製本用 PDF の組み立ての計画(計算だけ。PDF の作成は bookbinding-export.js)。
  *
- * 1. 本体の組み立て: 表紙(選んだ候補)+ 本文 + 裏表紙(選んだ候補)
- *    本文は「役割の付いていないページ」を元の順番で並べたもの。帯の役割のページは帯の出力へ回す。
+ * 1. 本体の組み立て: 最初のページ(カバーの表紙。選んだ候補)+ 本文 + 最後のページ(カバーの裏表紙。選んだ候補)
+ *    本文は「役割の付いていないページ」を元の順番で並べたもの。
+ *    付属の役割(表紙・裏表紙・帯・表紙の折り返し・裏表紙の折り返し・しおり)のページは付属の出力へ回す。
+ *    (役割の id は 0.1 までと同じ。cover = カバーの表紙、back = カバーの裏表紙、obiFront = 表紙、obiBack = 裏表紙)
  * 2. 白紙の挿入: 本体のページ数 N が 4 の倍数になるよう、0〜3 枚の白紙を入れる(既定: 裏表紙の直前)
  * 3. 面付け(中綴じ): 用紙 k 枚目(k = 1〜N/4)
  *      表面: 左 = N − 2(k − 1)、右 = 2k − 1
@@ -10,24 +12,47 @@
  *    右綴じでは左右を入れ替える。
  */
 
-export const ROLE_IDS = Object.freeze({ cover: "cover", back: "back", obi: "obi", obiFront: "obiFront", obiBack: "obiBack" });
-export const OBI_ROLES = ["obiFront", "obi", "obiBack"];
+export const ROLE_IDS = Object.freeze({
+  cover: "cover",
+  back: "back",
+  obiFront: "obiFront",
+  obiBack: "obiBack",
+  obi: "obi",
+  flapFront: "flapFront",
+  flapBack: "flapBack",
+  bookmark: "bookmark",
+});
+/** 付属の役割(本体には入れず、付属として出力する。使い道は設定で変えられる)。並びは画面に出す順 */
+export const ACCESSORY_ROLES = Object.freeze(["obiFront", "obiBack", "obi", "flapFront", "flapBack", "bookmark"]);
+/** 0.1 までの名前(互換のため) */
+export const OBI_ROLES = ACCESSORY_ROLES;
+
+/** 付属の役割 → 設定の項目名 */
+export const ROLE_USE_SETTING = Object.freeze({
+  obiFront: "bindUseObiFront",
+  obiBack: "bindUseObiBack",
+  obi: "bindUseObi",
+  flapFront: "bindUseFlapFront",
+  flapBack: "bindUseFlapBack",
+  bookmark: "bindUseBookmark",
+});
 
 /**
- * 帯の役割のページの使い道(詳細設定で変えられる)。
- * "obi" 帯として出力 / "cover" 表紙の候補 / "back" 裏表紙の候補 / "none" 出力しない
+ * 付属の役割のページの使い道(詳細設定で変えられる)。
+ * "obi" 付属として出力 / "cover" 最初のページ(カバーの表紙)の候補 / "back" 最後のページ(カバーの裏表紙)の候補 / "none" 出力しない
  */
 export const ROLE_USES = Object.freeze(["obi", "cover", "back", "none"]);
-export const DEFAULT_ROLE_USE = Object.freeze({ obiFront: "obi", obi: "obi", obiBack: "obi" });
-export const ROLE_USE_LABEL = Object.freeze({ obi: "帯として出力", cover: "表紙の候補", back: "裏表紙の候補", none: "出力しない" });
+export const DEFAULT_ROLE_USE = Object.freeze(Object.fromEntries(ACCESSORY_ROLES.map(r => [r, "obi"])));
+export const ROLE_USE_LABEL = Object.freeze({
+  obi: "付属として出力",
+  cover: "最初のページの候補",
+  back: "最後のページの候補",
+  none: "出力しない",
+});
 
 /** 設定から使い道の割り当てを作る */
 export function roleUseFromSettings(s) {
-  return {
-    obiFront: s?.bindUseObiFront || "obi",
-    obi: s?.bindUseObi || "obi",
-    obiBack: s?.bindUseObiBack || "obi",
-  };
+  return Object.fromEntries(ACCESSORY_ROLES.map(r => [r, s?.[ROLE_USE_SETTING[r]] || "obi"]));
 }
 
 /** 役割 → 出力での使い道("cover" "back" "obi" "none")。役割が無ければ null(本文) */
@@ -61,7 +86,7 @@ export const PAPERS = Object.freeze({
  * @param {number|null} [o.coverIndex] 使う表紙(0始まり)。null なら自動
  * @param {number|null} [o.backIndex] 使う裏表紙(0始まり)。null なら自動
  * @param {{mode:"beforeBack"|"afterCover"|"custom", after?:number[]}} [o.blank] 白紙の位置。after は「何ページ目の後ろ」(1始まり、重複可)
- * @param {{obiFront?:string, obi?:string, obiBack?:string}} [o.roleUse] 帯の役割のページの使い道
+ * @param {Object<string,string>} [o.roleUse] 付属の役割のページの使い道
  */
 export function planBook({ numPages, roles = new Map(), coverIndex = null, backIndex = null, blank = { mode: "beforeBack" }, roleUse = DEFAULT_ROLE_USE }) {
   const warnings = [];
@@ -95,7 +120,8 @@ export function planBook({ numPages, roles = new Map(), coverIndex = null, backI
 
   // ---- 本文(役割の無いページ。表紙・裏表紙に使ったページは除く) ----
   const body = unassigned.filter(i => i !== cover && i !== back);
-  const obi = all.filter(i => OBI_ROLES.includes(roleOf(i)) && useOf(i) === "obi");
+  // 付属(元のページの順)
+  const obi = all.filter(i => ACCESSORY_ROLES.includes(roleOf(i)) && useOf(i) === "obi");
   const omitted = all.filter(i => useOf(i) === "none");
 
   const sequence = [];

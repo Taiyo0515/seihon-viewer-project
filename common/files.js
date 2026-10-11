@@ -33,6 +33,8 @@ export function asciiFileName(name) {
     .replace(/製本/g, "seihon")
     .replace(/ほか/g, "etc")
     .replace(/帯/g, "obi")
+    .replace(/付属/g, "extras")
+    .replace(/コピー/g, "copy")
     .normalize("NFKD")
     .replace(/[^\x20-\x7e]/g, "")
     .replace(/[\\/:*?"<>|]/g, "_")
@@ -51,10 +53,11 @@ export function baseName(name) {
   return last.replace(/\.(pdf|png|zip)$/i, "");
 }
 
-/** 出力ファイル名に付ける日時(例: 20261006_2130) */
-export function timestampForFileName(date = new Date()) {
+/** 出力ファイル名に付ける日時(例: 20261006_2130。seconds なら 20261006_213045) */
+export function timestampForFileName(date = new Date(), { seconds = false } = {}) {
   const p = (n, w = 2) => String(n).padStart(w, "0");
-  return `${date.getFullYear()}${p(date.getMonth() + 1)}${p(date.getDate())}_${p(date.getHours())}${p(date.getMinutes())}`;
+  const base = `${date.getFullYear()}${p(date.getMonth() + 1)}${p(date.getDate())}_${p(date.getHours())}${p(date.getMinutes())}`;
+  return seconds ? `${base}${p(date.getSeconds())}` : base;
 }
 
 /** バイト数を読みやすく(例: 1.2 MB) */
@@ -204,6 +207,101 @@ export async function saveBlob(blob, fileName) {
   }
 }
 
+/** コピー(「PDF としてコピー」など)のためにファイルを保存するフォルダ(ダウンロードフォルダの中) */
+export const COPY_FOLDER = "製本ビューア_コピー";
+
+/**
+ * ダウンロードが終わるまで待つ。
+ * @returns {Promise<{ok:boolean, filename?:string, canceled?:boolean, error?:string}>}
+ */
+export function waitForDownload(id, url = null) {
+  return new Promise(resolve => {
+    let finished = false;
+    const finish = result => {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      chrome.downloads.onChanged.removeListener(onChanged);
+      chrome.downloads.onErased.removeListener(onErased);
+      if (url) {
+        URL.revokeObjectURL(url);
+      }
+      resolve(result);
+    };
+    const check = async () => {
+      const [item] = await chrome.downloads.search({ id }).catch(() => []);
+      if (!item) {
+        finish({ ok: false, canceled: true });
+      } else if (item.state === "complete") {
+        finish({ ok: true, filename: item.filename });
+      } else if (item.state === "interrupted") {
+        finish({ ok: false, canceled: item.error === "USER_CANCELED", error: item.error });
+      }
+    };
+    const onChanged = delta => {
+      if (delta.id === id && (delta.state || delta.error)) {
+        check();
+      }
+    };
+    const onErased = erasedId => {
+      if (erasedId === id) {
+        finish({ ok: false, canceled: true });
+      }
+    };
+    chrome.downloads.onChanged.addListener(onChanged);
+    chrome.downloads.onErased.addListener(onErased);
+    // すでに終わっていた場合
+    check();
+  });
+}
+
+/**
+ * Blob をダウンロードフォルダの中に、保存先を聞かずに保存し、保存が終わるまで待つ(コピー用)。
+ * 同じ名前のファイルがあるときは「名前 (1).pdf」のようにする(上書きしない)。
+ * @param {Blob} blob
+ * @param {string} relPath ダウンロードフォルダからの場所(例: "製本ビューア_コピー/本_抜粋.pdf")
+ * @returns {Promise<{id:number, path:string}>} path は保存したファイルのパソコン上の場所
+ */
+export async function saveBlobAndWait(blob, relPath) {
+  const url = URL.createObjectURL(blob);
+  let id;
+  try {
+    try {
+      id = await chrome.downloads.download({ url, filename: relPath, conflictAction: "uniquify", saveAs: false });
+    } catch (e) {
+      // 日本語のファイル名を扱えない環境では、英数字だけの名前で保存する
+      if (!/filename/i.test(e?.message || "")) {
+        throw e;
+      }
+      const ascii = relPath.split("/").map(asciiFileName).join("/");
+      id = await chrome.downloads.download({ url, filename: ascii, conflictAction: "uniquify", saveAs: false });
+    }
+  } catch (e) {
+    URL.revokeObjectURL(url);
+    throw e;
+  }
+  const result = await waitForDownload(id, url);
+  if (!result.ok) {
+    throw new Error(result.error ? `保存できませんでした(${result.error})` : "保存できませんでした");
+  }
+  return { id, path: result.filename };
+}
+
+/** パソコン上のファイルの場所から、フォルダの場所を作る(Windows の「\」と Mac・Linux の「/」の両方に対応) */
+export function parentFolderOf(path) {
+  const s = String(path || "");
+  const i = Math.max(s.lastIndexOf("\\"), s.lastIndexOf("/"));
+  if (i < 0) {
+    return s;
+  }
+  if (i === 0) {
+    return s[0];
+  }
+  // 「C:\」のようなドライブの直下は、区切りを残す
+  return /^[A-Za-z]:$/.test(s.slice(0, i)) ? s.slice(0, i + 1) : s.slice(0, i);
+}
+
 /**
  * Blob を、保存先を選ぶ画面を出して保存する(「名前を付けて保存」)。
  * 保存先とファイル名は使う人が選ぶ。同じ名前のファイルが保存先にあるときは、
@@ -235,41 +333,5 @@ export async function saveBlobAs(blob, fileName) {
     URL.revokeObjectURL(url);
     return { ok: false, canceled: true };
   }
-  return new Promise(resolve => {
-    let finished = false;
-    const finish = result => {
-      if (finished) {
-        return;
-      }
-      finished = true;
-      chrome.downloads.onChanged.removeListener(onChanged);
-      chrome.downloads.onErased.removeListener(onErased);
-      URL.revokeObjectURL(url);
-      resolve({ id, ...result });
-    };
-    const check = async () => {
-      const [item] = await chrome.downloads.search({ id }).catch(() => []);
-      if (!item) {
-        finish({ ok: false, canceled: true });
-      } else if (item.state === "complete") {
-        finish({ ok: true, filename: item.filename });
-      } else if (item.state === "interrupted") {
-        finish({ ok: false, canceled: item.error === "USER_CANCELED", error: item.error });
-      }
-    };
-    const onChanged = delta => {
-      if (delta.id === id && (delta.state || delta.error)) {
-        check();
-      }
-    };
-    const onErased = erasedId => {
-      if (erasedId === id) {
-        finish({ ok: false, canceled: true });
-      }
-    };
-    chrome.downloads.onChanged.addListener(onChanged);
-    chrome.downloads.onErased.addListener(onErased);
-    // すでに終わっていた場合
-    check();
-  });
+  return { id, ...(await waitForDownload(id, url)) };
 }

@@ -41,7 +41,15 @@ const RADIO_SETTINGS = [
   "bindObiOutput",
 ];
 const CHECK_SETTINGS = ["openLocalFiles", "restorePosition", "guardEnabled", "perfLog", "collectClearAfterExport", "bindImpose"];
-const SELECT_SETTINGS = ["bindPaper", "bindUseObiFront", "bindUseObi", "bindUseObiBack"];
+const SELECT_SETTINGS = [
+  "bindPaper",
+  "bindUseObiFront",
+  "bindUseObiBack",
+  "bindUseObi",
+  "bindUseFlapFront",
+  "bindUseFlapBack",
+  "bindUseBookmark",
+];
 const TEXT_SETTINGS = ["bindNameSuffix", "bindObiSuffix"];
 const NUMBER_SETTINGS = { pngLongSide: [800, 12000], pngScale: [1, 8], collectLimitMB: [50, 20000] };
 

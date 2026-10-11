@@ -8,11 +8,12 @@
 import { onSettingsChanged, saveSettings } from "../common/settings.js";
 import { matchesShortcut } from "../common/shortcut.js";
 import { viewerUrlFor } from "../common/viewer-url.js";
-import { AiCopy } from "./ai-copy.js";
 import { BookLayout, VIEW_MODES } from "./book-layout.js";
 import { Collection } from "./collection.js";
-import { DocSource } from "./doc-source.js";
+import { DocSource, decryptedCopy } from "./doc-source.js";
+import { PageCopy } from "./page-copy.js";
 import { PageEditor } from "./page-edit.js";
+import { canPrintWithChrome, printWithChrome, removePrintFrame } from "./print-native.js";
 import { isRearranged, viewPageCount } from "./page-map.js";
 import { PageRoles } from "./roles.js";
 import { hydrateIcons, setIcon } from "./icons.js";
@@ -27,6 +28,7 @@ import { EmptyState, ErrorPanel, Toast, setupDropZone } from "./ui/panels.js";
 import { PopupMenu } from "./ui/popup.js";
 import { RolesPanel } from "./ui/roles-panel.js";
 import { SidebarTabs } from "./ui/sidebar.js";
+import { SourceMenu } from "./ui/source-menu.js";
 import { ThumbSelection } from "./ui/thumb-select.js";
 import { Toolbar } from "./ui/toolbar.js";
 
@@ -68,15 +70,15 @@ book.setDirection(settings.bindingDirection, { silent: true });
 /** いま表示している文書の出どころ */
 let current = { kind: null, url: null, name: null };
 
-// ---- フェーズ2: AI用コピー・ページ収集 ----
+// ---- フェーズ2: コピー(0.1 までの「AI用コピー」)・ページ収集 ----
 const getSettings = () => settings;
 const docSource = new DocSource(app, { getCurrent: () => current, getSettings });
-const aiCopy = new AiCopy({ app, toast, docSource, getSettings });
+const pageCopy = new PageCopy({ app, toast, docSource, getSettings });
 let collectPanel = null;
 const collection = new Collection({
   app,
   docSource,
-  aiCopy,
+  pageCopy,
   toast,
   getSettings,
   onShowPanel: () => collectPanel?.open(),
@@ -135,7 +137,7 @@ bindDialog = new BookbindingDialog({
 document.getElementById("shBindOutput").addEventListener("click", () => bindDialog.open());
 let contextMenu = null;
 const thumbSelection = new ThumbSelection(app, {
-  onCopy: pages => aiCopy.copyPages(pages),
+  onCopy: pages => pageCopy.copyPages(pages),
   onCollect: pages => collection.addCurrentPages(pages),
   onDelete: pages => pageEditor.deletePages(pages),
   onRoles: (pages, anchor) => contextMenu?.openRoleMenuAt(pages, anchor),
@@ -143,7 +145,7 @@ const thumbSelection = new ThumbSelection(app, {
 });
 contextMenu = new ViewerContextMenu({
   app,
-  aiCopy,
+  pageCopy,
   collection,
   collectPanel,
   thumbSelection,
@@ -153,6 +155,19 @@ contextMenu = new ViewerContextMenu({
   pageEditor,
   getSettings,
 });
+
+// 元のリンク・ファイルの場所のコピー(タイトルの右のボタン)
+const sourceButton = document.getElementById("shSource");
+const sourceMenu = new SourceMenu({
+  app,
+  button: sourceButton,
+  getCurrent: () => current,
+  getDownloadId: () => boot.downloadId,
+  toast,
+});
+
+// 「ページに合わせる」は、いちばん大きく見えているページを真ん中にして合わせる
+toolbar.onFitPage = () => book.fitPageCentered();
 
 /**
  * PDF.js は文書ごとに前回の表示状態(ページ・倍率・回転など)を localStorage に記録し、
@@ -225,6 +240,7 @@ function sanitizeViewHistory() {
       current = { kind: "data", url: null, name: args.filename || null };
     }
     perf.startDocument(current.name || current.url || "");
+    sourceMenu.update();
     sanitizeViewHistory();
     book.applyInitialOptions(book.mode || settings.initialView, book.direction);
     try {
@@ -259,6 +275,7 @@ async function openInitial() {
     const allowed = await (boot.fileAccessPromise || chrome.extension.isAllowedFileSchemeAccess());
     if (!allowed) {
       current = { kind: "url", url: src, name: null };
+      sourceMenu.update();
       showFileAccessHelp(src);
       return;
     }
@@ -518,19 +535,85 @@ window.addEventListener(
   true
 );
 
-document.getElementById("shPrint").addEventListener("click", () => {
-  updatePrintResolution();
-  app.triggerPrinting();
-});
+document.getElementById("shPrint").addEventListener("click", () => app.triggerPrinting());
 
 /**
- * 印刷の画質(ページを画像にするときの解像度)。PDF.js は印刷を始めるときにこの値を読む
- * (印刷ボタン・Ctrl+P・ブラウザのメニューからの印刷のどれでも)。
+ * 印刷(印刷ボタン・Ctrl+P)。画質が「最高画質」(初期値)なら、元の PDF のまま Chrome の印刷機能で印刷する
+ * (画像は元の解像度、文字・OCR の文字も残る。print-native.js)。それ以外は PDF.js の印刷(ページを画像にして印刷)。
+ * ブラウザのメニューから印刷したときは、PDF.js の印刷になる(高画質)。
+ */
+{
+  const pdfjsPrint = app.triggerPrinting.bind(app);
+  let preparing = false;
+  app.triggerPrinting = () => {
+    if (!app.pdfDocument) {
+      return;
+    }
+    if (settings.printQuality !== "max" || !canPrintWithChrome()) {
+      updatePrintResolution();
+      pdfjsPrint();
+      return;
+    }
+    if (preparing) {
+      return;
+    }
+    preparing = true;
+    printOriginal()
+      .catch(e => {
+        console.warn("[製本ビューア] 最高画質で印刷できなかったため、ページを画像にして印刷します", e);
+        toast.show(`最高画質で印刷できなかったため、ページを画像にして印刷します(${e.message || e})`, { duration: 6000 });
+        updatePrintResolution();
+        pdfjsPrint();
+      })
+      .finally(() => {
+        preparing = false;
+      });
+  };
+}
+
+/** 元の PDF(編集していれば編集を反映した PDF)を Chrome の印刷画面で印刷する */
+async function printOriginal() {
+  const doc = app.pdfDocument;
+  const passwordDoc = docSource.passwordDocs.has(doc);
+  const edited = hasEdits();
+  if (passwordDoc && edited) {
+    // 編集を反映した写しにもパスワードが必要になるため、画像にして印刷する
+    throw new Error("パスワード付きの PDF を編集しているため");
+  }
+  const busy = toast.show("印刷の準備をしています…", { duration: 0 });
+  try {
+    let bytes;
+    if (edited) {
+      pageEditor.sweepDeletedEditors();
+      bytes = await pageEditor.buildEditedBytes(doc);
+    } else if (passwordDoc) {
+      bytes = await decryptedCopy(doc);
+    } else {
+      bytes = await doc.getData();
+    }
+    if (!bytes?.length) {
+      throw new Error("印刷する PDF を作れませんでした");
+    }
+    if (doc !== app.pdfDocument) {
+      return;
+    }
+    busy();
+    await printWithChrome(bytes);
+  } finally {
+    busy();
+  }
+}
+app.eventBus.on("documentinit", () => removePrintFrame());
+
+/**
+ * ページを画像にして印刷するときの解像度。PDF.js は印刷を始めるときにこの値を読む
+ * (最高画質以外の印刷ボタン・Ctrl+P と、ブラウザのメニューからの印刷)。
+ * 最高画質の設定でブラウザのメニューから印刷したときは、高画質(300dpi)にする。
  */
 function updatePrintResolution() {
   const count = viewPageCount(app.pdfDocument);
   const q = settings.printQuality;
-  const dpi = q === "high" || (q === "auto" && count > 0 && count <= 50) ? 300 : 150;
+  const dpi = q === "high" || q === "max" || (q === "auto" && count > 0 && count <= 50) ? 300 : 150;
   window.PDFViewerApplicationOptions.set("printResolution", dpi);
   return dpi;
 }
@@ -596,47 +679,44 @@ async function openEditedInNative() {
 // ---------------------------------------------------------------------------
 // 表示モード(製本表示・見開き・単ページ)と綴じ方向
 // ---------------------------------------------------------------------------
+// 表示モードのボタンは、押すたびに 単ページ → 製本表示 → 見開き → 単ページ… と切り替える(0.2)。
+// その右の綴じ方向のボタンで、左綴じ・右綴じを切り替える。
+const NEXT_VIEW_MODE = Object.freeze({ single: "book", book: "spread", spread: "single" });
 const viewModeButton = document.getElementById("shViewMode");
-const viewModeMenu = new PopupMenu({
-  anchor: viewModeButton,
-  align: "center",
-  items: () => [
-    { header: "表示モード" },
-    ...Object.entries(VIEW_MODES).map(([id, m]) => ({
-      label: m.label,
-      hint: m.detail,
-      checked: book.mode === id,
-      radio: true,
-      onSelect: () => book.setMode(id),
-    })),
-    { separator: true },
-    { header: "綴じ方向" },
-    {
-      label: "左綴じ(表紙が右・横書きの本)",
-      checked: book.direction === "ltr",
-      radio: true,
-      onSelect: () => changeDirection("ltr"),
-    },
-    {
-      label: "右綴じ(表紙が左・縦書きの本)",
-      checked: book.direction === "rtl",
-      radio: true,
-      onSelect: () => changeDirection("rtl"),
-    },
-  ],
+const bindDirButton = document.getElementById("shBindDir");
+viewModeButton.addEventListener("click", () => {
+  const next = NEXT_VIEW_MODE[book.mode] || "book";
+  book.setMode(next);
+  toast.show(`表示モード: ${VIEW_MODES[next].label}`, { duration: 1500 });
 });
-viewModeButton.addEventListener("click", () => viewModeMenu.toggle());
+bindDirButton.addEventListener("click", () => {
+  const next = book.direction === "rtl" ? "ltr" : "rtl";
+  changeDirection(next);
+  toast.show(next === "rtl" ? "右綴じにしました(← キーで次のページ)" : "左綴じにしました(→ キーで次のページ)", { duration: 2500 });
+});
 
 function changeDirection(direction) {
   book.setDirection(direction);
   saveSettings({ bindingDirection: direction }).catch(() => {});
 }
 
-book.onChange(mode => {
-  const m = VIEW_MODES[mode];
+function updateViewButtons() {
+  const m = VIEW_MODES[book.mode] || VIEW_MODES.book;
+  const next = VIEW_MODES[NEXT_VIEW_MODE[book.mode] || "book"];
   setIcon(viewModeButton, m.icon);
-  viewModeButton.title = `表示モード: ${m.label}(${m.detail})`;
-});
+  viewModeButton.title = `表示モード: ${m.label}(${m.detail})。押すと「${next.label}」に切り替えます`;
+  viewModeButton.setAttribute("aria-label", `表示モード: ${m.label}。押すと${next.label}`);
+  viewModeButton.dataset.mode = book.mode;
+  const rtl = book.direction === "rtl";
+  setIcon(bindDirButton, rtl ? "bind-rtl" : "bind-ltr");
+  bindDirButton.title = rtl
+    ? "綴じ方向: 右綴じ(表紙が左・縦書きの本・漫画)。押すと左綴じに切り替えます"
+    : "綴じ方向: 左綴じ(表紙が右・横書きの本)。押すと右綴じに切り替えます";
+  bindDirButton.setAttribute("aria-label", rtl ? "綴じ方向: 右綴じ。押すと左綴じ" : "綴じ方向: 左綴じ。押すと右綴じ");
+  bindDirButton.dataset.direction = book.direction;
+}
+book.onChange(() => updateViewButtons());
+updateViewButtons();
 
 // ---------------------------------------------------------------------------
 // ⋮ メニュー
@@ -667,24 +747,25 @@ const moreMenu = new PopupMenu({
       { label: "ドキュメントのプロパティ", icon: "info", disabled: !hasDoc, onSelect: () => app.pdfDocumentProperties?.open() },
       { separator: true },
       {
-        label: "表示中のページをAI用にコピー",
-        icon: "ai-copy",
+        label: "表示中のページをコピー",
+        icon: "copy",
         shortcut: shortcutLabel(settings.aiCopyShortcut),
         disabled: !hasDoc,
-        onSelect: () => aiCopy.copySinglePage(app.page),
+        onSelect: () => pageCopy.copySinglePage(app.page),
       },
+      { label: "元のリンク・ファイルの場所をコピー…", icon: "link", disabled: sourceButton.disabled, onSelect: () => sourceMenu.open() },
       { label: "表示中のページを収集に追加", icon: "collect", disabled: !hasDoc, onSelect: () => collection.addCurrentPages([app.page]) },
       { label: `ページ収集を表示(${collection.count}ページ)`, icon: "collect", onSelect: () => collectPanel.open() },
       { separator: true },
       { label: "製本用PDF出力…", icon: "bind-output", disabled: !hasDoc, onSelect: () => bindDialog.open() },
       {
-        label: "ページを選ぶ(削除・表紙や帯の指定)",
+        label: "ページを選ぶ(削除・カバーや帯などの指定)",
         icon: "select",
         disabled: !hasDoc,
         hint: "サイドバーのサムネイルでページを選び、まとめて削除したり、役割を付けたりします",
         onSelect: () => openPageSelect(),
       },
-      { label: "ページ役割(表紙・帯など)の一覧", icon: "label", disabled: !hasDoc, onSelect: () => rolesPanel.open() },
+      { label: "ページ役割(カバー・表紙・帯など)の一覧", icon: "label", disabled: !hasDoc, onSelect: () => rolesPanel.open() },
       ...(settings.perfLog ? [{ label: "速度ログを表示", icon: "speed", disabled: !perf.done, onSelect: () => perf.render() }] : []),
       { separator: true },
       { label: "詳細設定", icon: "settings", onSelect: () => chrome.runtime.openOptionsPage() },
@@ -803,7 +884,7 @@ window.addEventListener(
 );
 
 // ---------------------------------------------------------------------------
-// AI用コピーのショートカット(既定 Ctrl+Shift+C。詳細設定で変更可)
+// コピーのショートカット(既定 Ctrl+Shift+C。詳細設定で変更可)
 //   サムネイルを複数選んでいれば選んだページ、そうでなければマウスの下のページ(無ければ表示中のページ)
 // ---------------------------------------------------------------------------
 {
@@ -828,7 +909,7 @@ window.addEventListener(
       e.preventDefault();
       e.stopPropagation();
       if (thumbSelection.size) {
-        aiCopy.copyPages(thumbSelection.pages());
+        pageCopy.copyPages(thumbSelection.pages());
         return;
       }
       let pageNumber = app.page;
@@ -838,7 +919,7 @@ window.addEventListener(
           pageNumber = Number(el.dataset.pageNumber);
         }
       }
-      aiCopy.copySinglePage(pageNumber);
+      pageCopy.copySinglePage(pageNumber);
     },
     true
   );
@@ -917,11 +998,14 @@ window.__seihonViewer = {
   annotations,
   perf,
   docSource,
-  aiCopy,
+  pageCopy,
+  /** 0.1 までの名前(試験・互換用) */
+  aiCopy: pageCopy,
   collection,
   collectPanel,
   thumbSelection,
   pageRoles,
+  sourceMenu,
   rolesPanel,
   bindDialog,
   pageEditor,

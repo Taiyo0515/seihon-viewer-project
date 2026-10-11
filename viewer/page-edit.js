@@ -597,7 +597,7 @@ export class PageEditor {
       duration: 7000,
       action: result.id !== undefined ? { label: "フォルダを開く", onClick: () => chrome.downloads.show(result.id) } : undefined,
     });
-    // 保存した PDF を開き直したときにも、表紙・帯などの役割が残るようにする
+    // 保存した PDF を開き直したときにも、カバー・表紙・帯などの役割が残るようにする
     computePdfKey(bytes)
       .then(key => this.roles.copyToSaved(key, savedName, viewPageCount(doc)))
       .catch(e => console.warn("[製本ビューア] 保存した PDF にページ役割を写せませんでした", e));

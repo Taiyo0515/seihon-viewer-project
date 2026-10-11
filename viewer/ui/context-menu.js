@@ -1,8 +1,8 @@
 /**
  * ビューア内の右クリックメニュー(ページとサムネイル)。
  *
- * - ページの上: 「AI用にコピー」「PNG/PDF で保存」「収集に追加/外す」など。
- *   文字を選んでいるときは「コピー」(通常の文字のコピー)も出す。リンクの上ではリンクの操作も出す。
+ * - ページの上: 「コピー」(0.1 までの「AI用にコピー」)「画像/PDF で保存」「収集に追加/外す」など。
+ *   文字を選んでいるときは「選択した文字をコピー」(通常の文字のコピー)も出す。リンクの上ではリンクの操作も出す。
  * - サムネイルの上: 同じ操作。複数選択中は、選んだページ全部が対象。
  * - Shift を押しながら右クリックすると、Chrome の通常のメニューを出す。
  *   入力欄(フォーム)や注釈の文字入力の上でも、通常のメニュー(貼り付けなど)を出す。
@@ -20,7 +20,7 @@ export class ViewerContextMenu {
   /**
    * @param {object} o
    * @param {object} o.app
-   * @param {object} o.aiCopy
+   * @param {object} o.pageCopy ページのコピー・書き出し
    * @param {object} o.collection
    * @param {object} o.collectPanel
    * @param {object} o.thumbSelection
@@ -57,18 +57,18 @@ export class ViewerContextMenu {
       s.aiCopySingle === "file-pdf"
         ? "このページを PDF で保存します(詳細設定で変更できます)"
         : s.aiCopySingle === "file-png"
-          ? "このページを PNG で保存します(詳細設定で変更できます)"
-          : "このページを高解像度の PNG 画像としてクリップボードに入れます。AI のチャット欄に貼り付けられます";
+          ? "このページを画像で保存します(詳細設定で変更できます)"
+          : "このページを画像にしてクリップボードに入れます。チャット欄や文書に貼り付けられます";
     return [
       {
-        label: "AI用にコピー",
-        icon: "ai-copy",
+        label: "コピー",
+        icon: "copy",
         shortcut: shortcutLabel(s.aiCopyShortcut),
         hint: copyHint,
-        onSelect: () => this.aiCopy.copySinglePage(pageNumber),
+        onSelect: () => this.pageCopy.copySinglePage(pageNumber),
       },
-      { label: "PNG 画像として保存", icon: "file-png", onSelect: () => this.aiCopy.savePagePng(pageNumber) },
-      { label: "このページだけの PDF として保存", icon: "file-pdf", onSelect: () => this.aiCopy.savePagePdf(pageNumber) },
+      { label: "画像として保存", icon: "file-png", onSelect: () => this.pageCopy.savePageImage(pageNumber) },
+      { label: "このページだけの PDF として保存", icon: "file-pdf", onSelect: () => this.pageCopy.savePagePdf(pageNumber) },
       { separator: true },
       collected
         ? { label: "収集から外す", icon: "collect-remove", onSelect: () => this.collection.removeCurrentPage(pageNumber) }
@@ -147,7 +147,7 @@ export class ViewerContextMenu {
     const items = [];
     if (text.trim()) {
       items.push(
-        { label: "コピー", icon: "copy", shortcut: shortcutLabel("Ctrl+C"), onSelect: () => this.copyText(text) },
+        { label: "選択した文字をコピー", icon: "text-cursor", shortcut: shortcutLabel("Ctrl+C"), onSelect: () => this.copyText(text) },
         { separator: true }
       );
     }
@@ -179,13 +179,23 @@ export class ViewerContextMenu {
     let items;
     if (sel.size > 1 && sel.has(pageNumber)) {
       const pages = sel.pages();
-      const multi = this.getSettings().aiCopyMulti === "zip" ? "PNG(ZIP)" : "PDF";
+      const multi = { "pdf-copy": "PDF", "image-copy": "画像", pdf: "PDF で保存", zip: "画像の ZIP で保存" }[this.getSettings().aiCopyMulti] || "PDF";
       items = [
         {
-          label: `選んだ${pages.length}ページをAI用にコピー(${multi}で保存)`,
-          icon: "ai-copy",
+          label: `選んだ${pages.length}ページをコピー(${multi})`,
+          icon: "copy",
           shortcut: shortcutLabel(this.getSettings().aiCopyShortcut),
-          onSelect: () => this.aiCopy.copyPages(pages),
+          onSelect: () => this.pageCopy.copyPages(pages),
+        },
+        {
+          label: `選んだ${pages.length}ページを PDF としてコピー`,
+          icon: "file-pdf",
+          onSelect: () => this.pageCopy.copyPdf(this.pageCopy.currentPages(pages)),
+        },
+        {
+          label: `選んだ${pages.length}ページを画像としてコピー`,
+          icon: "file-png",
+          onSelect: () => this.pageCopy.copyImages(this.pageCopy.currentPages(pages)),
         },
         { label: `選んだ${pages.length}ページを収集に追加`, icon: "collect", onSelect: () => this.collection.addCurrentPages(pages) },
         { label: `選んだ${pages.length}ページに役割を付ける`, icon: "label", shortcut: "▸", onSelect: () => this.openRoleMenu(pages) },

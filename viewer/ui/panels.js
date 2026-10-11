@@ -14,7 +14,8 @@ export class Toast {
 
   /**
    * @param {string} message
-   * @param {{duration?: number, action?: {label: string, onClick: Function}, kind?: "info"|"error"}} [opts]
+   * @param {{duration?: number, action?: {label: string, onClick: Function}, actions?: Array<{label: string, onClick: Function}>,
+   *          kind?: "info"|"error"}} [opts]
    *   duration に 0 を渡すと自動では消えない(処理中の表示など。戻り値の関数で消す)
    * @returns {Function} 通知を消す関数。dismiss.update(文字) で文字を差し替えられる
    */
@@ -30,16 +31,22 @@ export class Toast {
     const text = document.createElement("span");
     text.textContent = message;
     el.append(text);
-    if (opts.action) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "sh-toast-action";
-      b.textContent = opts.action.label;
-      b.addEventListener("click", () => {
-        opts.action.onClick();
-        dismiss();
-      });
-      el.append(b);
+    const actions = [...(opts.action ? [opts.action] : []), ...(opts.actions || [])];
+    if (actions.length) {
+      const box = document.createElement("span");
+      box.className = "sh-toast-actions";
+      for (const action of actions) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "sh-toast-action";
+        b.textContent = action.label;
+        b.addEventListener("click", () => {
+          action.onClick();
+          dismiss();
+        });
+        box.append(b);
+      }
+      el.append(box);
     }
     this.host.append(el);
     requestAnimationFrame(() => el.classList.add("sh-show"));

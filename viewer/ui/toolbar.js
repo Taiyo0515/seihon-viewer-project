@@ -218,7 +218,12 @@ export class Toolbar {
       return;
     }
     const fit = this.nextFit;
-    viewer.currentScaleValue = fit;
+    if (fit === "page-fit" && this.onFitPage) {
+      // いちばん大きく見えているページを真ん中にして合わせる(book-layout.js)
+      this.onFitPage();
+    } else {
+      viewer.currentScaleValue = fit;
+    }
     this.setNextFit(fit === "page-fit" ? "page-width" : "page-fit");
   }
 

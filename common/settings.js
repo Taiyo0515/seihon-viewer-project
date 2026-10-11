@@ -31,10 +31,12 @@ export const DEFAULT_SETTINGS = Object.freeze({
   /** テーマ: "system" システムに従う / "light" / "dark" */
   theme: "system",
   /**
-   * 印刷の画質(ビューアはページを画像にして印刷する):
+   * 印刷の画質:
+   * "max" 最高画質(元の PDF のまま Chrome の印刷機能で印刷する。画像は元の解像度、文字・OCR の文字も残る)/
    * "auto" 50ページまでは高画質、それより多いときは標準 / "standard" 150dpi / "high" 300dpi
+   * (max 以外は、ビューアがページを画像にして印刷する)
    */
-  printQuality: "auto",
+  printQuality: "max",
 
   // ---- 強制ダウンロード対策 ----
   /** 「表示せずダウンロード」させるサイトでもビューアで開く */
@@ -45,18 +47,29 @@ export const DEFAULT_SETTINGS = Object.freeze({
   /** 強制ダウンロードされたPDFをビューアで開いた後の元ファイル(第3層): "keep" 残す / "delete" 削除 */
   guardOriginalFile: "keep",
 
-  // ---- AI用コピー ----
-  /** 1ページのとき: "clipboard-png" PNGをクリップボードへ / "file-pdf" PDFを保存 / "file-png" PNGを保存 */
+  // ---- コピー(0.1 までの「AI用コピー」。設定の名前は互換のためそのまま) ----
+  /** 1ページのとき: "clipboard-png" 画像をクリップボードへ / "file-pdf" PDFを保存 / "file-png" 画像を保存 */
   aiCopySingle: "clipboard-png",
-  /** 複数ページのとき: "pdf" PDFを保存 / "zip" PNG群をZIPで保存 */
-  aiCopyMulti: "pdf",
-  /** PNGの大きさの指定方法: "longside" 長辺ピクセル / "scale" 倍率 */
+  /**
+   * 複数ページのとき: "pdf-copy" PDF をクリップボードへ(ファイルとして) / "image-copy" 画像をクリップボードへ(ファイルとして) /
+   * "pdf" PDFを保存 / "zip" 画像をまとめて ZIP で保存
+   */
+  aiCopyMulti: "pdf-copy",
+  /** 「画像としてコピー」で複数ページのとき: "files" 1ページ1枚の画像ファイル / "zip" ZIP にまとめる */
+  copyImagesAs: "files",
+  /**
+   * 画像(コピー・画像の保存・ZIP)の画質:
+   * "max" 最高画質(元の画質。スキャンしたページは元の画像の解像度、文字・図のページは 600dpi)/
+   * "high" 高画質(長辺 2400 ピクセル)/ "standard" 標準(長辺 1600 ピクセル)/ "custom" 指定する(下の pngMode など)
+   */
+  imageQuality: "max",
+  /** 「指定する」のときの大きさの指定方法: "longside" 長辺ピクセル / "scale" 倍率 */
   pngMode: "longside",
   /** 長辺ピクセル(文字が潰れない高め。A4 で約 205dpi、A5・B5 で約 240〜290dpi) */
   pngLongSide: 2400,
   /** 倍率(1 = ビューアの100%表示と同じ大きさ = 96dpi。3 なら 288dpi) */
   pngScale: 3,
-  /** AI用コピーのショートカット(ビューア内) */
+  /** コピーのショートカット(ビューア内) */
   aiCopyShortcut: "Ctrl+Shift+C",
 
   // ---- ページ収集 ----
@@ -76,19 +89,24 @@ export const DEFAULT_SETTINGS = Object.freeze({
   bindDuplex: "short",
   /** ページの大きさがそろっていないときの基準: "mode" 最も多い大きさ / "first" 最初のページ */
   bindSizeRef: "mode",
-  /** 帯の出力: "separate" 別の PDF / "append" 本体の後ろに同梱 / "none" 出力しない */
+  /** 付属(表紙・裏表紙・帯・折り返し・しおり)の出力: "separate" 別の PDF / "append" 本体の後ろに同梱 / "none" 出力しない */
   bindObiOutput: "separate",
   /**
-   * 帯の役割のページの使い道(帯の運用が違う場合に、割り当てを変えられるようにする)。
-   * "obi" 帯として出力 / "cover" 表紙の候補にする / "back" 裏表紙の候補にする / "none" 出力しない
+   * 付属の役割のページの使い道(運用に合わせて割り当てを変えられるようにする)。
+   * "obi" 付属として出力 / "cover" 本の最初のページ(カバーの表紙)の候補にする /
+   * "back" 本の最後のページ(カバーの裏表紙)の候補にする / "none" 出力しない
+   * (設定の名前は 0.1 までの役割の名前のまま: ObiFront = 表紙、ObiBack = 裏表紙)
    */
   bindUseObiFront: "obi",
-  bindUseObi: "obi",
   bindUseObiBack: "obi",
+  bindUseObi: "obi",
+  bindUseFlapFront: "obi",
+  bindUseFlapBack: "obi",
+  bindUseBookmark: "obi",
   /** 出力ファイル名に付ける言葉(元名_製本.pdf / 元名_製本_面付け.pdf) */
   bindNameSuffix: "_製本",
-  /** 帯の出力ファイル名に付ける言葉(元名_帯.pdf) */
-  bindObiSuffix: "_帯",
+  /** 付属の出力ファイル名に付ける言葉(元名_付属.pdf) */
+  bindObiSuffix: "_付属",
 
   // ---- 速度 ----
   /** 速度ログ(画面右下の計測表示とログの保存) */
@@ -111,12 +129,14 @@ export const SETTING_LABELS = Object.freeze({
   guardEnabled: "強制ダウンロード対策",
   guardExcludeSites: "対策の対象外にするサイト",
   guardOriginalFile: "強制ダウンロード時の元ファイル",
-  aiCopySingle: "AI用コピー(1ページ)",
-  aiCopyMulti: "AI用コピー(複数ページ)",
-  pngMode: "PNG の解像度の指定方法",
-  pngLongSide: "PNG の長辺",
-  pngScale: "PNG の倍率",
-  aiCopyShortcut: "AI用コピーのショートカット",
+  aiCopySingle: "コピー(1ページ)",
+  aiCopyMulti: "コピー(複数ページ)",
+  copyImagesAs: "画像としてコピー(複数ページ)",
+  imageQuality: "コピー・画像の画質",
+  pngMode: "画像の大きさの指定方法",
+  pngLongSide: "画像の長辺",
+  pngScale: "画像の倍率",
+  aiCopyShortcut: "コピーのショートカット",
   collectClearAfterExport: "書き出し後の収集",
   collectLimitMB: "収集の保存上限",
   bindBlankPosition: "白紙を入れる位置",
@@ -124,12 +144,15 @@ export const SETTING_LABELS = Object.freeze({
   bindPaper: "出力用紙",
   bindDuplex: "両面の綴じ方向",
   bindSizeRef: "大きさがそろっていないとき",
-  bindObiOutput: "帯の出力",
-  bindUseObiFront: "帯表紙の使い道",
+  bindObiOutput: "付属の出力",
+  bindUseObiFront: "表紙の使い道",
+  bindUseObiBack: "裏表紙の使い道",
   bindUseObi: "帯の使い道",
-  bindUseObiBack: "帯裏表紙の使い道",
+  bindUseFlapFront: "表紙の折り返しの使い道",
+  bindUseFlapBack: "裏表紙の折り返しの使い道",
+  bindUseBookmark: "しおりの使い道",
   bindNameSuffix: "出力ファイル名(本体)",
-  bindObiSuffix: "出力ファイル名(帯)",
+  bindObiSuffix: "出力ファイル名(付属)",
   perfLog: "速度ログ",
 });
 
@@ -138,10 +161,12 @@ const ENUMS = {
   initialView: ["book", "spread", "single"],
   bindingDirection: ["ltr", "rtl"],
   theme: ["system", "light", "dark"],
-  printQuality: ["auto", "standard", "high"],
+  printQuality: ["max", "auto", "standard", "high"],
   guardOriginalFile: ["keep", "delete"],
   aiCopySingle: ["clipboard-png", "file-pdf", "file-png"],
-  aiCopyMulti: ["pdf", "zip"],
+  aiCopyMulti: ["pdf-copy", "image-copy", "pdf", "zip"],
+  copyImagesAs: ["files", "zip"],
+  imageQuality: ["max", "high", "standard", "custom"],
   pngMode: ["longside", "scale"],
   bindBlankPosition: ["beforeBack", "afterCover", "custom"],
   bindPaper: ["auto", "A3", "A4", "A5", "B4", "B5", "Letter", "Tabloid", "double"],
@@ -149,8 +174,11 @@ const ENUMS = {
   bindSizeRef: ["mode", "first"],
   bindObiOutput: ["separate", "append", "none"],
   bindUseObiFront: ["obi", "cover", "back", "none"],
-  bindUseObi: ["obi", "cover", "back", "none"],
   bindUseObiBack: ["obi", "cover", "back", "none"],
+  bindUseObi: ["obi", "cover", "back", "none"],
+  bindUseFlapFront: ["obi", "cover", "back", "none"],
+  bindUseFlapBack: ["obi", "cover", "back", "none"],
+  bindUseBookmark: ["obi", "cover", "back", "none"],
 };
 
 /** 数値設定の範囲(範囲外は初期値に戻す) */
@@ -241,6 +269,43 @@ export function normalizeSettings(stored) {
     }
   }
   return out;
+}
+
+/**
+ * 古い版から更新したときの設定の引き継ぎ(拡張機能の更新時に1回だけ Service Worker が呼ぶ)。
+ * 初期値が変わった項目は、前の版の初期値のままなら新しい初期値にする(自分で選んだ値はそのまま)。
+ * @param {object|undefined} stored 保存されている設定
+ * @param {string} previousVersion 更新前の版(例: "0.1.0")
+ * @returns {object|null} 書き換えた設定(変えるものが無ければ null)
+ */
+export function migrateSettings(stored, previousVersion) {
+  if (!stored || typeof stored !== "object" || !previousVersion || compareVersions(previousVersion, "0.2.0") >= 0) {
+    return null;
+  }
+  const next = { ...stored };
+  let changed = false;
+  // 0.2: 印刷とコピーの初期値を「最高画質」「クリップボードへ」に、付属の出力ファイル名を「_付属」に
+  const defaultsBefore12 = { printQuality: "auto", aiCopyMulti: "pdf", bindObiSuffix: "_帯" };
+  for (const [key, oldDefault] of Object.entries(defaultsBefore12)) {
+    if (next[key] === oldDefault) {
+      next[key] = DEFAULT_SETTINGS[key];
+      changed = true;
+    }
+  }
+  return changed ? normalizeSettings(next) : null;
+}
+
+/** "0.2.0" のような版を比べる(a が新しければ正) */
+export function compareVersions(a, b) {
+  const pa = String(a).split(".").map(n => Number.parseInt(n, 10) || 0);
+  const pb = String(b).split(".").map(n => Number.parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d) {
+      return d;
+    }
+  }
+  return 0;
 }
 
 /** 設定を読み込む(常に検証済みの完全なオブジェクトを返す) */

@@ -22,15 +22,15 @@ export class Collection {
    * @param {object} o
    * @param {object} o.app
    * @param {object} o.docSource
-   * @param {object} o.aiCopy
+   * @param {object} o.pageCopy ページのコピー・書き出し(page-copy.js)
    * @param {object} o.toast
    * @param {() => object} o.getSettings
    * @param {() => void} o.onShowPanel 「収集を表示」が押されたとき
    */
-  constructor({ app, docSource, aiCopy, toast, getSettings, onShowPanel }) {
+  constructor({ app, docSource, pageCopy, toast, getSettings, onShowPanel }) {
     this.app = app;
     this.docSource = docSource;
-    this.aiCopy = aiCopy;
+    this.pageCopy = pageCopy;
     this.toast = toast;
     this.getSettings = getSettings;
     this.onShowPanel = onShowPanel;
@@ -157,16 +157,16 @@ export class Collection {
   }
 
   /**
-   * 収集したページを書き出す。
-   * @param {"pdf"|"zip"} format
+   * 収集したページを、書き出し・コピーの指定にする(元の PDF のデータを読み込む)。
+   * @returns {Promise<Array<{source:Uint8Array, pageIndex:number, name:string}>|null>}
    */
-  async exportAll(format) {
+  async collectPages() {
     await this.ready;
     await this.refresh();
     const items = this.items;
     if (!items.length) {
       this.toast.show("収集したページがありません");
-      return false;
+      return null;
     }
     const bytesByKey = new Map();
     const missing = [];
@@ -185,20 +185,48 @@ export class Collection {
       .filter(i => bytesByKey.has(i.pdfKey))
       .map(i => ({ source: bytesByKey.get(i.pdfKey), pageIndex: i.pageIndex, name: baseName(i.name) }));
     if (missing.length) {
-      this.toast.show(`元の PDF のデータが見つからないページを除いて書き出します(${[...new Set(missing)].join("、")})`, {
+      this.toast.show(`元の PDF のデータが見つからないページを除きます(${[...new Set(missing)].join("、")})`, {
         kind: "error",
         duration: 8000,
       });
     }
-    if (!pages.length) {
+    return pages.length ? pages : null;
+  }
+
+  /**
+   * 収集したページを書き出す(ファイルに保存)。
+   * @param {"pdf"|"zip"} format
+   */
+  async exportAll(format) {
+    const pages = await this.collectPages();
+    if (!pages) {
       return false;
     }
-    const ok = await this.aiCopy.saveMultiple(pages, format);
+    const ok = await this.pageCopy.saveMultiple(pages, format);
+    await this.afterExport(ok);
+    return ok;
+  }
+
+  /**
+   * 収集したページをコピーする(「PDF としてコピー」「画像としてコピー」)。
+   * 裏で PDF・画像のファイルを作って保存し、クリップボードに入れる(file-clipboard.js)。
+   * @param {"pdf"|"images"} format
+   */
+  async copyAll(format) {
+    const pages = await this.collectPages();
+    if (!pages) {
+      return false;
+    }
+    const ok = format === "images" ? await this.pageCopy.copyImages(pages) : await this.pageCopy.copyPdf(pages);
+    await this.afterExport(ok);
+    return ok;
+  }
+
+  async afterExport(ok) {
     if (ok && this.getSettings().collectClearAfterExport) {
       await clearCollection();
       this.toast.show("書き出したので、収集を空にしました(詳細設定で変更できます)");
     }
-    return ok;
   }
 }
 
