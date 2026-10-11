@@ -301,14 +301,15 @@ const fmt = v => {
  * @param {Array<{src:number, rect:number[]|null, rotate:number, masks?:number[][]}>} pages 作るページ(順に)。
  *   src: 元のページ(0始まり)/ rect: 表示する範囲(元のページのユーザー空間 [x0 y0 x1 y1]。null ならそのまま)/
  *   rotate: 元の回転に足す回転(度)/ masks: 白く覆う範囲(元のページのユーザー空間。スキャンで入った本の縁など)
- * @param {{id:string, onProgress?:Function}} o id: 32桁の16進(文書の ID)
+ * @param {{id:string, onProgress?:Function, pdf?:object}} o id: 32桁の16進(文書の ID)/
+ *   pdf: bytes を pdf-lib で読み込んだ文書(あれば読み直さずに使う。中身を書き換えるので、使えるのは1回だけ)
  * @returns {Promise<Uint8Array>}
  */
-export async function buildArrangedPdf(bytes, pages, { id, onProgress = null }) {
+export async function buildArrangedPdf(bytes, pages, { id, onProgress = null, pdf: loaded = null }) {
   const lib = await pdfLib();
   const { PDFName, PDFArray, PDFDict, PDFRef, PDFNumber, PDFHexString } = lib;
   const N = n => PDFName.of(n);
-  const pdf = await lib.PDFDocument.load(bytes, { updateMetadata: false, throwOnInvalidObject: false });
+  const pdf = loaded || (await lib.PDFDocument.load(bytes, { updateMetadata: false, throwOnInvalidObject: false }));
   const context = pdf.context;
   const source = new ScanSource(lib, pdf);
   const srcPages = source.pages;

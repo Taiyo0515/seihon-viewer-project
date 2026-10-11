@@ -23,6 +23,7 @@ import {
   halvesFor,
   orderBooklet,
   orderSpread,
+  shrinkGray,
   toGray,
 } from "./scan-analysis.js";
 import { ScanSource, arrangedId, buildArrangedPdf } from "./scan-pages.js";
@@ -158,33 +159,6 @@ async function drawJpeg(ctx, viewport, image) {
     decoder.close();
   }
   return true;
-}
-
-/** 灰色の画像を縮める(プレビュー用) */
-function shrinkGray(gray, W, H, width) {
-  const w = Math.max(1, Math.min(width, W));
-  const scale = w / W;
-  const h = Math.max(1, Math.round(H * scale));
-  const out = new Uint8Array(w * h);
-  for (let y = 0; y < h; y++) {
-    const sy0 = Math.floor(y / scale);
-    const sy1 = Math.max(sy0 + 1, Math.min(H, Math.floor((y + 1) / scale)));
-    for (let x = 0; x < w; x++) {
-      const sx0 = Math.floor(x / scale);
-      const sx1 = Math.max(sx0 + 1, Math.min(W, Math.floor((x + 1) / scale)));
-      let sum = 0;
-      let n = 0;
-      for (let yy = sy0; yy < sy1; yy++) {
-        const row = yy * W;
-        for (let xx = sx0; xx < sx1; xx++) {
-          sum += gray[row + xx];
-          n++;
-        }
-      }
-      out[y * w + x] = n ? sum / n : 255;
-    }
-  }
-  return { data: out, width: w, height: h, scale };
 }
 
 /** 画像の座標(ビューポート)の点を、PDF のユーザー空間の点にする */
@@ -553,14 +527,75 @@ export class ScanArranger {
     const gray = toGray(data, W, H);
     const img = { gray, width: W, height: H, pxPerMm: (scale * 72) / 25.4 };
     // 開発時の確認用(試験から調べた画像を見るため。ふだんは何もしない)
-    globalThis.__seihonScanDebug?.push({ index: i, gray, width: W, height: H, pxPerMm: img.pxPerMm, jpeg: drawn });
-    const scan = analyzeScan(img);
+    globalThis.__seihonScanDebug?.push({ index: i, gray: gray.slice(), width: W, height: H, pxPerMm: img.pxPerMm, jpeg: drawn });
+    let result;
+    try {
+      result = await this.runAnalysis(img);
+    } catch (e) {
+      if (this.workerBroken && !base.retried?.has(i)) {
+        // Worker が途中で止まった(画像は渡してしまった): この画面で調べ直す
+        (base.retried ||= new Set()).add(i);
+        return this.analyzePage(base, i);
+      }
+      throw e;
+    }
+    const { scan, preview } = result;
     scan.transform = viewport.transform.slice();
-    scan.candidates = candidateHalves(img, scan);
     scan.pure = !!info?.pureImage;
     base.scans[i] = scan;
-    base.previews[i] = shrinkGray(gray, W, H, PREVIEW_WIDTH);
+    base.previews[i] = preview;
     return scan;
+  }
+
+  /**
+   * 画像を調べる(Worker で。Worker が使えなければ、この画面で)。
+   * @returns {Promise<{scan:object, preview:object}>}
+   */
+  async runAnalysis(img) {
+    if (this.workerBroken !== true) {
+      try {
+        if (!this.worker) {
+          this.worker = new Worker(new URL("./scan-worker.js", import.meta.url), { type: "module" });
+          this.workerJobs = new Map();
+          this.workerSeq = 0;
+          this.worker.onmessage = ({ data }) => {
+            const job = this.workerJobs.get(data.id);
+            this.workerJobs.delete(data.id);
+            if (data.error) {
+              job?.reject(new Error(data.error));
+            } else {
+              job?.resolve(data);
+            }
+          };
+          this.worker.onerror = e => {
+            this.workerBroken = true;
+            for (const job of this.workerJobs.values()) {
+              job.reject(new Error(e?.message || "Worker のエラー"));
+            }
+            this.workerJobs.clear();
+          };
+        }
+        const id = ++this.workerSeq;
+        const result = await new Promise((resolve, reject) => {
+          this.workerJobs.set(id, { resolve, reject });
+          const buffer = img.gray.buffer;
+          this.worker.postMessage(
+            { id, gray: buffer, width: img.width, height: img.height, pxPerMm: img.pxPerMm, previewWidth: PREVIEW_WIDTH },
+            [buffer]
+          );
+        });
+        return { scan: result.scan, preview: result.preview };
+      } catch (e) {
+        console.warn("[製本ビューア] スキャンを調べる Worker が使えないため、この画面で調べます", e);
+        this.workerBroken = true;
+        if (!img.gray.byteLength) {
+          throw e; // 画像を Worker に渡してしまった(呼び出し側で調べ直す)
+        }
+      }
+    }
+    const scan = analyzeScan(img);
+    scan.candidates = candidateHalves(img, scan);
+    return { scan, preview: shrinkGray(img.gray, img.width, img.height, PREVIEW_WIDTH) };
   }
 
   /**
@@ -576,8 +611,14 @@ export class ScanArranger {
       throw new Error("PDF を読み込めませんでした");
     }
     const total = base.pageCount;
+    base.cancel = false;
     for (let i = 0; i < total; i++) {
       if (!this.alive(base)) {
+        return false;
+      }
+      if (base.cancel) {
+        // 途中でやめた(整え方のダイアログを閉じた)。調べたページの結果は残す
+        base.cancel = false;
         return false;
       }
       if (!base.scans[i]) {
@@ -590,8 +631,7 @@ export class ScanArranger {
       base.checked = true;
     }
     base.analyzed = true;
-    // 調べ終わったら、pdf-lib の読み込みと、調べるために開いた文書は手放す(作るときは読み直す)
-    base.source = null;
+    // 調べるために開いた文書は手放す(pdf-lib の読み込みは、最初に PDF を作るときに使う)
     if (base.analysisDoc) {
       base.analysisDoc.destroy().catch(() => {});
       base.analysisDoc = null;
@@ -661,8 +701,15 @@ export class ScanArranger {
       await this.restore({ remember });
       return true;
     }
-    if (this.pageEditor.dirty && !(await this.pageEditor.guard("スキャンを整える"))) {
-      return false;
+    if (this.pageEditor.dirty) {
+      // 開いたときの自動の整えは、その間に書き込みなどを始めていたら行わない(ボタンで知らせるだけ)
+      if (auto) {
+        this.setState("suggest");
+        return false;
+      }
+      if (!(await this.pageEditor.guard("スキャンを整える"))) {
+        return false;
+      }
     }
     const before = this.state;
     this.setState("busy", "調べています…");
@@ -692,7 +739,10 @@ export class ScanArranger {
       this.busyToast?.update?.("PDF を作っています…");
       const sig = signature(options);
       const id = await arrangedId(`${base.key}|${sig}|${plan.pages.length}`);
-      const bytes = await buildArrangedPdf(base.plain, plan.pages, { id });
+      // 調べるのに読み込んだ pdf-lib の文書があれば、作るのに使う(読み直さずに済む。作ると中身が変わるので、使うのは1回だけ)
+      const pdf = base.source?.pdf || null;
+      base.source = null;
+      const bytes = await buildArrangedPdf(base.plain, plan.pages, { id, pdf });
       if (!this.alive(base)) {
         return false;
       }
@@ -858,6 +908,13 @@ export class ScanArranger {
     const res = await saveBlobAs(new Blob([base.bytes], { type: "application/pdf" }), base.fileName);
     if (!res.ok && !res.canceled) {
       this.toast.show(`保存できませんでした(${res.error || "不明なエラー"})`, { kind: "error", duration: 8000 });
+    }
+  }
+
+  /** 整え方を選ぶ画面のために調べているのを、やめる(ダイアログを閉じたとき) */
+  cancelAnalysis() {
+    if (this.base && this.state === "busy" && !this.arranged) {
+      this.base.cancel = true;
     }
   }
 

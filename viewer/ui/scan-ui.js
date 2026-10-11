@@ -138,6 +138,11 @@ export class ScanDialog {
     this.dialog.addEventListener("close", () => {
       this.canvasCache.clear();
       this.preview.textContent = "";
+      // 調べている途中で閉じたら、調べるのをやめる(整えるボタンを押したときは続ける)
+      if (!this.applying) {
+        this.arranger.cancelAnalysis();
+      }
+      this.applying = false;
     });
   }
 
@@ -204,6 +209,13 @@ export class ScanDialog {
     this.preview.textContent = "";
     if (!this.dialog.open) {
       this.dialog.showModal();
+    }
+    if (!a.base.analyzed && !(await a.mostlyLandscape(a.base.doc))) {
+      // 縦長のページの PDF(ふつうの文書): 分けられない
+      this.ready = false;
+      this.updateControls();
+      this.showMessage("この PDF は横長のページではないため、見開きの分割・冊子の並べ替えはできません(スキャンした見開きは横長のページになります)。");
+      return;
     }
     if (!a.base.analyzed) {
       this.progress.textContent = "スキャンを調べています…";
@@ -362,6 +374,7 @@ export class ScanDialog {
 
   async apply() {
     const o = this.options();
+    this.applying = true;
     this.close();
     if (o.mode === "none") {
       await this.arranger.restore({ remember: true });

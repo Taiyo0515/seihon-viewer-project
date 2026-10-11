@@ -32,6 +32,33 @@ export function toGray(rgba, width, height) {
   return out;
 }
 
+/** 灰色の画像を縮める(プレビュー用) */
+export function shrinkGray(gray, W, H, width) {
+  const w = Math.max(1, Math.min(width, W));
+  const scale = w / W;
+  const h = Math.max(1, Math.round(H * scale));
+  const out = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    const sy0 = Math.floor(y / scale);
+    const sy1 = Math.max(sy0 + 1, Math.min(H, Math.floor((y + 1) / scale)));
+    for (let x = 0; x < w; x++) {
+      const sx0 = Math.floor(x / scale);
+      const sx1 = Math.max(sx0 + 1, Math.min(W, Math.floor((x + 1) / scale)));
+      let sum = 0;
+      let n = 0;
+      for (let yy = sy0; yy < sy1; yy++) {
+        const row = yy * W;
+        for (let xx = sx0; xx < sx1; xx++) {
+          sum += gray[row + xx];
+          n++;
+        }
+      }
+      out[y * w + x] = n ? sum / n : 255;
+    }
+  }
+  return { data: out, width: w, height: h, scale };
+}
+
 // ---------------------------------------------------------------------------
 // ノド(綴じ目)
 // ---------------------------------------------------------------------------
@@ -731,8 +758,9 @@ export function candidateHalves(img, scan) {
   if (!scan.landscape) {
     return out;
   }
+  // 近い位置(3mm 以内)の候補は1つにまとめる(調べる時間を減らす。中身の範囲は数 mm の違いではほとんど変わらない)
   const add = (x, band, by) => {
-    if (out.some(c => c.band === band && Math.abs(c.x - x) <= img.pxPerMm)) {
+    if (out.some(c => Math.abs(c.x - x) <= 3 * img.pxPerMm)) {
       return;
     }
     out.push({ x, band, by, ...analyzeHalves(img, x, band) });
