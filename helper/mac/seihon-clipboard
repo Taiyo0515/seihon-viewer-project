@@ -1,0 +1,5 @@
+#!/bin/sh
+# 製本ビューア: ファイルをクリップボードに入れる補助プログラム(Mac)の呼び出し口。
+# Chrome(ネイティブ メッセージング)から呼ばれる。直接実行するものではない。
+DIR="$(cd "$(dirname "$0")" && pwd)"
+exec /usr/bin/osascript -l JavaScript "$DIR/seihon-clipboard.js"

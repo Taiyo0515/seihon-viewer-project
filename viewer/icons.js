@@ -73,9 +73,13 @@ export const ICONS = {
   "speed": s('<path d="M5.6 18.4a9 9 0 1 1 12.8 0"/><path d="m12 13 3.5-4"/>'),
   "settings": s('<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>'),
   "binding-ltr": s('<path d="M4 5h7v14H4zM13 5h7v14h-7z"/><path d="m8 12-2 0M18 12h-2"/><path d="M6.5 9.5 4.5 12l2 2.5"/>'),
+  // ---- 0.2: 綴じ方向(左綴じ = 綴じ目が左、→ の向きに読み進める / 右綴じ = 綴じ目が右、← の向き)・元の場所 ----
+  "bind-ltr": s('<rect x="5.5" y="3.5" width="13" height="17" rx="1.5"/><path d="M8.5 3.5v17" stroke-width="2.6"/><path d="M11.5 12h4.5M14 9.5l2.5 2.5-2.5 2.5"/>'),
+  "bind-rtl": s('<rect x="5.5" y="3.5" width="13" height="17" rx="1.5"/><path d="M15.5 3.5v17" stroke-width="2.6"/><path d="M12.5 12H8M10 9.5 7.5 12l2.5 2.5"/>'),
+  "link": s('<path d="M10 13.5a4 4 0 0 0 5.66.34l2.83-2.83a4 4 0 0 0-5.66-5.66l-1.4 1.4"/><path d="M14 10.5a4 4 0 0 0-5.66-.34l-2.83 2.83a4 4 0 0 0 5.66 5.66l1.4-1.4"/>'),
   "arrow-drop-down": s('<path d="m8 10 4 4 4-4"/>'),
   "file-pdf": s('<path d="M6 3.5h8l4 4v13H6z"/><path d="M14 3.5v4h4"/><path d="M8.5 13h7M8.5 16h5"/>'),
-  // ---- フェーズ2: AI用コピー・ページ収集 ----
+  // ---- フェーズ2: コピー・ページ収集 ----
   "collect": s('<rect x="7.5" y="3.5" width="13" height="13" rx="1.5"/><path d="M4 7.5V18a2.5 2.5 0 0 0 2.5 2.5H17"/><path d="M14 6.8v6.4M10.8 10h6.4"/>'),
   "collect-remove": s('<rect x="7.5" y="3.5" width="13" height="13" rx="1.5"/><path d="M4 7.5V18a2.5 2.5 0 0 0 2.5 2.5H17"/><path d="M10.8 10h6.4"/>'),
   "ai-copy": s('<rect x="8.5" y="8.5" width="12" height="12" rx="1.5"/><path d="M15.5 8.5V5A1.5 1.5 0 0 0 14 3.5H5A1.5 1.5 0 0 0 3.5 5v9A1.5 1.5 0 0 0 5 15.5h3.5"/><path d="M14.5 11.3l.8 1.9 1.9.8-1.9.8-.8 1.9-.8-1.9-1.9-.8 1.9-.8z"/>'),

@@ -21,7 +21,7 @@
     <nav class="toc" aria-label="設定の目次">
       <a href="#sec-launch">起動</a>
       <a href="#sec-view">表示</a>
-      <a href="#sec-ai">AI用コピー</a>
+      <a href="#sec-copy">コピー・画像</a>
       <a href="#sec-collect">ページ収集</a>
       <a href="#sec-bind">製本用PDF出力</a>
       <a href="#sec-guard">強制ダウンロード対策</a>
@@ -94,41 +94,65 @@
         <div class="row">
           <div class="label">印刷の画質</div>
           <div class="control radios">
-            <label><input type="radio" name="printQuality" value="auto" /> 自動(50ページまでは高画質、それより多いときは標準)<span class="default-mark">初期値</span></label>
-            <label><input type="radio" name="printQuality" value="standard" /> 標準(150dpi。速く、大きな PDF でも止まりにくい)</label>
-            <label><input type="radio" name="printQuality" value="high" /> 高画質(300dpi。文字がくっきりするが、印刷の準備に時間とメモリを使う)</label>
-            <p class="help">製本ビューアの印刷は、ページを画像にしてから印刷します。もっとくっきり印刷したいときは、⋮ メニューの「Chrome標準ビューアで開いて印刷」を使ってください。</p>
+            <label><input type="radio" name="printQuality" value="max" /> 最高画質(元の PDF のまま印刷。画像は元の解像度、文字は文字のまま)<span class="default-mark">初期値</span></label>
+            <label><input type="radio" name="printQuality" value="high" /> 高画質(ページを 300dpi の画像にして印刷)</label>
+            <label><input type="radio" name="printQuality" value="standard" /> 標準(ページを 150dpi の画像にして印刷。速く、大きな PDF でも止まりにくい)</label>
+            <label><input type="radio" name="printQuality" value="auto" /> 自動(50ページまでは高画質、それより多いときは標準)</label>
+            <p class="help">
+              最高画質では、Chrome の印刷画面で印刷します(ページを削除したり書き込んだりしていれば、その内容を反映した PDF を印刷します)。
+              印刷画面で「PDF に保存」を選ぶと、元の画質のまま、OCR の文字(スキャンした PDF の検索できる文字)も残った PDF になります。
+              高画質・標準・自動では、ビューアがページを画像にしてから印刷します(「PDF に保存」すると文字も画像になります)。
+              ブラウザのメニューから印刷したときは、いつも画像にして印刷します(最高画質の設定のときは高画質)。
+            </p>
           </div>
         </div>
       </section>
 
-      <section class="card" aria-labelledby="sec-ai">
-        <h2 id="sec-ai">AI用コピー</h2>
+      <section class="card" aria-labelledby="sec-copy">
+        <h2 id="sec-copy">コピー・画像</h2>
+        <p class="help">右クリックの「コピー」、ショートカット、サムネイルを選んでのコピー、ページ収集の「PDF としてコピー」「画像としてコピー」の動きを決めます。</p>
         <div class="row">
           <div class="label">1ページのとき</div>
           <div class="control radios">
-            <label><input type="radio" name="aiCopySingle" value="clipboard-png" /> PNG 画像をクリップボードへ(AI のチャット欄に貼り付けられる)<span class="default-mark">初期値</span></label>
-            <label><input type="radio" name="aiCopySingle" value="file-pdf" /> PDF をファイルに保存(元のテキスト・ベクターのまま)</label>
-            <label><input type="radio" name="aiCopySingle" value="file-png" /> PNG をファイルに保存</label>
+            <label><input type="radio" name="aiCopySingle" value="clipboard-png" /> 画像をクリップボードへ(チャット欄や文書に貼り付けられる)<span class="default-mark">初期値</span></label>
+            <label><input type="radio" name="aiCopySingle" value="file-pdf" /> PDF をファイルに保存(元の文字・図・画像のまま)</label>
+            <label><input type="radio" name="aiCopySingle" value="file-png" /> 画像をファイルに保存</label>
           </div>
         </div>
         <div class="row">
           <div class="label">複数ページのとき</div>
           <div class="control radios">
-            <label><input type="radio" name="aiCopyMulti" value="pdf" /> 1つの PDF としてファイルに保存<span class="default-mark">初期値</span></label>
-            <label><input type="radio" name="aiCopyMulti" value="zip" /> PNG 画像をまとめて ZIP で保存</label>
-            <p class="help">Chrome のクリップボードには画像を1枚しか入れられないため、複数ページはファイルに保存します。サムネイルを Ctrl+クリックで複数選んだときと、ページ収集の書き出しで使います。</p>
+            <label><input type="radio" name="aiCopyMulti" value="pdf-copy" /> PDF としてコピー(1つの PDF にして、ファイルとしてクリップボードへ)<span class="default-mark">初期値</span></label>
+            <label><input type="radio" name="aiCopyMulti" value="image-copy" /> 画像としてコピー(1ページずつ画像にして、ファイルとしてクリップボードへ)</label>
+            <label><input type="radio" name="aiCopyMulti" value="pdf" /> 1つの PDF としてファイルに保存</label>
+            <label><input type="radio" name="aiCopyMulti" value="zip" /> 画像をまとめて ZIP で保存</label>
+            <p class="help">サムネイルを Ctrl+クリックで複数選んでコピーしたときに使います。ファイルとしてクリップボードに入れるには、下の「補助プログラム」が必要です(無いときは、保存したファイルの場所をクリップボードに入れます)。</p>
           </div>
         </div>
         <div class="row">
-          <div class="label">PNG の解像度</div>
+          <div class="label">画像としてコピー(複数ページ)</div>
           <div class="control radios">
-            <label class="inline-input"><input type="radio" name="pngMode" value="longside" /> 長辺を <input type="number" id="pngLongSide" min="800" max="12000" step="100" /> ピクセルにする<span class="default-mark">初期値 2400</span></label>
-            <label class="inline-input"><input type="radio" name="pngMode" value="scale" /> 倍率 <input type="number" id="pngScale" min="1" max="8" step="0.5" /> 倍(1倍 = ビューアの100%表示 = 96dpi)</label>
+            <label><input type="radio" name="copyImagesAs" value="files" /> 1ページ1枚の画像ファイルにする(チャット欄などにまとめて貼り付けられる)<span class="default-mark">初期値</span></label>
+            <label><input type="radio" name="copyImagesAs" value="zip" /> ZIP にまとめる</label>
+            <p class="help">1ページだけのときは、いつも画像そのものをクリップボードに入れます。</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">画像の画質</div>
+          <div class="control radios">
+            <label><input type="radio" name="imageQuality" value="max" /> 最高画質(元の画質。スキャンしたページは元の画像の解像度、文字・図のページは 600dpi)<span class="default-mark">初期値</span></label>
+            <label><input type="radio" name="imageQuality" value="high" /> 高画質(長辺 2400 ピクセル)</label>
+            <label><input type="radio" name="imageQuality" value="standard" /> 標準(長辺 1600 ピクセル。ファイルが小さい)</label>
+            <label><input type="radio" name="imageQuality" value="custom" /> 指定する:</label>
+            <div class="sub-options" id="imageCustomOptions">
+              <label class="inline-input"><input type="radio" name="pngMode" value="longside" /> 長辺を <input type="number" id="pngLongSide" min="800" max="12000" step="100" /> ピクセルにする</label>
+              <label class="inline-input"><input type="radio" name="pngMode" value="scale" /> 倍率 <input type="number" id="pngScale" min="1" max="8" step="0.5" /> 倍(1倍 = ビューアの100%表示 = 96dpi)</label>
+            </div>
             <p class="help">
-              PNG は劣化しない形式(可逆圧縮)で作ります。長辺 2400 ピクセルは A4 で約 205dpi、A5・B5 で約 240〜290dpi で、小さな文字も潰れません。
-              大きくするほど文字はくっきりしますが、画像のファイルも大きくなり、AI のサービスによっては縮められたり受け付けられなかったりします。
-              クリップボードに入れられなかったときは、自動で解像度を下げて再挑戦し、それでも駄目なら PNG ファイルとして保存して知らせます。
+              最高画質では、スキャンしたページは元の画像と同じ解像度で、劣化しない PNG にします。ファイルに保存するときは、ページが1枚の JPEG 画像だけでできていれば、
+              元の JPEG をそのまま取り出します(作り直さないので、画質も大きさも元と同じ)。画像が大きいと、コピー・保存に少し時間がかかります。
+              クリップボードに入れられなかったときは、自動で解像度を下げて再挑戦し、それでも駄目なら画像ファイルとして保存して知らせます。
+              PDF のコピー・保存は、画質の設定にかかわらず、いつも元の画質のままです(画像を作り直さず、OCR の文字も残ります)。
             </p>
           </div>
         </div>
@@ -141,7 +165,35 @@
               <button type="button" class="btn small" id="aiCopyShortcutReset">初期値に戻す</button>
             </div>
             <p class="status" id="aiCopyShortcutStatus" hidden></p>
-            <p class="help">ビューアで押すと、マウスの下のページ(サムネイルを複数選んでいるときは選んだページ)を AI 用にコピーします。Ctrl または Alt を含む組み合わせ、または F キーを登録できます。</p>
+            <p class="help">ビューアで押すと、マウスの下のページ(サムネイルを複数選んでいるときは選んだページ)をコピーします。Ctrl または Alt を含む組み合わせ、または F キーを登録できます。</p>
+          </div>
+        </div>
+        <div class="row" id="helperRow">
+          <div class="label">補助プログラム<br /><span class="label-sub">(ファイルのコピー)</span></div>
+          <div class="control">
+            <p class="status" id="helperStatus">確認中…</p>
+            <p class="buttons">
+              <button type="button" class="btn primary" id="helperEnable">補助プログラムを使えるようにする…</button>
+              <button type="button" class="btn" id="helperCheck">もう一度確かめる</button>
+              <button type="button" class="btn" id="helperDisable">使うのをやめる</button>
+            </p>
+            <p class="help">
+              ブラウザの決まりで、拡張機能だけではファイル(PDF や画像のファイル)をクリップボードに入れられません。
+              「PDF としてコピー」などで、貼り付けたときにファイルとして貼り付くようにするには、拡張機能のフォルダの <code>helper</code> にある補助プログラムを入れてください。
+              補助プログラムは、この拡張機能から頼まれたファイルをクリップボードに入れるだけで、ほかの通信はしません。
+            </p>
+            <ol class="steps">
+              <li>上の「補助プログラムを使えるようにする…」を押し、Chrome の確認で「許可」を押します(「ネイティブ アプリとの通信」の権限)。</li>
+              <li>拡張機能のフォルダの <code>helper</code> を開き、使っているパソコンのものを入れます。
+                <ul>
+                  <li>Windows: <code>helper\windows\install.bat</code> をダブルクリック</li>
+                  <li>Mac: <code>helper/mac/install.command</code> を右クリック →「開く」</li>
+                  <li>Linux: 端末で <code>sh helper/linux/install.sh</code>(xclip または wl-clipboard が必要)</li>
+                </ul>
+              </li>
+              <li>「もう一度確かめる」を押して「使えます」と出れば準備完了です。拡張機能のフォルダを移動したときは、もう一度入れ直してください。</li>
+            </ol>
+            <p class="help">補助プログラムが無いときは、保存したファイルの場所(パス)をクリップボードに入れます。ファイルを選ぶ画面の「ファイル名」の欄に貼り付けると、そのファイルを選べます。</p>
           </div>
         </div>
       </section>

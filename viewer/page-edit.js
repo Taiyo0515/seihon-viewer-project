@@ -121,7 +121,7 @@ export class PageEditor {
 
   /**
    * 書き込み・フォームの入力の変更を見張る。
-   * PDF.js の「変更あり」の印は、ページの抜き出し(AI用コピーなど)でも消えるため、保存したかどうかは自分で覚えておく。
+   * PDF.js の「変更あり」の印は、ページの抜き出し(コピーなど)でも消えるため、保存したかどうかは自分で覚えておく。
    */
   watchStorage(doc) {
     const storage = doc.annotationStorage;
@@ -405,7 +405,7 @@ export class PageEditor {
       return;
     }
     // PDF.js の「ページ番号 → ページ」の控えを、いまの並びに合わせ直す。
-    // 削除を元に戻したとき、戻ったページの控えが別のページのままになり、印刷・検索・AI用コピーなどが
+    // 削除を元に戻したとき、戻ったページの控えが別のページのままになり、印刷・検索・コピーなどが
     // 別のページの中身を使ってしまうため(画面のページは正しく見えていても起きる)
     for (let i = 0; i < viewer.pagesCount; i++) {
       const view = viewer.getPageView(i);

@@ -1,0 +1,7 @@
+{
+  "name": "com.seihon_viewer.clipboard",
+  "description": "Seihon Viewer clipboard helper (puts saved files on the clipboard)",
+  "path": "seihon-clipboard.bat",
+  "type": "stdio",
+  "allowed_origins": ["chrome-extension://miiaicaobmegmjkmicojhmajnancjnjp/"]
+}

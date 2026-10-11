@@ -130,6 +130,9 @@ body {
     overflow: visible !important;
     background: none !important;
   }
+  .sh-print-frame {
+    display: none !important;
+  }
 }
 
 /* スクロールバー(Chromium の PDF ビューアと同じ形) */
@@ -294,6 +297,26 @@ kbd {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* 元のリンク・ファイルの場所のコピー(タイトルの右) */
+.sh-source-btn {
+  flex: none;
+  margin-inline-start: 2px;
+}
+.sh-source-btn:disabled {
+  visibility: hidden;
+}
+
+/* 最高画質の印刷に使う、見えない枠(print-native.js) */
+.sh-print-frame {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .sh-center {
@@ -533,6 +556,7 @@ body.sh-no-document #viewsManagerToggleButton {
 @media (max-width: 560px) {
   #shFit,
   #shViewMode,
+  #shBindDir,
   .sh-center > .sh-sep {
     display: none;
   }
@@ -1362,7 +1386,7 @@ body.sh-has-error #viewerContainer {
 }
 
 /* ---------------------------------------------------------------------------
- * フェーズ2: AI用コピー・ページ収集
+ * フェーズ2: コピー・ページ収集
  * ------------------------------------------------------------------------- */
 
 /* 小さめのボタン */

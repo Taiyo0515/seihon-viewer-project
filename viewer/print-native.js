@@ -8,6 +8,25 @@
  */
 
 let frame = null;
+let pdfLibPromise = null;
+
+/**
+ * PDF に題名(/Title)を付ける。Chrome の印刷画面の「PDF に保存」は、PDF の題名をファイル名の候補にするため、
+ * 題名の無い PDF では、印刷用の仮の名前(英数字の羅列)になってしまう。付けられなければ、元のまま返す。
+ * (画像などの中身は作り直さずにそのまま写す)
+ */
+export async function withTitle(bytes, title) {
+  try {
+    pdfLibPromise ||= import("../lib/pdf-lib.esm.min.js");
+    const { PDFDocument } = await pdfLibPromise;
+    const pdf = await PDFDocument.load(bytes, { updateMetadata: false });
+    pdf.setTitle(title);
+    return await pdf.save({ useObjectStreams: false });
+  } catch (e) {
+    console.warn("[製本ビューア] 印刷用の PDF に題名を付けられませんでした", e);
+    return bytes;
+  }
+}
 let frameUrl = null;
 let cleanupTimer = 0;
 
@@ -29,7 +48,7 @@ export function removePrintFrame() {
 
 /**
  * PDF を Chrome の印刷画面で印刷する。
- * @param {Uint8Array} bytes 印刷する PDF(暗号化されていないもの)
+ * @param {Uint8Array} bytes 印刷する PDF(暗号化されていないもの。題名は withTitle で付けておく)
  */
 export async function printWithChrome(bytes) {
   if (!canPrintWithChrome()) {

@@ -5,6 +5,7 @@
  * ツールバー・メニュー・製本表示などの独自部分をここで結び付ける。
  */
 
+import { sanitizeFileName } from "../common/files.js";
 import { onSettingsChanged, saveSettings } from "../common/settings.js";
 import { matchesShortcut } from "../common/shortcut.js";
 import { viewerUrlFor } from "../common/viewer-url.js";
@@ -13,7 +14,7 @@ import { Collection } from "./collection.js";
 import { DocSource, decryptedCopy } from "./doc-source.js";
 import { PageCopy } from "./page-copy.js";
 import { PageEditor } from "./page-edit.js";
-import { canPrintWithChrome, printWithChrome, removePrintFrame } from "./print-native.js";
+import { canPrintWithChrome, printWithChrome, removePrintFrame, withTitle } from "./print-native.js";
 import { isRearranged, viewPageCount } from "./page-map.js";
 import { PageRoles } from "./roles.js";
 import { hydrateIcons, setIcon } from "./icons.js";
@@ -569,6 +570,14 @@ document.getElementById("shPrint").addEventListener("click", () => app.triggerPr
         preparing = false;
       });
   };
+  // Ctrl+P(boot.js が PDF.js より先に受け取る): 最高画質なら、ここで印刷する
+  boot.printHandler = () => {
+    if (!app.pdfDocument || settings.printQuality !== "max" || !canPrintWithChrome()) {
+      return false; // PDF.js の印刷(ページを画像にして印刷)
+    }
+    app.triggerPrinting();
+    return true;
+  };
 }
 
 /** 元の PDF(編集していれば編集を反映した PDF)を Chrome の印刷画面で印刷する */
@@ -593,6 +602,12 @@ async function printOriginal() {
     }
     if (!bytes?.length) {
       throw new Error("印刷する PDF を作れませんでした");
+    }
+    // 題名の無い PDF は、「PDF に保存」のファイル名の候補が英数字の羅列にならないよう、ファイル名を題名にする
+    const info = await doc.getMetadata().catch(() => null);
+    if (!String(info?.info?.Title || "").trim()) {
+      const base = sanitizeFileName(docSource.baseName());
+      bytes = await withTitle(bytes, edited ? `${base}_編集済み` : base);
     }
     if (doc !== app.pdfDocument) {
       return;

@@ -26,7 +26,26 @@ const state = (window.__seihon = {
   settingsPromise: null,
   preparePromise: null,
   fileAccessPromise: null,
+  /** Ctrl+P の処理(main.js が用意する。最高画質で印刷したら true を返す) */
+  printHandler: null,
 });
+
+// ---- Ctrl+P(PDF.js より先に受け取る) ------------------------------------------
+// PDF.js は Ctrl+P でページを画像にして印刷する。印刷の画質が「最高画質」のときは、
+// 元の PDF のまま Chrome の印刷機能で印刷するため、PDF.js より先に受け取る(main.js の printHandler)。
+window.addEventListener(
+  "keydown",
+  e => {
+    if (e.keyCode !== 80 || !(e.ctrlKey || e.metaKey) || e.altKey) {
+      return;
+    }
+    if (state.printHandler?.()) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    }
+  },
+  true
+);
 
 // ---- URL の整理 ------------------------------------------------------------
 {

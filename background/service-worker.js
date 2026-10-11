@@ -15,7 +15,9 @@
 
 import {
   DEFAULT_SETTINGS,
+  SETTINGS_KEY,
   loadSettings,
+  migrateSettings,
   onSettingsChanged,
   saveSettings,
 } from "../common/settings.js";
@@ -551,8 +553,25 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   }
 });
 
+/** 古い版から更新したとき、初期値が変わった設定を引き継ぐ(0.2: 印刷・コピーの初期値など) */
+async function migrateOnUpdate(previousVersion) {
+  try {
+    const items = await chrome.storage.local.get(SETTINGS_KEY);
+    const next = migrateSettings(items[SETTINGS_KEY], previousVersion);
+    if (next) {
+      await chrome.storage.local.set({ [SETTINGS_KEY]: next });
+      console.info(LOG, `設定を ${previousVersion} から引き継ぎました`);
+    }
+  } catch (e) {
+    console.warn(LOG, "設定の引き継ぎに失敗しました", e);
+  }
+}
+
 chrome.runtime.onInstalled.addListener(details => {
   createContextMenus();
+  if (details.reason === "update" && details.previousVersion) {
+    migrateOnUpdate(details.previousVersion);
+  }
   applyAll(`onInstalled:${details.reason}`);
   if (details.reason === "install") {
     chrome.tabs.create({ url: chrome.runtime.getURL("welcome/welcome.html?first=1") });

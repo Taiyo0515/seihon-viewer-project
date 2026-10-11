@@ -24,6 +24,7 @@ import { BACKUP_MAX_BYTES, applyBackup, createBackup, describeBackup, parseBacku
 import { saveBlob, timestampForFileName } from "../common/files.js";
 import { ROLES, ROLE_LABEL } from "../viewer/roles.js";
 import { applyThemePreference } from "../viewer/theme.js";
+import { HELPER_PERMISSION, helperStatus } from "../viewer/file-clipboard.js";
 
 const RADIO_SETTINGS = [
   "launchMode",
@@ -34,6 +35,8 @@ const RADIO_SETTINGS = [
   "guardOriginalFile",
   "aiCopySingle",
   "aiCopyMulti",
+  "copyImagesAs",
+  "imageQuality",
   "pngMode",
   "bindBlankPosition",
   "bindDuplex",
@@ -100,6 +103,12 @@ function render(settings) {
     }
   }
   $("guardExcludeSites").disabled = !settings.guardEnabled;
+  // 画像の大きさの指定は「指定する」のときだけ
+  const custom = settings.imageQuality === "custom";
+  $("imageCustomOptions").classList.toggle("disabled", !custom);
+  for (const input of $("imageCustomOptions").querySelectorAll("input")) {
+    input.disabled = !custom;
+  }
   applyThemePreference(settings.theme);
 }
 
@@ -194,6 +203,7 @@ function bind() {
     toast("ページ役割をすべて消しました");
   });
   bindBackup();
+  bindHelper();
   $("perfCopy").addEventListener("click", copyPerfLogs);
   $("perfClear").addEventListener("click", async () => {
     await chrome.storage.local.remove("perfLogs");
@@ -254,6 +264,63 @@ function bindShortcut() {
   $("aiCopyShortcutReset").addEventListener("click", async () => {
     await save({ aiCopyShortcut: DEFAULT_SETTINGS.aiCopyShortcut }, `ショートカットを ${DEFAULT_SETTINGS.aiCopyShortcut} に戻しました`);
   });
+}
+
+// ---- 補助プログラム(ファイルをクリップボードに入れる) -------------------------
+const OS_NAME = { windows: "Windows", mac: "Mac", linux: "Linux" };
+
+async function renderHelper() {
+  const el = $("helperStatus");
+  const status = await helperStatus();
+  $("helperEnable").hidden = status.reason !== "permission";
+  $("helperDisable").hidden = status.reason === "permission";
+  $("helperCheck").hidden = status.reason === "permission";
+  if (status.available) {
+    el.className = "status ok";
+    el.textContent = `✓ 使えます(${OS_NAME[status.os] || status.os || "補助プログラム"}${status.version ? `、版 ${status.version}` : ""})。「PDF としてコピー」などで、ファイルそのものがクリップボードに入ります。`;
+  } else if (status.reason === "permission") {
+    el.className = "status";
+    el.textContent = "使っていません(保存したファイルの場所をクリップボードに入れます)。";
+  } else if (status.reason === "reload") {
+    el.className = "status warn";
+    el.textContent = "許可しました。このページと、開いているビューアのタブを開き直すと使えるようになります。";
+  } else if (status.reason === "not-installed") {
+    el.className = "status warn";
+    el.textContent = "権限は許可されていますが、補助プログラムが見つかりません。下の手順 2 で入れてから「もう一度確かめる」を押してください。";
+  } else {
+    el.className = "status warn";
+    el.textContent = `補助プログラムを使えませんでした: ${status.error || "不明なエラー"}`;
+  }
+}
+
+function bindHelper() {
+  $("helperEnable").addEventListener("click", async () => {
+    let granted = false;
+    try {
+      granted = await chrome.permissions.request(HELPER_PERMISSION);
+    } catch (e) {
+      toast(`権限を求められませんでした: ${e?.message || e}`);
+    }
+    if (granted) {
+      toast("許可しました");
+    }
+    renderHelper();
+  });
+  $("helperCheck").addEventListener("click", async () => {
+    $("helperStatus").textContent = "確認中…";
+    await renderHelper();
+  });
+  $("helperDisable").addEventListener("click", async () => {
+    try {
+      await chrome.permissions.remove(HELPER_PERMISSION);
+      toast("補助プログラムを使うのをやめました");
+    } catch (e) {
+      toast(`やめられませんでした: ${e?.message || e}`);
+    }
+    renderHelper();
+  });
+  chrome.permissions.onAdded?.addListener(() => renderHelper());
+  chrome.permissions.onRemoved?.addListener(() => renderHelper());
 }
 
 // ---- 保存しているページ役割 ---------------------------------------------------
@@ -582,6 +649,7 @@ bind();
 renderStatus();
 renderCollectUsage();
 renderRoles();
+renderHelper();
 onDataChanged(({ kind }) => {
   if (kind === "collection") {
     renderCollectUsage();
