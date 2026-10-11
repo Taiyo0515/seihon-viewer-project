@@ -5,7 +5,7 @@
  * ツールバー・メニュー・製本表示などの独自部分をここで結び付ける。
  */
 
-import { sanitizeFileName } from "../common/files.js";
+import { sanitizeFileName, saveBlobAs } from "../common/files.js";
 import { onSettingsChanged, saveSettings } from "../common/settings.js";
 import { matchesShortcut } from "../common/shortcut.js";
 import { viewerUrlFor } from "../common/viewer-url.js";
@@ -29,6 +29,10 @@ import { EmptyState, ErrorPanel, Toast, setupDropZone } from "./ui/panels.js";
 import { PopupMenu } from "./ui/popup.js";
 import { RolesPanel } from "./ui/roles-panel.js";
 import { ScanArranger } from "./scan/scan-arranger.js";
+import { EbookRouter } from "./ebook/ebook-router.js";
+import { PdfConvertDialog } from "./ui/convert-dialog.js";
+import { OPEN_ACCEPT } from "../common/ebook-formats.js";
+import { getHandoff } from "../common/handoff.js";
 import { ScanChip, ScanDialog } from "./ui/scan-ui.js";
 import { SidebarTabs } from "./ui/sidebar.js";
 import { SourceMenu } from "./ui/source-menu.js";
@@ -105,6 +109,20 @@ const scanArranger = new ScanArranger({
 const scanDialog = new ScanDialog({ arranger: scanArranger });
 scanArranger.openDialog = () => scanDialog.open();
 new ScanChip({ arranger: scanArranger, dialog: scanDialog, toolbar });
+// ---- 0.4: 電子書籍・コミック(EPUB・MOBI・AZW・AZW3・CBZ・CBR)と、PDF からの変換 ----
+const ebookRouter = new EbookRouter({
+  app,
+  toast,
+  errorPanel,
+  toolbar,
+  book,
+  emptyState,
+  getSettings,
+  getCurrent: () => current,
+  openDocument: args => app.open(args),
+  openFilePicker: () => openFilePicker(),
+});
+const convertDialog = new PdfConvertDialog({ app, toast, docSource, getCurrent: () => current, getDirection: () => book.direction, pageEditor });
 let rolesPanel = null;
 let bindDialog = null;
 
@@ -243,6 +261,11 @@ function sanitizeViewHistory() {
     }
     if (!special) {
       scanArranger.beforeUserOpen();
+      // 0.4: 電子書籍・コミックなら、それに合った方法で開く(PDF なら null が返り、このまま PDF.js で開く)
+      const handled = await ebookRouter.intercept(args);
+      if (handled !== null) {
+        return handled;
+      }
     }
     // いまの文書は閉じるので、編集の状態(「保存」ボタンなど)も消す
     pageEditor.resetFor(null);
@@ -282,6 +305,13 @@ function sanitizeViewHistory() {
       await originalOpen(args);
       return true;
     } catch (reason) {
+      // 0.4: PDF ではなかったとき、中身が電子書籍・コミックならそちらで開く(拡張子の無いダウンロードの URL など)
+      if (!special && reason?.name === "InvalidPDFException" && typeof args.url === "string") {
+        const handled = await ebookRouter.retryAsEbook(args.url, args.originalUrl).catch(() => null);
+        if (handled !== null) {
+          return handled;
+        }
+      }
       showLoadError(reason);
       return false;
     }
@@ -292,16 +322,40 @@ function openFilePicker() {
   app.eventBus.dispatch("openfile", { source: window });
 }
 
+// 0.4: ファイルを選ぶ画面で、PDF と電子書籍・コミックを選べるようにする
+if (app._openFileInput) {
+  app._openFileInput.accept = OPEN_ACCEPT;
+}
+
+/** コミックなどから作った PDF を保存する */
+async function saveConvertedPdf() {
+  const data = await app.pdfDocument.getData();
+  const res = await saveBlobAs(new Blob([data], { type: "application/pdf" }), current.converted.fileName);
+  if (res.ok) {
+    toast.show("PDF を保存しました");
+  } else if (!res.canceled) {
+    toast.show(`保存できませんでした(${res.error || "不明なエラー"})`, { kind: "error" });
+  }
+}
+
 /** 起動時に開く文書 */
 async function openInitial() {
   const src = boot.src;
   // 前回の表示位置から開くか(PDF.js の「viewOnLoad」: 0=前回の位置 / 1=最初のページ)
   window.PDFViewerApplicationOptions.set("viewOnLoad", settings.restorePosition ? 0 : 1);
   book.applyInitialOptions(settings.initialView, settings.bindingDirection);
+  if (!src && boot.handoff) {
+    // 0.4: 電子書籍リーダーの画面から渡された PDF・コミック
+    const item = await getHandoff(boot.handoff).catch(() => null);
+    if (item?.blob) {
+      await app.open({ url: URL.createObjectURL(item.blob), originalUrl: encodeURIComponent(item.name || "document.pdf") });
+      return;
+    }
+  }
   if (!src) {
     toolbar.reset();
     toolbar.setLoading(false);
-    emptyState.show(boot.wantsFilePicker ? "「PDFファイルを選ぶ」を押して、開くファイルを選んでください。" : "");
+    emptyState.show(boot.wantsFilePicker ? "「ファイルを選ぶ」を押して、開くファイルを選んでください。" : "");
     if (boot.wantsFilePicker) {
       document.getElementById("shEmptyOpen").focus();
     }
@@ -473,8 +527,8 @@ function showFileAccessHelp(fileUrl) {
 // Chrome 標準ビューアで開く
 // ---------------------------------------------------------------------------
 async function openNative() {
-  if (current.arranged && app.pdfDocument) {
-    // 整えたスキャンの PDF: 同じ内容を新しいタブの Chrome 標準ビューアで開く(このタブはそのまま)
+  if ((current.arranged || current.converted) && app.pdfDocument) {
+    // 整えたスキャンの PDF・コミックから作った PDF: 同じ内容を新しいタブの Chrome 標準ビューアで開く(このタブはそのまま)
     if (pageEditor.dirty || hasEdits()) {
       await openEditedInNative();
       return;
@@ -483,7 +537,7 @@ async function openNative() {
     const url = URL.createObjectURL(new Blob([data], { type: "application/pdf" }));
     window.open(url, "_blank");
     setTimeout(() => URL.revokeObjectURL(url), 120000);
-    toast.show("整えた PDF を、新しいタブの Chrome 標準ビューアで開きました", { duration: 5000 });
+    toast.show(current.converted ? "PDF にしたものを、新しいタブの Chrome 標準ビューアで開きました" : "整えた PDF を、新しいタブの Chrome 標準ビューアで開きました", { duration: 5000 });
     return;
   }
   if (current.kind === "url" && /^(https?|file):/i.test(current.url || "")) {
@@ -543,8 +597,19 @@ const downloadMenu = new PopupMenu({
         onSelect: () => scanArranger.saveArranged(),
       });
       items.push({ label: "元の PDF を保存(整える前のスキャン)", onSelect: () => scanArranger.saveOriginal() });
+    } else if (current.converted) {
+      // 0.4: コミック・画像の EPUB を PDF にしたもの
+      items.push({
+        label: hasEdits() ? "PDF として保存(編集は含めない)…" : "PDF として保存…",
+        hint: "画像を並べた PDF を、保存先を選んで保存します(画質は元のまま)",
+        onSelect: () => saveConvertedPdf(),
+      });
+      items.push({ label: `元のファイルを保存(${current.converted.sourceName})`, onSelect: () => ebookRouter.saveSource() });
     } else {
       items.push({ label: "元のPDFを保存(編集は含めない)", onSelect: () => app.download() });
+    }
+    if (app.pdfDocument) {
+      items.push({ label: "ほかの形式に変換して保存…", hint: "画像(ZIP)・CBZ・EPUB・テキストにして保存します", onSelect: () => convertDialog.open() });
     }
     return items;
   },
@@ -558,7 +623,7 @@ downloadButton.addEventListener("click", () => {
   if (!app.pdfDocument) {
     return;
   }
-  if (hasEdits() || current.arranged) {
+  if (hasEdits() || current.arranged || current.converted) {
     downloadMenu.toggle();
   } else {
     app.download(); // 元のPDFをそのまま保存(再生成しない)
@@ -589,7 +654,7 @@ window.addEventListener(
     e.stopImmediatePropagation();
     if (pageEditor.dirty) {
       pageEditor.save();
-    } else if (hasEdits() || current.arranged) {
+    } else if (hasEdits() || current.arranged || current.converted) {
       downloadMenu.open();
     } else {
       app.download();
@@ -719,7 +784,7 @@ app.eventBus.on("pagesedited", () => updatePrintResolution());
 async function openNativeForPrint() {
   // ページを削除したり書き込んだりしていれば、その内容を反映した PDF を新しいタブの Chrome 標準ビューアで開く
   // (元の PDF に切り替えると、削除したページも印刷され、書き込みは印刷されないため)
-  if (app.pdfDocument && (hasEdits() || current.arranged)) {
+  if (app.pdfDocument && (hasEdits() || current.arranged || current.converted)) {
     if (hasEdits()) {
       await openEditedInNative();
     } else {
@@ -782,6 +847,8 @@ function changeDirection(direction) {
   saveSettings({ bindingDirection: direction }).catch(() => {});
   // 0.3: スキャンを整えて表示していれば、新しい綴じ方向で並べ直す
   scanArranger.onDirectionChanged(direction);
+  // 0.4: コミックの見開きの画像を分けていれば、新しい綴じ方向で作り直す
+  ebookRouter.onDirectionChanged(direction).catch(e => console.error(e));
 }
 
 function updateViewButtons() {
@@ -812,7 +879,7 @@ const moreMenu = new PopupMenu({
     const hasDoc = !!app.pdfDocument;
     const handOn = app.pdfCursorTools?.activeTool === 1;
     return [
-      { label: "PDFファイルを開く…", icon: "folder-open", shortcut: "Ctrl+O", onSelect: () => openFilePicker() },
+      { label: "ファイルを開く…(PDF・電子書籍・コミック)", icon: "folder-open", shortcut: "Ctrl+O", onSelect: () => openFilePicker() },
       { label: "PDFを閉じる", icon: "close", hint: "このタブを閉じます(保存していない変更があれば、先に保存するか聞きます)", onSelect: () => closeViewer() },
       { separator: true },
       { label: "最初のページ", icon: "first-page", shortcut: "Home", disabled: !hasDoc, onSelect: () => (app.page = 1) },
@@ -848,6 +915,13 @@ const moreMenu = new PopupMenu({
         disabled: !hasDoc || !scanArranger.base,
         hint: "スキャンした見開きを1ページずつに分けたり、ばらした冊子を表紙から順に並べ替えたりします(画質は元のまま)",
         onSelect: () => scanDialog.open(),
+      },
+      {
+        label: "ほかの形式に変換して保存…",
+        icon: "file-zip",
+        disabled: !hasDoc,
+        hint: "画像(ZIP)・コミック(CBZ)・EPUB・テキストにして保存します",
+        onSelect: () => convertDialog.open(),
       },
       {
         label: "ページを選ぶ(削除・カバーや帯などの指定)",
@@ -1038,7 +1112,7 @@ app.eventBus.on("documentloaded", () => {
 setupDropZone({
   onFile: file => {
     if (!file) {
-      toast.show("PDFファイルではないため開けません", { kind: "error" });
+      toast.show("開けない種類のファイルです(PDF・EPUB・MOBI・AZW・AZW3・CBZ・CBR を開けます)", { kind: "error" });
       return;
     }
     app.open({ url: URL.createObjectURL(file), originalUrl: encodeURIComponent(file.name) });
@@ -1099,6 +1173,8 @@ window.__seihonViewer = {
   sourceMenu,
   scanArranger,
   scanDialog,
+  ebookRouter,
+  convertDialog,
   rolesPanel,
   bindDialog,
   pageEditor,

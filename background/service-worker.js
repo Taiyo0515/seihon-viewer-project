@@ -319,6 +319,23 @@ chrome.webNavigation.onBeforeNavigate.addListener(
   }
 );
 
+// 4b. 0.4: パソコン内の電子書籍・コミック(file:// の EPUB・MOBI・AZW3・CBZ・CBR など)を製本ビューアで開く。
+//     Chrome はこれらを表示できない(ダウンロードになる)ため、開こうとしたタブを製本ビューアに切り替える
+//     (ビューアがファイルの種類を見分け、コミックは PDF にして表示、文字の本は電子書籍リーダーで表示する)。
+chrome.webNavigation.onBeforeNavigate.addListener(
+  async details => {
+    if (details.frameId !== 0) {
+      return;
+    }
+    const settings = await getSettings();
+    if (settings.launchMode !== "auto" || !settings.openLocalEbooks) {
+      return;
+    }
+    chrome.tabs.update(details.tabId, { url: viewerUrlFor(details.url) });
+  },
+  { url: [{ schemes: ["file"], urlMatches: "(?i)\\.(epub|mobi|azw|azw3|kfx|prc|cbz|cbr|cb7|fb2)$" }] }
+);
+
 // ---------------------------------------------------------------------------
 // 5. リファラの引き継ぎ
 // ---------------------------------------------------------------------------
@@ -397,6 +414,14 @@ const PDF_LINK_PATTERNS = [
   "file:///*.PDF",
 ];
 
+/** 0.4: 電子書籍・コミックへのリンク(右クリックメニューを出すもの) */
+const EBOOK_LINK_PATTERNS = ["epub", "mobi", "azw", "azw3", "cbz", "cbr", "cb7", "fb2"].flatMap(ext => [
+  `*://*/*.${ext}`,
+  `*://*/*.${ext}?*`,
+  `*://*/*.${ext.toUpperCase()}`,
+  `file:///*.${ext}`,
+]);
+
 function createContextMenus() {
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
@@ -412,9 +437,16 @@ function createContextMenus() {
       contexts: ["page", "frame"],
       visible: false,
     });
+    // 0.4: 電子書籍・コミックへのリンク
+    chrome.contextMenus.create({
+      id: "seihon-open-ebook-link",
+      title: "リンク先の本・コミックを製本ビューアで開く",
+      contexts: ["link"],
+      targetUrlPatterns: EBOOK_LINK_PATTERNS,
+    });
     chrome.contextMenus.create({
       id: "seihon-open-file",
-      title: "PDFファイルを開く…",
+      title: "ファイルを開く…(PDF・電子書籍・コミック)",
       contexts: ["action"],
     });
     chrome.contextMenus.create({
@@ -531,6 +563,13 @@ chrome.action.onClicked.addListener(tab => {
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   switch (info.menuItemId) {
     case "seihon-open-link":
+      chrome.tabs.create({
+        url: viewerUrlFor(info.linkUrl),
+        index: tab ? tab.index + 1 : undefined,
+        openerTabId: tab?.id,
+      });
+      break;
+    case "seihon-open-ebook-link":
       chrome.tabs.create({
         url: viewerUrlFor(info.linkUrl),
         index: tab ? tab.index + 1 : undefined,

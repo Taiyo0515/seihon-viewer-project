@@ -118,6 +118,18 @@ export const DEFAULT_SETTINGS = Object.freeze({
   /** 見開きを分けるとき、スキャンで入った余分なふち(余白・影・本の縁・ごみ)を除いて、ページの大きさをそろえる */
   scanTrim: true,
 
+  // ---- 電子書籍・コミック(0.4) ----
+  /**
+   * コミック(CBZ・CBR)・画像の EPUB の読む向き
+   *  "auto": 本の情報(ComicInfo.xml・EPUB の page-progression-direction)に従い、無ければ右綴じ
+   *  "rtl": いつも右綴じ / "ltr": いつも左綴じ
+   */
+  comicDirection: "auto",
+  /** コミックの見開きの画像(横長の 1 枚)を、2 ページに分けて表示する(画像は作り直さない) */
+  comicSplitSpreads: true,
+  /** パソコン内の電子書籍・コミック(file:// の EPUB・CBZ など)を開いたとき、製本ビューアで表示する */
+  openLocalEbooks: true,
+
   // ---- 速度 ----
   /** 速度ログ(画面右下の計測表示とログの保存) */
   perfLog: false,
@@ -165,6 +177,9 @@ export const SETTING_LABELS = Object.freeze({
   bindObiSuffix: "出力ファイル名(付属)",
   scanArrange: "スキャンした見開き",
   scanTrim: "スキャンの余白を除く",
+  comicDirection: "コミックの読む向き",
+  comicSplitSpreads: "コミックの見開きの画像を分ける",
+  openLocalEbooks: "パソコン内の電子書籍・コミックを開く",
   perfLog: "速度ログ",
 });
 
@@ -192,6 +207,7 @@ const ENUMS = {
   bindUseFlapBack: ["obi", "cover", "back", "none"],
   bindUseBookmark: ["obi", "cover", "back", "none"],
   scanArrange: ["auto", "ask", "off"],
+  comicDirection: ["auto", "rtl", "ltr"],
 };
 
 /** 数値設定の範囲(範囲外は初期値に戻す) */

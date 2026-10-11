@@ -22,6 +22,7 @@
       <a href="#sec-launch">起動</a>
       <a href="#sec-view">表示</a>
       <a href="#sec-scan">スキャンの整え</a>
+      <a href="#sec-ebook">電子書籍・コミック</a>
       <a href="#sec-copy">コピー・画像</a>
       <a href="#sec-collect">ページ収集</a>
       <a href="#sec-bind">製本用PDF出力</a>
@@ -136,6 +137,38 @@
             <p class="help">PDF ごとに選んだ整え方(「元に戻す」を選んだことも含む)を覚えておき、次に開いたときも同じように表示します。</p>
             <p class="status" id="scanChoicesStatus"></p>
             <button type="button" class="btn" id="clearScanChoices">覚えている整え方を消す</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="sec-ebook">
+        <h2 id="sec-ebook">電子書籍・コミック</h2>
+        <p class="help">
+          EPUB・MOBI・AZW・AZW3 の本は「電子書籍リーダー」で表示します(縦書き・右から左へめくる表示・目次・検索・PDF に保存)。
+          コミック(CBZ・CBR)と、画像だけでできた EPUB は、画像をそのまま並べた PDF にして製本ビューアで表示します(製本表示・印刷・PDF として保存が使えます。画質は元のまま)。
+          KFX と、DRM(コピー防止)がかかった本は表示できません。
+        </p>
+        <div class="row">
+          <div class="label">コミックの読む向き</div>
+          <div class="control radios">
+            <label><input type="radio" name="comicDirection" value="auto" /> 本の情報に従う(情報が無ければ右綴じ)<span class="default-mark">初期値</span></label>
+            <label><input type="radio" name="comicDirection" value="rtl" /> いつも右綴じ(右から左へ読む。日本の漫画)</label>
+            <label><input type="radio" name="comicDirection" value="ltr" /> いつも左綴じ(左から右へ読む。アメコミなど)</label>
+            <p class="help">「本の情報」は、CBZ・CBR の ComicInfo.xml と、EPUB のページの進む向きです。表示しているときは、ツールバーの綴じ方向のボタンでも切り替えられます。</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">見開きの画像</div>
+          <div class="control">
+            <label class="check"><input type="checkbox" id="comicSplitSpreads" /> 見開きの画像(横長の 1 枚)を 2 ページに分けて表示する<span class="default-mark">初期値</span></label>
+            <p class="help">画像は作り直さず、同じ画像の右半分・左半分を表示するページにします。製本表示で 2 ページが同じ見開きに並ぶよう、必要なら前に白紙のページを入れます。</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">パソコン内の本</div>
+          <div class="control">
+            <label class="check"><input type="checkbox" id="openLocalEbooks" /> パソコン内の電子書籍・コミック(file:// の EPUB・CBZ など)を開いたとき、製本ビューアで表示する<span class="default-mark">初期値</span></label>
+            <p class="help">「ファイルの URL へのアクセスを許可する」がオンのときに使えます(パソコン内の PDF と同じ)。</p>
           </div>
         </div>
       </section>

@@ -300,8 +300,8 @@ export class ScanArranger {
     this.suggestToast?.();
     this.suggestToast = null;
     this.setState("none");
-    if (!doc) {
-      return;
+    if (!doc || cur.converted) {
+      return; // 0.4: コミックなどから作った PDF は調べない(見開きの画像はすでに分けてある)
     }
     const base = {
       id: ++this.seq,

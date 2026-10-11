@@ -4,6 +4,9 @@
 
 import { hydrateIcons } from "../icons.js";
 
+/** ドラッグ&ドロップで受け付けるファイル */
+const OPENABLE = /\.(pdf|epub|mobi|azw3?|prc|kfx|cbz|cbr|cb7|fb2|zip|rar|7z)$/i;
+
 // ---------------------------------------------------------------------------
 // 小さな通知(画面下部に数秒表示)
 // ---------------------------------------------------------------------------
@@ -190,8 +193,9 @@ export function setupDropZone({ onFile, onUrl }) {
       }
       e.preventDefault();
       e.stopPropagation();
+      // PDF と、電子書籍・コミック(0.4)。中身は開くときに確かめる
       const file = [...(e.dataTransfer.files || [])].find(
-        f => f.type === "application/pdf" || /\.pdf$/i.test(f.name)
+        f => f.type === "application/pdf" || OPENABLE.test(f.name)
       );
       if (file) {
         onFile(file);

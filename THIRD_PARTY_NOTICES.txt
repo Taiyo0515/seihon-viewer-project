@@ -184,5 +184,69 @@
     USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 --------------------------------------------------------------------
+5. foliate-js(0.4: 電子書籍リーダーの表示)
+--------------------------------------------------------------------
+  バージョン : GitHub の johnfactotum/foliate-js
+               コミット 78914aef4466eb960965702401634c2cb348e9b1(2026-05-01)
+  入手元     : https://github.com/johnfactotum/foliate-js
+  著作権     : Copyright (c) 2022 John Factotum
+  ライセンス : MIT License
+  全文       : lib/foliate/LICENSE
+  同梱範囲   : lib/foliate/ の view.js, epub.js, epubcfi.js, mobi.js,
+               paginator.js, fixed-layout.js, progress.js, overlayer.js,
+               text-walker.js, search.js, comic-book.js, fb2.js(無改変)
+               PDF の表示部品(pdf.js と vendor/pdfjs)・読み上げ・辞書・
+               OPDS などの使わない部品は同梱していません。
+
+  foliate-js の配布物には、さらに次のものが含まれています。
+
+  5-1. zip.js(EPUB の ZIP を読む部品。lib/foliate/vendor/zip.js)
+       著作権     : Copyright (c) 2023 Gildas Lormeau
+       ライセンス : BSD 3-Clause License
+       全文       : lib/foliate/vendor/LICENSE_ZIPJS.txt
+       入手元     : https://github.com/gildas-lormeau/zip.js
+
+  5-2. fflate の一部(MOBI の圧縮を解く部品。lib/foliate/vendor/fflate.js)
+       ライセンス : MIT License(下の 6. と同じ)
+
+--------------------------------------------------------------------
+6. fflate(0.4: ZIP・EPUB・CBZ の読み込み)
+--------------------------------------------------------------------
+  バージョン : 0.8.3
+  入手元     : https://github.com/101arrowz/fflate
+  著作権     : Copyright (c) 2026 Arjun Barrett
+  ライセンス : MIT License
+  全文       : lib/fflate/LICENSE
+  同梱範囲   : lib/fflate/fflate.js(src/index.ts と src/worker.ts を
+               TypeScript で ES モジュールに変換し、1 つのファイルに
+               まとめたもの。処理の内容は変えていません)
+
+--------------------------------------------------------------------
+7. libarchive.js(0.4: CBR(RAR)・CB7(7z)の読み込み)
+--------------------------------------------------------------------
+  バージョン : 2.0.2(GitHub の nika-begiashvili/libarchivejs、
+               コミット 0989c1a6db20d030d793b1763e20d880068091bd)
+  入手元     : https://github.com/nika-begiashvili/libarchivejs
+  著作権     : Copyright (c) 2018 ნიკა(Nika Begiashvili)
+  ライセンス : MIT License
+  全文       : lib/libarchive/LICENSE
+  同梱範囲   : lib/libarchive/ の libarchive.js, worker-bundle.js,
+               libarchive.wasm(配布物の dist のまま無改変)
+
+  libarchive.wasm には、次のライブラリが含まれています
+  (全文は lib/libarchive/LICENSES_BUNDLED.txt)。
+   - libarchive 3.7.2 … BSD 2-Clause License
+       (RAR・RAR5 の読み込みは libarchive 独自の実装で、unRAR は含みません)
+   - zlib 1.3 … zlib License
+   - bzip2 1.0.8 … bzip2 License(BSD 系)
+   - XZ Utils 5.2.11 の liblzma … パブリックドメイン
+   - OpenSSL 1.0.2s … OpenSSL License / Original SSLeay License
+       This product includes software developed by the OpenSSL Project
+       for use in the OpenSSL Toolkit (http://www.openssl.org/)
+       This product includes cryptographic software written by
+       Eric Young (eay@cryptsoft.com)
+   - Comlink(libarchive.js の中) … Apache License 2.0(Copyright 2019 Google LLC)
+
+--------------------------------------------------------------------
 製本ビューア自体のコード(上記以外のファイル)は、個人利用のために
 作成したものです。

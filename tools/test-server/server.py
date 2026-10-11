@@ -245,6 +245,16 @@ li{margin:6px 0} .exp{color:#5f6368;font-size:13px}
 <li><a href="/pdf/sample.pdf">ふつうの PDF(文字の PDF)</a> / <a href="/pdf/landscape-4.pdf">横長の文字の PDF</a><div class="exp">期待: 何も起きない(ツールバーに「見開きを分ける」は出ない)</div></li>
 </ol>
 
+<h2>1.4 の確認(電子書籍・コミックの表示と変換)</h2>
+<ol>
+<li><a href="/book/novel-vertical.epub">縦書きの小説の EPUB</a>(右クリック →「リンク先の本・コミックを製本ビューアで開く」)<div class="exp">期待: 電子書籍リーダーで、縦書き・右から左へめくる表示になる。目次・検索・文字の大きさ・背景の色が使える。「PDF に保存」で印刷画面が開き、縦書きのまま並ぶ</div></li>
+<li><a href="/book/novel-horizontal.epub">横書きの EPUB</a></li>
+<li><a href="/book/manga-fxl.epub">画像だけの EPUB(固定レイアウトの漫画)</a><div class="exp">期待: 製本ビューアで PDF として表示される(右綴じ・製本表示、白紙のページも入る)。ダウンロードボタンで PDF として保存できる</div></li>
+<li><a href="/book/comic.cbz">コミック(CBZ)</a> / <a href="/book/comic.cbr">コミック(CBR)</a> / <a href="/book/comic-noinfo.cbz">ComicInfo の無い CBZ(WebP・GIF 入り)</a><div class="exp">期待: 画像をそのまま並べた PDF として表示される。見開きの画像は 2 ページに分かれる(右綴じは右半分が先)</div></li>
+<li><a href="/book/drm.epub">DRM 付きの EPUB</a> / <a href="/book/fake.kfx">KFX</a><div class="exp">期待: 表示できない理由が出る</div></li>
+<li><a href="/pdf/book-8.pdf">8ページのPDF</a><div class="exp">期待: ダウンロードボタン →「ほかの形式に変換して保存」で、画像(ZIP)・CBZ・EPUB・テキストにして保存できる</div></li>
+</ol>
+
 <h2>速度確認用</h2>
 <ol>
 <li><a href="/slow/sample.pdf">回線が遅い場合(約200KB/秒)</a></li>
@@ -483,6 +493,24 @@ class Handler(BaseHTTPRequestHandler):
             disposition = 'attachment; filename="once-attach.pdf"' if m.group(2) == "once-attach" else None
             return self._send_bytes(SAMPLES["book-8.pdf"], disposition=disposition, allow_range=False)
 
+        # 0.4: 電子書籍・コミックの見本(samples/books)。/book-dl/ はダウンロードさせる(Content-Disposition: attachment)
+        m = re.match(r"^/(book|book-dl)/([^/]+)$", path)
+        if m:
+            name = m.group(2)
+            fp = os.path.realpath(os.path.join(_SAMPLES_DIR, "books", name))
+            data = None
+            if fp.startswith(os.path.realpath(os.path.join(_SAMPLES_DIR, "books")) + os.sep) and os.path.isfile(fp):
+                data = FileSource(fp)
+            else:
+                data = self._sample(name)
+            if data is None:
+                return self._not_found()
+            ext = name.rsplit(".", 1)[-1].lower()
+            ctype = {"epub": "application/epub+zip", "cbz": "application/vnd.comicbook+zip",
+                     "cbr": "application/vnd.comicbook-rar", "mobi": "application/x-mobipocket-ebook",
+                     "azw3": "application/vnd.amazon.mobi8-ebook"}.get(ext, "application/octet-stream")
+            disposition = 'attachment; filename="%s"' % name if m.group(1) == "book-dl" else None
+            return self._send_bytes(data, content_type=ctype, disposition=disposition)
         if path == "/blob.html":
             return self._send_html(BLOB_HTML)
         if path == "/paste.html":

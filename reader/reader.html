@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>電子書籍リーダー - 製本ビューア</title>
+<link rel="icon" href="../icons/icon32.png" />
+<link rel="stylesheet" href="reader.css" />
+<script type="module" src="reader.js"></script>
+</head>
+<body class="rd-empty">
+  <header class="rd-toolbar" role="toolbar" aria-label="電子書籍リーダーの操作">
+    <button id="rdToc" class="rd-btn" type="button" data-icon="toc" title="目次" aria-label="目次" aria-expanded="false"></button>
+    <div class="rd-title-box">
+      <span id="rdTitle" class="rd-title">電子書籍リーダー</span>
+      <span id="rdFormat" class="rd-format" hidden></span>
+    </div>
+    <div class="rd-spacer"></div>
+    <div class="rd-group" data-needs-book>
+      <button id="rdPrev" class="rd-btn" type="button" data-icon="chevron-left" title="左へ" aria-label="左のページへ"></button>
+      <button id="rdNext" class="rd-btn" type="button" data-icon="chevron-right" title="右へ" aria-label="右のページへ"></button>
+    </div>
+    <span class="rd-sep" data-needs-book></span>
+    <div class="rd-group" data-needs-book>
+      <button id="rdColumns" class="rd-btn" type="button" data-icon="view-spread" title="見開きで表示" aria-label="単ページ・見開きの切り替え"></button>
+      <button id="rdFontMinus" class="rd-btn" type="button" data-icon="font-minus" title="文字を小さく" aria-label="文字を小さく"></button>
+      <span id="rdFontSize" class="rd-font-size" aria-live="polite">100%</span>
+      <button id="rdFontPlus" class="rd-btn" type="button" data-icon="font-plus" title="文字を大きく" aria-label="文字を大きく"></button>
+      <button id="rdTheme" class="rd-btn" type="button" data-icon="theme" title="背景の色" aria-label="背景の色"></button>
+      <button id="rdSearchBtn" class="rd-btn" type="button" data-icon="search" title="本の中を検索 (Ctrl+F)" aria-label="本の中を検索"></button>
+    </div>
+    <span class="rd-sep" data-needs-book></span>
+    <div class="rd-group">
+      <button id="rdPrint" class="rd-btn rd-btn-text" type="button" data-icon="print" title="PDF に保存(印刷)" data-needs-book>PDF に保存</button>
+      <button id="rdMore" class="rd-btn" type="button" data-icon="more-vert" title="その他" aria-label="その他" aria-haspopup="menu"></button>
+    </div>
+  </header>
+
+  <div class="rd-body">
+    <aside id="rdSide" class="rd-side" hidden>
+      <div class="rd-side-head">
+        <div id="rdSideTabs" class="rd-tabs" role="tablist">
+          <button type="button" role="tab" data-tab="toc" aria-selected="true">目次</button>
+          <button type="button" role="tab" data-tab="search" aria-selected="false">検索</button>
+          <button type="button" role="tab" data-tab="info" aria-selected="false">本の情報</button>
+        </div>
+      </div>
+      <div class="rd-side-panel" data-panel="toc"><nav id="rdTocList" class="rd-toc" aria-label="目次"></nav></div>
+      <div class="rd-side-panel" data-panel="search" hidden>
+        <form id="rdSearchForm" class="rd-search-form" autocomplete="off">
+          <input id="rdSearchInput" type="search" placeholder="本の中を検索" aria-label="検索する文字" />
+          <button class="rd-btn" type="submit" data-icon="search" aria-label="検索"></button>
+        </form>
+        <p id="rdSearchStatus" class="rd-note" role="status"></p>
+        <ol id="rdSearchResults" class="rd-results"></ol>
+      </div>
+      <div class="rd-side-panel" data-panel="info" hidden>
+        <div class="rd-info">
+          <img id="rdCover" class="rd-cover" alt="表紙" hidden />
+          <dl id="rdInfoList"></dl>
+        </div>
+      </div>
+    </aside>
+
+    <main class="rd-main">
+      <div id="rdView" class="rd-view"></div>
+      <button id="rdEdgeLeft" class="rd-edge rd-edge-left" type="button" tabindex="-1" aria-hidden="true" data-icon="chevron-left"></button>
+      <button id="rdEdgeRight" class="rd-edge rd-edge-right" type="button" tabindex="-1" aria-hidden="true" data-icon="chevron-right"></button>
+
+      <section id="rdEmpty" class="rd-panel">
+        <div class="rd-panel-card">
+          <div class="rd-panel-icon" data-icon="ebook"></div>
+          <h1>電子書籍リーダー</h1>
+          <p>EPUB・MOBI・AZW・AZW3 の本を表示します。ここにドラッグ&amp;ドロップするか、ファイルを選んで開きます。<br />PDF・コミック(CBZ・CBR)は、製本ビューアの画面で開きます。</p>
+          <p><button id="rdOpen" class="rd-btn-primary" type="button">ファイルを選ぶ</button></p>
+          <p id="rdEmptyNote" class="rd-note" hidden></p>
+        </div>
+      </section>
+      <section id="rdError" class="rd-panel" hidden>
+        <div class="rd-panel-card">
+          <div class="rd-panel-icon rd-panel-error" data-icon="error"></div>
+          <h1 id="rdErrorTitle">本を表示できませんでした</h1>
+          <p id="rdErrorMessage"></p>
+          <p><button id="rdErrorOpen" class="rd-btn-primary" type="button">ほかのファイルを選んで開く</button></p>
+          <pre id="rdErrorDetails" class="rd-details" hidden></pre>
+        </div>
+      </section>
+      <div id="rdLoading" class="rd-loading" hidden><span class="rd-spinner"></span><span id="rdLoadingText">読み込んでいます…</span></div>
+      <div id="rdDrop" class="rd-drop" hidden><span>ここにドロップして開く</span></div>
+    </main>
+  </div>
+
+  <footer class="rd-footer" data-needs-book>
+    <span id="rdChapter" class="rd-chapter"></span>
+    <input id="rdProgress" class="rd-progress" type="range" min="0" max="1" step="any" value="0" aria-label="読んだ位置" />
+    <span id="rdPercent" class="rd-percent">0%</span>
+  </footer>
+
+  <div id="rdMenu" class="rd-menu" role="menu" hidden>
+    <button type="button" role="menuitem" data-act="open">ファイルを開く…(Ctrl+O)</button>
+    <button type="button" role="menuitem" data-act="print" data-needs-book>PDF に保存(印刷)…</button>
+    <button type="button" role="menuitem" data-act="save-source" data-needs-book>元のファイルを保存</button>
+    <hr />
+    <button type="button" role="menuitem" data-act="theme-light">背景: 白</button>
+    <button type="button" role="menuitem" data-act="theme-sepia">背景: セピア</button>
+    <button type="button" role="menuitem" data-act="theme-dark">背景: 黒</button>
+    <hr />
+    <button type="button" role="menuitem" data-act="options">詳細設定</button>
+  </div>
+
+  <dialog id="rdPrintDialog" class="rd-dialog" aria-labelledby="rdPrintTitle">
+    <form method="dialog" class="rd-dialog-form">
+      <h2 id="rdPrintTitle">PDF に保存(印刷)</h2>
+      <p class="rd-note">本を紙の大きさに合わせて並べ直し、Chrome の印刷画面を開きます。送信先で「<b>PDF に保存</b>」を選ぶと、文字を検索・選択できる PDF として保存できます(紙に印刷することもできます)。</p>
+      <label class="rd-field">紙の大きさ
+        <select id="rdPaper">
+          <option value="A6">文庫(A6・105×148 mm)</option>
+          <option value="B6">新書・単行本(B6・128×182 mm)</option>
+          <option value="A5" selected>A5(148×210 mm)</option>
+          <option value="B5">B5(182×257 mm)</option>
+          <option value="A4">A4(210×297 mm)</option>
+        </select></label>
+      <label class="rd-field">文字の大きさ
+        <select id="rdPrintFont">
+          <option value="8.5">小さい(8.5 pt)</option>
+          <option value="10" selected>ふつう(10 pt)</option>
+          <option value="12">大きい(12 pt)</option>
+          <option value="14">とても大きい(14 pt)</option>
+        </select></label>
+      <label class="rd-field">余白
+        <select id="rdPrintMargin">
+          <option value="8">狭い(8 mm)</option>
+          <option value="14" selected>ふつう(14 mm)</option>
+          <option value="20">広い(20 mm)</option>
+        </select></label>
+      <label class="rd-check"><input id="rdPrintBreak" type="checkbox" checked /> 章ごとに新しいページから始める</label>
+      <p id="rdPrintNote" class="rd-note"></p>
+      <p id="rdPrintStatus" class="rd-note" role="status"></p>
+      <div class="rd-dialog-buttons">
+        <button type="button" id="rdPrintCancel" class="rd-btn-plain">キャンセル</button>
+        <button type="button" id="rdPrintGo" class="rd-btn-primary">印刷画面を開く</button>
+      </div>
+    </form>
+  </dialog>
+
+  <input id="rdFileInput" type="file" hidden />
+  <div id="rdToastHost" class="rd-toast-host" aria-live="polite"></div>
+</body>
+</html>

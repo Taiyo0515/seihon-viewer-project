@@ -100,6 +100,15 @@ export const ICONS = {
   // ---- 0.1: ページの選択・削除・保存 ----
   "select": s('<rect x="4" y="4" width="16" height="16" rx="2"/><path d="m8.2 12.2 2.6 2.6 5-5.4"/>'),
   "save": s('<path d="M5.2 4h10.6L20 8.2v10.6c0 .7-.5 1.2-1.2 1.2H5.2c-.7 0-1.2-.5-1.2-1.2V5.2C4 4.5 4.5 4 5.2 4Z"/><path d="M8 4v4.5h7V4"/><rect x="7.5" y="13" width="9" height="7"/>'),
+  // ---- 0.4: 電子書籍リーダー ----
+  "search": s('<circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5.5 5.5"/>'),
+  "chevron-left": s('<path d="m14.5 6-6 6 6 6"/>'),
+  "chevron-right": s('<path d="m9.5 6 6 6-6 6"/>'),
+  "font-minus": s('<path d="M3.5 18 8 6l4.5 12M5.2 14h5.6"/><path d="M15 12h6"/>'),
+  "font-plus": s('<path d="M3.5 18 8 6l4.5 12M5.2 14h5.6"/><path d="M15 12h6M18 9v6"/>'),
+  "theme": s('<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17a8.5 8.5 0 0 0 0-17Z" fill="currentColor"/>'),
+  "toc": s('<path d="M4 6.5h.01M4 12h.01M4 17.5h.01" stroke-width="2.6"/><path d="M8 6.5h12M8 12h12M8 17.5h9"/>'),
+  "ebook": s('<path d="M6 3.5h10.5a1.5 1.5 0 0 1 1.5 1.5v14.5H7.5A1.5 1.5 0 0 1 6 18Z"/><path d="M6 18a1.5 1.5 0 0 1 1.5-1.5H18"/><path d="M9.5 7.5h5M9.5 10.5h5"/>'),
 };
 
 /** アイコン名から <svg> 要素を作る */

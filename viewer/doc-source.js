@@ -72,6 +72,9 @@ export class DocSource {
     if (current.arranged?.fileName) {
       // 整えたスキャンの PDF(元の名前_分割.pdf など)
       name = current.arranged.fileName;
+    } else if (current.converted?.fileName) {
+      // 0.4: コミック・画像の EPUB を PDF にしたもの(元の名前.pdf)
+      name = current.converted.fileName;
     } else if (current.kind === "file" && current.name) {
       name = current.name;
     } else {

@@ -43,8 +43,9 @@ const RADIO_SETTINGS = [
   "bindSizeRef",
   "bindObiOutput",
   "scanArrange",
+  "comicDirection",
 ];
-const CHECK_SETTINGS = ["openLocalFiles", "restorePosition", "guardEnabled", "perfLog", "collectClearAfterExport", "bindImpose", "scanTrim"];
+const CHECK_SETTINGS = ["openLocalFiles", "restorePosition", "guardEnabled", "perfLog", "collectClearAfterExport", "bindImpose", "scanTrim", "comicSplitSpreads", "openLocalEbooks"];
 const SELECT_SETTINGS = [
   "bindPaper",
   "bindUseObiFront",

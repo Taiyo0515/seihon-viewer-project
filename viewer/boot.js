@@ -23,6 +23,8 @@ const state = (window.__seihon = {
   /** 強制ダウンロード対策(第3層)で開いたときの、元のダウンロードのID */
   downloadId: null,
   wantsFilePicker: false,
+  /** 0.4: 画面どうしの受け渡しで開くファイルの ID */
+  handoff: null,
   settingsPromise: null,
   preparePromise: null,
   fileAccessPromise: null,
@@ -61,8 +63,11 @@ window.addEventListener(
   } else if (location.search) {
     const params = new URLSearchParams(location.search);
     state.wantsFilePicker = params.get("open") === "file";
+    // 0.4: 電子書籍リーダーの画面から渡されたファイル(PDF・コミック)。再読み込みでも開けるよう URL に残す
+    const h = params.get("h");
+    state.handoff = /^[0-9a-f]{24}$/.test(h || "") ? h : null;
     // PDF.js が別の引数(file= など)を読まないよう、不要な引数は消しておく
-    history.replaceState(history.state, "", `${location.pathname}${location.hash}`);
+    history.replaceState(history.state, "", `${location.pathname}${state.handoff ? `?h=${state.handoff}` : ""}${location.hash}`);
   }
 }
 
