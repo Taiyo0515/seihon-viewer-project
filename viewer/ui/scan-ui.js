@@ -73,6 +73,16 @@ export class ScanChip {
       return [
         { label: "元のスキャンに戻す", icon: "undo", onSelect: () => a.restore({ remember: true }) },
         { label: "整え方を変える…", icon: "tune", onSelect: () => this.dialog.open() },
+        ...(a.arranged?.options?.mode === "spread"
+          ? [
+              {
+                label: a.arranged.options.reverse ? "ページの順を元に戻す" : "ページの順を逆にする",
+                icon: "swap-vert",
+                hint: "最後のページから始まってしまうとき(最後の見開きからスキャンしたもの)",
+                onSelect: () => a.arrange({ ...a.arranged.options, reverse: !a.arranged.options.reverse }, { remember: true, fromStart: true }),
+              },
+            ]
+          : []),
         { separator: true },
         {
           label: "整えた PDF を保存…",
@@ -118,6 +128,8 @@ export class ScanDialog {
     this.trim = $("shScanTrim");
     this.firstInner = $("shScanFirstInner");
     this.flipBacks = $("shScanFlipBacks");
+    this.reverse = $("shScanReverse");
+    this.spreadBox = $("shScanSpreadOptions");
     this.bookletBox = $("shScanBookletOptions");
     this.ready = false;
     this.renderTimer = 0;
@@ -160,6 +172,7 @@ export class ScanDialog {
       sheetOrder: radio("shScanSheetOrder") || "outer",
       firstSide: this.firstInner.checked ? "inner" : "outer",
       flipBacks: this.flipBacks.checked,
+      reverse: this.reverse.checked,
     });
   }
 
@@ -176,11 +189,13 @@ export class ScanDialog {
     this.trim.checked = !!o.trim;
     this.firstInner.checked = o.firstSide === "inner";
     this.flipBacks.checked = !!o.flipBacks;
+    this.reverse.checked = !!o.reverse;
   }
 
   updateControls() {
     const o = this.options();
     this.bookletBox.hidden = o.mode !== "booklet";
+    this.spreadBox.hidden = o.mode !== "spread";
     this.trim.disabled = o.mode === "none";
     this.dialog.querySelectorAll('input[name="shScanDirection"]').forEach(el => (el.disabled = o.mode === "none"));
     this.applyButton.disabled = !this.ready;

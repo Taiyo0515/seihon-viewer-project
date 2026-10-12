@@ -426,10 +426,13 @@ export class PageCopy {
       onClick: () => chrome.tabs.create({ url: chrome.runtime.getURL("options/options.html#sec-copy") }),
     };
     if (result.mode === "files") {
-      this.toast.show(`${what}をクリップボードにコピーしました。フォルダやチャット欄などに貼り付けられます(Ctrl+V)`, {
-        duration: 7000,
-        actions: [openFolder],
-      });
+      // 0.4.1: 見えない一時フォルダに置いた使い捨てのファイル(フォルダを開くボタンは出さない)
+      this.toast.show(
+        result.temp
+          ? `${what}をクリップボードにコピーしました。フォルダやチャット欄などに貼り付けられます(Ctrl+V。次にコピーすると、このコピーは使えなくなります)`
+          : `${what}をクリップボードにコピーしました。フォルダやチャット欄などに貼り付けられます(Ctrl+V)`,
+        { duration: 7000, actions: result.temp ? [] : [openFolder] }
+      );
     } else if (result.mode === "path") {
       const where = many ? "フォルダの場所" : "ファイルの場所";
       const why =

@@ -4,12 +4,14 @@
  * ブラウザの決まりで、拡張機能だけではクリップボードにファイルを入れられない
  * (入れられるのは文字と、画像1枚だけ)。そこで、
  *  - 補助プログラム(拡張機能のフォルダの helper。Windows・Mac・Linux 用)が入っていれば、
- *    ファイルのデータを補助プログラムに渡し、「ダウンロード」フォルダの「製本ビューア_コピー」に保存して、
+ *    ファイルのデータを補助プログラムに渡し、見えない一時フォルダ(Windows なら %TEMP%\seihon-viewer-copy)に保存して、
  *    クリップボードに入れてもらう(貼り付けると、ファイルとして貼り付く)。
- *    Chrome のダウンロードを通さないので、「保存する前に保存場所を確認する」の設定でも聞かれず、裏で済む。
- *  - 補助プログラムが無いとき(または使えないとき)は、Chrome のダウンロードで同じフォルダに保存し、
+ *    コピーは使い捨て: 次にコピーすると、前のコピーのファイルは消える(「ダウンロード」には何も残らない。0.4.1)。
+ *    Chrome のダウンロードを通さないので、ダウンロードの一覧にも出ない。
+ *  - 補助プログラムが無いとき(または使えないとき)は、Chrome のダウンロードで「ダウンロード」の「製本ビューア_コピー」に保存し、
  *    保存したファイルの場所(パス)を、文字としてクリップボードに入れる
- *    (ファイルを選ぶ画面の「ファイル名」の欄に貼り付けて使える)。
+ *    (ファイルを選ぶ画面の「ファイル名」の欄に貼り付けて使える)。このときも使い捨てで、次にコピーすると前のファイルは消す。
+ *    ダウンロードの表示(ツールバーのダウンロードの印)は、保存している間だけ出さない(0.4.1)。
  *
  * 補助プログラムとのやりとりには Chrome の「ネイティブ メッセージング」を使う。
  * そのための権限(nativeMessaging)は、詳細設定で補助プログラムを使うと決めたときだけ求める(任意の権限)。
@@ -76,7 +78,7 @@ function base64Of(blob) {
  * 補助プログラムにファイルのデータを渡して保存してもらい、クリップボードに入れてもらう。
  * @returns {Promise<{ok:boolean, paths?:string[], error?:string}>}
  */
-async function saveAndCopyWithHelper(files, folder, onProgress) {
+async function saveAndCopyWithHelper(files, folder, onProgress, place = null) {
   const port = chrome.runtime.connectNative(HELPER_HOST);
   const waiting = [];
   let failure = null;
@@ -100,6 +102,8 @@ async function saveAndCopyWithHelper(files, folder, onProgress) {
     const begun = await request({
       type: "begin",
       root: COPY_FOLDER,
+      // 版 3 の補助プログラム: 見えない一時フォルダに保存し、前のコピーは消す(使い捨て)
+      ...(place ? { place } : {}),
       folder: folder || "",
       files: files.map(f => ({ name: f.name, size: f.blob.size })),
     });
@@ -127,6 +131,51 @@ async function saveAndCopyWithHelper(files, folder, onProgress) {
       port.disconnect();
     } catch {}
   }
+}
+
+const COPY_IDS_KEY = "copyDownloadIds";
+
+/** 前のコピーで(Chrome のダウンロードで)保存したファイルを消す。消せないもの(すでに無い・使用中)はそのまま */
+async function disposePreviousCopies() {
+  let ids = [];
+  try {
+    ids = (await chrome.storage.local.get(COPY_IDS_KEY))[COPY_IDS_KEY] || [];
+  } catch {}
+  for (const id of ids) {
+    try {
+      const [item] = await chrome.downloads.search({ id });
+      if (item?.exists && item.byExtensionId === chrome.runtime.id) {
+        await chrome.downloads.removeFile(id);
+      }
+    } catch {}
+    try {
+      await chrome.downloads.erase({ id });
+    } catch {}
+  }
+  await chrome.storage.local.set({ [COPY_IDS_KEY]: [] }).catch(() => {});
+}
+
+async function rememberCopies(ids) {
+  await chrome.storage.local.set({ [COPY_IDS_KEY]: ids.filter(id => Number.isInteger(id)) }).catch(() => {});
+}
+
+/** ダウンロードの表示(ツールバーの印・吹き出し)を一時的に出さない(downloads.ui の権限があるとき) */
+async function hideDownloadUi() {
+  if (typeof chrome.downloads.setUiOptions !== "function") {
+    return { restore: async () => {} };
+  }
+  try {
+    await chrome.downloads.setUiOptions({ enabled: false });
+  } catch {
+    return { restore: async () => {} };
+  }
+  return {
+    restore: async () => {
+      try {
+        await chrome.downloads.setUiOptions({ enabled: true });
+      } catch {}
+    },
+  };
 }
 
 /** 保存済みのファイルを、補助プログラムでクリップボードに入れる */
@@ -170,9 +219,10 @@ export async function copyFilesToClipboard(files, { folder = null, onProgress = 
   let via = "downloads";
   if (status.available && status.version >= 2) {
     try {
-      const res = await saveAndCopyWithHelper(files, folder, onProgress);
+      const temp = status.version >= 3;
+      const res = await saveAndCopyWithHelper(files, folder, onProgress, temp ? "temp" : null);
       if (res.ok) {
-        return { mode: "files", via: "helper", paths: res.paths, ids: [] };
+        return { mode: "files", via: "helper", paths: res.paths, ids: [], temp };
       }
       reason = "error";
       error = res.error;
@@ -191,9 +241,17 @@ export async function copyFilesToClipboard(files, { folder = null, onProgress = 
     // Chrome のダウンロードで「製本ビューア_コピー」に保存する
     const dir = folder ? `${COPY_FOLDER}/${folder}` : COPY_FOLDER;
     const saved = [];
-    for (const f of files) {
-      saved.push(await saveBlobAndWait(f.blob, `${dir}/${f.name}`));
-      onProgress?.(saved.length, files.length);
+    // 使い捨て: 前のコピーで保存したファイルを消す。保存している間は、ダウンロードの表示を出さない
+    await disposePreviousCopies();
+    const ui = await hideDownloadUi();
+    try {
+      for (const f of files) {
+        saved.push(await saveBlobAndWait(f.blob, `${dir}/${f.name}`));
+        onProgress?.(saved.length, files.length);
+      }
+    } finally {
+      await ui.restore();
+      await rememberCopies(saved.map(x => x.id));
     }
     paths = saved.map(s => s.path);
     ids = saved.map(s => s.id);

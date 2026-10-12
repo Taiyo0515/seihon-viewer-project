@@ -322,6 +322,10 @@ chrome.webNavigation.onBeforeNavigate.addListener(
 // 4b. 0.4: パソコン内の電子書籍・コミック(file:// の EPUB・MOBI・AZW3・CBZ・CBR など)を製本ビューアで開く。
 //     Chrome はこれらを表示できない(ダウンロードになる)ため、開こうとしたタブを製本ビューアに切り替える
 //     (ビューアがファイルの種類を見分け、コミックは PDF にして表示、文字の本は電子書籍リーダーで表示する)。
+const LOCAL_EBOOK = /^file:\/\/.*\.(epub|mobi|azw|azw3|kfx|prc|cbz|cbr|cb7|fb2)$/i;
+/** 製本ビューアに切り替えた file:// の本(URL → 時刻)。同じ本のダウンロードを止めるときに、タブを開き直さないため */
+const redirectedEbooks = new Map();
+
 chrome.webNavigation.onBeforeNavigate.addListener(
   async details => {
     if (details.frameId !== 0) {
@@ -331,10 +335,44 @@ chrome.webNavigation.onBeforeNavigate.addListener(
     if (settings.launchMode !== "auto" || !settings.openLocalEbooks) {
       return;
     }
+    if (globalThis.__seihonSkipEbookRedirect) {
+      return; // 試験用: タブの切り替えより先にダウンロードが始まったときの動きを確かめる
+    }
+    redirectedEbooks.set(stripHash(details.url), Date.now());
     chrome.tabs.update(details.tabId, { url: viewerUrlFor(details.url) });
   },
   { url: [{ schemes: ["file"], urlMatches: "(?i)\\.(epub|mobi|azw|azw3|kfx|prc|cbz|cbr|cb7|fb2)$" }] }
 );
+
+// 0.4.1: Chrome は表示できない種類のファイル(EPUB など)を開くと、同時に「ダウンロード」も始める
+// (「保存する前に保存場所を確認する」がオンだと、保存先を聞く画面が出る)。
+// 製本ビューアで表示するので、そのダウンロードは保存先を決める前に取り消す(保存先を聞く画面も出さない)。
+// ほかのダウンロードには何もしない(すぐに Chrome の決めた名前のまま進める)。
+// 注: onDeterminingFilename は使わない(使うと、chrome.downloads.download で指定したファイル名が効かなくなる Chrome の不具合があるため)。
+//     ダウンロードが作られた直後(保存先を決める前)に取り消す。
+chrome.downloads.onCreated.addListener(item => {
+  const url = [item.finalUrl, item.url].find(u => LOCAL_EBOOK.test(stripHash(u || "")));
+  if (!url || item.byExtensionId) {
+    return;
+  }
+  (async () => {
+    const settings = await getSettings();
+    if (settings.launchMode !== "auto" || !settings.openLocalEbooks) {
+      return;
+    }
+    await chrome.downloads.cancel(item.id).catch(() => {});
+    chrome.downloads.erase({ id: item.id }).catch(() => {});
+    // タブの切り替えが起きていなければ(ダウンロードだけが始まったとき)、新しいタブで製本ビューアを開く
+    const key = stripHash(url);
+    setTimeout(async () => {
+      const t = redirectedEbooks.get(key);
+      if (t && Date.now() - t < 15000) {
+        return;
+      }
+      chrome.tabs.create({ url: viewerUrlFor(url) }).catch(() => {});
+    }, 600);
+  })().catch(e => console.warn(LOG, e));
+});
 
 // ---------------------------------------------------------------------------
 // 5. リファラの引き継ぎ

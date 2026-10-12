@@ -11,6 +11,8 @@
 依頼(4バイトの長さ + UTF-8 の JSON):
   {"type":"ping"}
   {"type":"begin","root":"製本ビューア_コピー","folder":"","files":[{"name":"a.pdf","size":123}]}
+  {"type":"begin","place":"temp",...}   (版 3: 「ダウンロード」ではなく、見えない一時フォルダに保存する。
+                                          前回のコピーのファイルは消す(コピーは使い捨て))
   {"type":"chunk","index":0,"data":"<base64>"}   … ファイルの中身(順番に)
   {"type":"finish"}                               … 保存を終えて、クリップボードに入れる
   {"type":"copy-files","paths":["/home/…/a.pdf"]} … 保存済みのファイルをクリップボードに入れる
@@ -27,7 +29,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-VERSION = 2
+VERSION = 3
 MAX_MESSAGE = 64 * 1024 * 1024
 
 
@@ -128,6 +130,31 @@ def copy_files(paths):
     return {"ok": True, "count": len(files), "paths": files}
 
 
+def temp_copy_dir():
+    """コピー用の見えない一時フォルダ(このフォルダの中だけを片付ける)"""
+    import tempfile
+    return Path(tempfile.gettempdir()) / ("seihon-viewer-copy-%d" % os.getuid())
+
+
+def new_temp_copy_dir():
+    import shutil
+    import time
+    base = temp_copy_dir()
+    base.mkdir(mode=0o700, parents=True, exist_ok=True)
+    for child in base.iterdir():  # 前回のコピーを消す
+        try:
+            if child.is_dir() and not child.is_symlink():
+                shutil.rmtree(child)
+            else:
+                child.unlink()
+        except OSError:
+            pass
+    directory = base / ("copy-%s" % time.strftime("%Y%m%d-%H%M%S"))
+    directory = unique_path(base, directory.name)
+    directory.mkdir()
+    return directory
+
+
 class Session:
     """begin → chunk… → finish の1回分の保存"""
 
@@ -141,8 +168,11 @@ class Session:
         files = message.get("files") or []
         if not isinstance(files, list) or not files:
             return {"ok": False, "error": "no-files"}
-        directory = Path(downloads_dir()) / root
-        directory.mkdir(parents=True, exist_ok=True)
+        if message.get("place") == "temp":
+            directory = new_temp_copy_dir()
+        else:
+            directory = Path(downloads_dir()) / root
+            directory.mkdir(parents=True, exist_ok=True)
         if folder:
             directory = unique_path(directory, safe_name(folder))
             directory.mkdir(parents=True, exist_ok=False)

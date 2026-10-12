@@ -8,6 +8,8 @@
 // 依頼(4バイトの長さ + UTF-8 の JSON):
 //   {"type":"ping"}
 //   {"type":"begin","root":"製本ビューア_コピー","folder":"","files":[{"name":"a.pdf","size":123}]}
+//   {"type":"begin","place":"temp",...}   (版 3: 「ダウンロード」ではなく、見えない一時フォルダに保存する。
+//                                          前回のコピーのファイルは消す(コピーは使い捨て))
 //   {"type":"chunk","index":0,"data":"<base64>"}   … ファイルの中身(順番に)
 //   {"type":"finish"}                               … 保存を終えて、クリップボードに入れる
 //   {"type":"copy-files","paths":["/Users/…/a.pdf"]} … 保存済みのファイルをクリップボードに入れる
@@ -17,7 +19,7 @@ ObjC.import("Foundation");
 ObjC.import("AppKit");
 ObjC.import("stdlib");
 
-const VERSION = 2;
+const VERSION = 3;
 const fm = $.NSFileManager.defaultManager;
 
 function readExact(count) {
@@ -121,6 +123,23 @@ function copyFiles(paths) {
   return ok ? { ok: true, count: found.length, paths: found } : { ok: false, error: "pasteboard", paths: found };
 }
 
+/** コピー用の見えない一時フォルダ(このフォルダの中だけを片付ける) */
+function newTempCopyDir() {
+  const base = `${$.NSTemporaryDirectory().js.replace(/\/$/, "")}/seihon-viewer-copy`;
+  makeDir(base);
+  const items = fm.contentsOfDirectoryAtPathError(base, $());
+  if (items && !items.isNil()) {
+    for (let i = 0; i < items.count; i++) {
+      fm.removeItemAtPathError(`${base}/${items.objectAtIndex(i).js}`, $()); // 前回のコピーを消す
+    }
+  }
+  const d = new Date();
+  const pad = n => String(n).padStart(2, "0");
+  const dir = uniquePath(base, `copy-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`);
+  makeDir(dir);
+  return dir;
+}
+
 const session = { paths: [], sizes: [] };
 
 function begin(message) {
@@ -128,8 +147,13 @@ function begin(message) {
   if (!files.length) {
     return { ok: false, error: "no-files" };
   }
-  let dir = `${downloadsDir()}/${safeName(message.root || "SeihonViewer")}`;
-  makeDir(dir);
+  let dir;
+  if (message.place === "temp") {
+    dir = newTempCopyDir();
+  } else {
+    dir = `${downloadsDir()}/${safeName(message.root || "SeihonViewer")}`;
+    makeDir(dir);
+  }
   if (message.folder) {
     dir = uniquePath(dir, safeName(message.folder));
     makeDir(dir);

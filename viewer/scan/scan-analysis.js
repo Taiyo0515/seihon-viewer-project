@@ -637,7 +637,139 @@ export function contentBox(img, x0, x1, side = "C", debug = null) {
       limits.bottom = y;
     }
   }
+  // 紙の端(0.4.1): 紙の外(ふた・台の影)との境目。中身の範囲の外にあるときだけ使う
+  const paper = paperEdges(img, x0, x1, side, box);
+  limits.paperTop = paper.top;
+  limits.paperBottom = paper.bottom;
+  limits.paperOuter = paper.outer;
   return { box, ink: total, limits, blobs };
+}
+
+/** 明るい画素(紙)とみなす明るさ */
+const PAPER_LEVEL = 235;
+
+/**
+ * 紙の端を探す(0.4.1)。スキャンでは、紙の外側(コピー機のふた・台)が紙と少し違う明るさで写るか、
+ * 紙の外側の縁に沿った影の帯の幅が、紙の角で変わる。その境目を紙の端とする。
+ *  - 外側の縁の影の帯: 行ごとに、外側の端から紙(明るい画素の並び)までの幅を見る。帯の内側の端が紙の外側の端。
+ *    下(上)の端の近くで帯がはっきり広くなり、そのまま画像の端まで続くところが、紙の下(上)の端。
+ *  - 紙の外が灰色に写るとき: 行ごとの明るさ(中央値)が、紙の明るさより暗いまま画像の端まで続くところ。
+ * 見つからなければ null。中身(box)にかかる位置は使わない。
+ * @returns {{top:number|null, bottom:number|null, outer:number|null}} 画像の座標
+ */
+export function paperEdges(img, x0, x1, side, box) {
+  const { gray, width: W, height: H } = img;
+  const out = { top: null, bottom: null, outer: null };
+  const w = x1 - x0;
+  if (w < 20 || H < 20) {
+    return out;
+  }
+  const mm = img.pxPerMm;
+  const keep = mm; // 中身から 1mm は離す
+  const boxTop = box ? box[1] - keep : H * 0.3;
+  const boxBottom = box ? box[3] + keep : H * 0.7;
+  const minRun = Math.max(2, Math.round(0.8 * mm));
+
+  // 1. 外側の縁の影の帯
+  if (side === "L" || side === "R") {
+    const maxBand = Math.round(w * 0.15);
+    const bandAt = y => {
+      const row = y * W;
+      for (let k = 0; k < maxBand; k++) {
+        const x = side === "R" ? x1 - 1 - k : x0 + k;
+        const step = side === "R" ? -1 : 1;
+        if (gray[row + x] >= PAPER_LEVEL && gray[row + x + step] >= PAPER_LEVEL && gray[row + x + 2 * step] >= PAPER_LEVEL) {
+          return k;
+        }
+      }
+      return maxBand;
+    };
+    const widths = new Int32Array(H);
+    for (let y = 0; y < H; y++) {
+      widths[y] = bandAt(y);
+    }
+    const mid = [];
+    for (let y = Math.round(H * 0.3); y < Math.round(H * 0.7); y++) {
+      mid.push(widths[y]);
+    }
+    mid.sort((a, b) => a - b);
+    const base = mid[mid.length >> 1];
+    if (base >= 1 && base < maxBand) {
+      out.outer = side === "R" ? x1 - base : x0 + base;
+      const wide = Math.max(2, Math.round(0.8 * mm));
+      // 下の端: 画像の下の端から上へ、帯が広いところが続く範囲
+      const runFrom = (start, dir, limit) => {
+        let y = start;
+        let misses = 0;
+        let last = null;
+        while (y >= 0 && y < H && (dir < 0 ? y >= limit : y <= limit)) {
+          if (widths[y] >= base + wide) {
+            last = y;
+            misses = 0;
+          } else if (++misses > Math.max(1, Math.round(0.3 * mm))) {
+            break;
+          }
+          y += dir;
+        }
+        return last;
+      };
+      const b = runFrom(H - 1, -1, Math.round(H * 0.8));
+      if (b !== null && H - b >= minRun && b >= boxBottom) {
+        out.bottom = b;
+      }
+      const t = runFrom(0, 1, Math.round(H * 0.2));
+      if (t !== null && t + 1 >= minRun && t + 1 <= boxTop) {
+        out.top = t + 1;
+      }
+    }
+  }
+
+  // 2. 紙の外が紙より暗く写るとき(行ごとの明るさの中央値で見る)
+  {
+    const cx0 = x0 + Math.round(w * 0.12);
+    const cx1 = x1 - Math.round(w * 0.12);
+    const hist = new Uint32Array(256);
+    const rowMed = new Uint8Array(H);
+    const n = Math.max(1, cx1 - cx0);
+    for (let y = 0; y < H; y++) {
+      hist.fill(0);
+      const row = y * W;
+      for (let x = cx0; x < cx1; x++) {
+        hist[gray[row + x]]++;
+      }
+      let acc = 0;
+      let v = 0;
+      while (v < 255 && acc + hist[v] <= n / 2) {
+        acc += hist[v];
+        v++;
+      }
+      rowMed[y] = v;
+    }
+    const mids = [];
+    for (let y = Math.round(H * 0.2); y < Math.round(H * 0.8); y++) {
+      mids.push(rowMed[y]);
+    }
+    mids.sort((a, b) => a - b);
+    const level = mids[mids.length >> 1];
+    if (level >= PAPER_LEVEL) {
+      const dark = y => rowMed[y] <= level - 4;
+      let y = H - 1;
+      while (y > H * 0.8 && dark(y)) {
+        y--;
+      }
+      if (H - 1 - y >= minRun && y + 1 >= boxBottom) {
+        out.bottom = out.bottom === null ? y + 1 : Math.min(out.bottom, y + 1);
+      }
+      y = 0;
+      while (y < H * 0.2 && dark(y)) {
+        y++;
+      }
+      if (y >= minRun && y <= boxTop) {
+        out.top = out.top === null ? y : Math.max(out.top, y);
+      }
+    }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -842,7 +974,29 @@ export function cropRects(scans, splits, halves, { trim, marginMm = DEFAULT_MARG
     return cropRects(scans, splits, halves, { trim: false });
   }
   // 単位は mm(ページによって画素の大きさが違っても合うように)
-  const outer = Math.max(...outerList) + marginMm;
+  let outer = Math.max(...outerList) + marginMm;
+  // 0.4.1: 紙の外側の端が分かるページがあれば、そこより外は切る(紙の外の余白を入れない)。中身には 1mm 以上の余白を残す
+  {
+    const paperOuter = [];
+    scans.forEach((s, i) => {
+      const sp = splits[i];
+      const h = halves[i];
+      if (!s || !sp || !h) {
+        return;
+      }
+      if (h.L && h.limitsL?.paperOuter != null) {
+        paperOuter.push((sp.x - h.limitsL.paperOuter) / s.pxPerMm);
+      }
+      if (h.R && h.limitsR?.paperOuter != null) {
+        paperOuter.push((h.limitsR.paperOuter - sp.x) / s.pxPerMm);
+      }
+    });
+    const contentOuter = Math.max(...outerList);
+    const usable = paperOuter.filter(v => v >= contentOuter + 1);
+    if (usable.length) {
+      outer = Math.max(contentOuter + 1, Math.min(outer, ...usable));
+    }
+  }
   const bandMm = Math.max(0, ...splits.filter(Boolean).map((sp, i) => sp.band / (scans.find(Boolean)?.pxPerMm || 1)));
   const inner = Math.max(bandMm, Math.min(...innerList) - marginMm);
   // 縦: 本のように、どの見開きにも上下いっぱいの中身(見出し・ページ番号など)があるときは、見開きごとに中身の範囲に合わせる
@@ -862,10 +1016,30 @@ export function cropRects(scans, splits, halves, { trim, marginMm = DEFAULT_MARG
     const typicalTop = median(fullTops);
     topOf = i => (fullFlags[i] ? (unions[i][0] + unions[i][1]) / 2 - frameHeight / 2 : typicalTop);
   } else {
-    const topMm = Math.min(...known.map(u => u[0])) - marginMm;
-    const bottomMm = Math.max(...known.map(u => u[1])) + marginMm;
+    const contentTop = Math.min(...known.map(u => u[0]));
+    const contentBottom = Math.max(...known.map(u => u[1]));
+    let topMm = contentTop - marginMm;
+    let bottomMm = contentBottom + marginMm;
+    // 0.4.1: 紙の上下の端が分かれば、そこで切る(どのページも同じ位置で切るので、いちばん内側の端に合わせる)
+    const edges = paperEdgesMm(scans, splits, halves);
+    const bottoms = edges.bottom.filter(v => v >= contentBottom + 1);
+    if (bottoms.length) {
+      bottomMm = Math.max(contentBottom + 1, Math.min(bottomMm, ...bottoms));
+    }
+    const tops = edges.top.filter(v => v <= contentTop - 1);
+    if (tops.length) {
+      topMm = Math.min(contentTop - 1, Math.max(topMm, ...tops));
+    }
     frameHeight = bottomMm - topMm;
     topOf = () => topMm;
+  }
+  if (bookLike) {
+    // 0.4.1: 本のときも、紙の上下の端が分かるページがあれば、どのページの紙にも収まる高さまで縮める(中身は切らない)
+    const edges = paperEdgesMm(scans, splits, halves, true);
+    const spans = edges.spans.filter(v => v >= maxHeight + 2);
+    if (spans.length) {
+      frameHeight = Math.max(maxHeight + 2, Math.min(frameHeight, ...spans));
+    }
   }
   scans.forEach((s, i) => {
     const sp = splits[i];
@@ -884,6 +1058,25 @@ export function cropRects(scans, splits, halves, { trim, marginMm = DEFAULT_MARG
       y1 = Math.min(s.height, y1 - y0);
       y0 = 0;
     }
+    // 0.4.1: 紙の端の外にはみ出すときは、中身を切らない範囲で紙の中へずらす
+    {
+      const h = halves[i] || {};
+      const lims = [h.limitsL, h.limitsR].filter(Boolean);
+      const pTop = Math.max(-Infinity, ...lims.map(l => l.paperTop ?? -Infinity));
+      const pBottom = Math.min(Infinity, ...lims.map(l => l.paperBottom ?? Infinity));
+      const boxes = [h.L, h.R].filter(Boolean);
+      const cTop = boxes.length ? Math.min(...boxes.map(b => b[1])) : y0;
+      const cBottom = boxes.length ? Math.max(...boxes.map(b => b[3])) : y1;
+      if (y1 > pBottom) {
+        const d = Math.min(y1 - pBottom, Math.max(0, cTop - y0));
+        y0 -= d;
+        y1 -= d;
+      } else if (y0 < pTop) {
+        const d = Math.min(pTop - y0, Math.max(0, y1 - cBottom));
+        y0 += d;
+        y1 += d;
+      }
+    }
     // ノドからの距離で、左右の範囲を決める(スキャンの外にはみ出す分は白い余白になる)
     const innerPx = Math.max(sp.band, px(inner));
     const h = halves[i] || {};
@@ -898,6 +1091,34 @@ export function cropRects(scans, splits, halves, { trim, marginMm = DEFAULT_MARG
     };
   });
   return rects;
+}
+
+/**
+ * 紙の上下の端(mm)。edges.top / edges.bottom はページごとの値の一覧、edges.spans は上下の両方が分かるページの紙の高さ。
+ */
+function paperEdgesMm(scans, splits, halves) {
+  const top = [];
+  const bottom = [];
+  const spans = [];
+  scans.forEach((s, i) => {
+    const h = halves[i];
+    if (!s || !splits[i] || !h) {
+      return;
+    }
+    const lims = [h.L ? h.limitsL : null, h.R ? h.limitsR : null].filter(Boolean);
+    const t = lims.map(l => l.paperTop).filter(v => v != null);
+    const b = lims.map(l => l.paperBottom).filter(v => v != null);
+    if (t.length) {
+      top.push(Math.max(...t) / s.pxPerMm);
+    }
+    if (b.length) {
+      bottom.push(Math.min(...b) / s.pxPerMm);
+    }
+    if (t.length && b.length) {
+      spans.push((Math.min(...b) - Math.max(...t)) / s.pxPerMm);
+    }
+  });
+  return { top, bottom, spans };
 }
 
 /**
@@ -925,6 +1146,22 @@ function avoidJunk(rect, box, limits, side, pxPerMm) {
   }
   if (limits.bottom !== null && limits.bottom - gap < d) {
     d = Math.min(y1, Math.max(limits.bottom - gap, box ? box[3] + keep : -Infinity, b + 10 * pxPerMm));
+  }
+  // 0.4.1: 紙の端の外(ふた・台)は白く覆う(中身には 1mm の余白を残す)
+  const near = pxPerMm;
+  if (limits.paperBottom != null && limits.paperBottom < d) {
+    d = Math.min(d, Math.max(limits.paperBottom, box ? box[3] + near : -Infinity, b + 10 * pxPerMm));
+  }
+  if (limits.paperTop != null && limits.paperTop > b) {
+    b = Math.max(b, Math.min(limits.paperTop, box ? box[1] - near : Infinity, d - 10 * pxPerMm));
+  }
+  if (limits.paperOuter != null) {
+    if (side === "L" && limits.paperOuter > a) {
+      a = Math.max(a, Math.min(limits.paperOuter, box ? box[0] - near : Infinity, c - 10 * pxPerMm));
+    }
+    if (side === "R" && limits.paperOuter < c) {
+      c = Math.min(c, Math.max(limits.paperOuter, box ? box[2] + near : -Infinity, a + 10 * pxPerMm));
+    }
   }
   return [a, b, c, d];
 }
@@ -979,9 +1216,14 @@ function masksOutside(frame, inner) {
  * @returns {Array<{scan:number, half:"L"|"R"|null, rect:number[]|null, masks:number[][], rotate:number}>}
  *   rect が null なら分けずにそのまま。masks: 白く覆う範囲
  */
-export function orderSpread(rects, direction = "ltr") {
+export function orderSpread(rects, direction = "ltr", reverse = false) {
   const out = [];
-  rects.forEach((r, i) => {
+  // reverse(0.4.1): 最後の見開きから順にスキャンしたもの(右綴じの本を左綴じの本と同じ向きにめくってスキャンしたときなど)
+  const order = rects.map((r, i) => [r, i]);
+  if (reverse) {
+    order.reverse();
+  }
+  order.forEach(([r, i]) => {
     if (!r) {
       out.push({ scan: i, half: null, rect: null, masks: [], rotate: 0 });
       return;

@@ -9,13 +9,15 @@
 # Messages (UTF-8 JSON with a 4-byte length):
 #   {"type":"ping"}
 #   {"type":"begin","root":"...","folder":"","files":[{"name":"a.pdf","size":123}]}
+#   {"type":"begin","place":"temp",...}            (version 3: save in a hidden temp folder, not in Downloads.
+#                                                    The files of the previous copy are deleted: each copy is single-use)
 #   {"type":"chunk","index":0,"data":"<base64>"}   (file contents, in order; each message is small)
 #   {"type":"finish"}                               (close the files and put them on the clipboard)
 #   {"type":"copy-files","paths":["C:\\...\\a.pdf"]}
 #   {"type":"reveal","path":"C:\\...\\a.pdf"}       (open the folder in Explorer)
 
 $ErrorActionPreference = 'Stop'
-$Version = 2
+$Version = 3
 $stdin = [Console]::OpenStandardInput()
 $stdout = [Console]::OpenStandardOutput()
 
@@ -115,12 +117,33 @@ function Copy-Files($paths) {
 
 $session = @{ paths = @(); sizes = @() }
 
+# The hidden folder for copies (only this folder is ever cleaned up)
+function Get-TempCopyDir {
+  return (Join-Path ([IO.Path]::GetTempPath()) 'seihon-viewer-copy')
+}
+
+function New-TempCopyDir {
+  $base = Get-TempCopyDir
+  [void][IO.Directory]::CreateDirectory($base)
+  # Delete the previous copies (a file still open in another app is left; it is tried again next time)
+  foreach ($item in @(Get-ChildItem -LiteralPath $base -Force -ErrorAction SilentlyContinue)) {
+    try { Remove-Item -LiteralPath $item.FullName -Recurse -Force -ErrorAction Stop } catch {}
+  }
+  $dir = Join-Path $base ('copy-' + [DateTime]::Now.ToString('yyyyMMdd-HHmmss-fff'))
+  [void][IO.Directory]::CreateDirectory($dir)
+  return $dir
+}
+
 function Start-Session($message) {
   $files = @($message.files)
   if ($files.Count -eq 0) { return @{ ok = $false; error = 'no-files' } }
-  $root = Get-SafeName ([string]$message.root)
-  $dir = Join-Path (Get-DownloadsDir) $root
-  [void][IO.Directory]::CreateDirectory($dir)
+  if ([string]$message.place -eq 'temp') {
+    $dir = New-TempCopyDir
+  } else {
+    $root = Get-SafeName ([string]$message.root)
+    $dir = Join-Path (Get-DownloadsDir) $root
+    [void][IO.Directory]::CreateDirectory($dir)
+  }
   if ($message.folder) {
     $dir = Get-UniquePath $dir (Get-SafeName ([string]$message.folder))
     [void][IO.Directory]::CreateDirectory($dir)

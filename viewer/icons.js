@@ -102,6 +102,7 @@ export const ICONS = {
   "save": s('<path d="M5.2 4h10.6L20 8.2v10.6c0 .7-.5 1.2-1.2 1.2H5.2c-.7 0-1.2-.5-1.2-1.2V5.2C4 4.5 4.5 4 5.2 4Z"/><path d="M8 4v4.5h7V4"/><rect x="7.5" y="13" width="9" height="7"/>'),
   // ---- 0.4: 電子書籍リーダー ----
   "search": s('<circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5.5 5.5"/>'),
+  "swap-vert": s('<path d="M8 4v15M4.5 7.5 8 4l3.5 3.5M16 20V5M12.5 16.5 16 20l3.5-3.5"/>'),
   "chevron-left": s('<path d="m14.5 6-6 6 6 6"/>'),
   "chevron-right": s('<path d="m9.5 6 6 6-6 6"/>'),
   "font-minus": s('<path d="M3.5 18 8 6l4.5 12M5.2 14h5.6"/><path d="M15 12h6"/>'),

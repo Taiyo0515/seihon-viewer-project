@@ -66,12 +66,14 @@ export function normalizeOptions(o) {
     sheetOrder: o.sheetOrder === "inner" ? "inner" : "outer",
     firstSide: o.firstSide === "inner" ? "inner" : "outer",
     flipBacks: !!o.flipBacks,
+    // 0.4.1: 見開きのスキャンが、最後の見開きから順に並んでいる
+    reverse: !!o.reverse,
   };
 }
 
 /** 整え方を表す文字列(整えた PDF の ID と指紋に使う。同じ整え方なら同じ) */
 function signature(o) {
-  return [o.mode, o.trim ? 1 : 0, o.direction, o.sheetOrder, o.firstSide, o.flipBacks ? 1 : 0].join("|");
+  return [o.mode, o.trim ? 1 : 0, o.direction, o.sheetOrder, o.firstSide, o.flipBacks ? 1 : 0, ...(o.reverse ? ["rev"] : [])].join("|");
 }
 
 async function loadChoices() {
@@ -660,7 +662,7 @@ export class ScanArranger {
       }
       order = r.pages;
     } else {
-      order = orderSpread(rects, options.direction);
+      order = orderSpread(rects, options.direction, options.reverse);
     }
     return {
       pages: order.map(o => ({
@@ -691,7 +693,7 @@ export class ScanArranger {
    * @param {{auto?:boolean, remember?:boolean}} [o] auto: 開いたときに自動で / remember: この PDF の整え方として覚える
    * @returns {Promise<boolean>}
    */
-  async arrange(options, { auto = false, remember = !auto } = {}) {
+  async arrange(options, { auto = false, remember = !auto, fromStart = false } = {}) {
     const base = this.base;
     options = normalizeOptions(options);
     if (!base || !options || this.state === "busy") {
@@ -748,10 +750,11 @@ export class ScanArranger {
       }
       const fileName = `${sanitizeFileName(base.baseName)}${MODE_SUFFIX[options.mode]}.pdf`;
       // いま見ているページに当たるページから表示する
-      const viewing = this.isArranged || this.app.pdfDocument === base.doc ? this.currentSourcePage() : 0;
+      const viewing = !fromStart && (this.isArranged || this.app.pdfDocument === base.doc) ? this.currentSourcePage() : -1;
       const target = Math.max(1, plan.pages.findIndex(p => p.src === viewing) + 1);
       this.arranged = { options, pages: plan.pages, fileName, key: `${base.key}#scan:${sig}`, doc: null, auto, size: bytes.length };
-      this.app.initialBookmark = target > 1 ? `page=${target}` : null;
+      // 1ページ目でも指定する(PDF.js が前回見ていた位置に戻さないように。0.4.1)
+      this.app.initialBookmark = `page=${target}`;
       // 見開きを分けたとき: 1ページ目が見開きの片側なら、元のスキャンと同じ組み合わせ(1-2、3-4…)で並ぶ「見開き」で表示する
       // (製本表示では1ページ目が表紙として単独になり、組み合わせが1つずれるため)。冊子は製本表示のまま
       if (this.book) {
@@ -879,7 +882,14 @@ export class ScanArranger {
     if (!this.isArranged || this.state === "busy" || this.arranged.options.direction === direction) {
       return;
     }
-    await this.arrange({ ...this.arranged.options, direction }, { remember: true });
+    const ok = await this.arrange({ ...this.arranged.options, direction }, { remember: true });
+    if (ok && direction === "rtl" && this.arranged?.options.mode === "spread" && !this.arranged.options.reverse) {
+      // 0.4.1: 右綴じの本を、横書きの本と同じ向きにめくってスキャンしたものは、最後のページから始まる
+      this.toast.show("右綴じの順に並べ直しました。最後のページから始まってしまうときは、ツールバーの「分割表示」→「ページの順を逆にする」を押してください", {
+        duration: 9000,
+        action: { label: "ページの順を逆にする", onClick: () => this.arrange({ ...this.arranged.options, reverse: true }, { remember: true, fromStart: true }) },
+      });
+    }
   }
 
   /** 整えた PDF を保存する(保存先を選ぶ) */
