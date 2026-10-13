@@ -20,6 +20,11 @@ export class Toolbar {
     this.pageCount = document.getElementById("shPageCount");
     this.zoomInput = document.getElementById("shZoomInput");
     this.fitButton = document.getElementById("shFit");
+    /** 0.4.2: 付け直した名前(main.js が設定する)。付け直していなければ null */
+    this.getTitleOverride = () => null;
+    /** 0.4.2: 名前を付け直したときに呼ぶ(null は元の名前に戻す) */
+    this.onRename = null;
+    this.titleEl.addEventListener("click", () => this.startRename());
     /** 次に押したときに適用する合わせ方(Chrome と同じく、ボタンは「次の動作」を表示) */
     this.nextFit = "page-fit";
     this.loading = true;
@@ -227,6 +232,76 @@ export class Toolbar {
     this.setNextFit(fit === "page-fit" ? "page-width" : "page-fit");
   }
 
+  /** 0.4.2: 左上の名前をクリックしたら、その場で名前を書き換えられるようにする */
+  startRename() {
+    if (!this.app.pdfDocument || !this.onRename || this.renameInput) {
+      return;
+    }
+    const original = this.originalTitle();
+    const input = document.createElement("input");
+    input.type = "text";
+    input.id = "shTitleInput";
+    input.className = "sh-title-input";
+    input.value = this.getTitleOverride() ?? original;
+    input.placeholder = original || "名前";
+    input.setAttribute("aria-label", "文書の名前(保存すると PDF の題名になります)");
+    input.title = "Enter で決定・Esc でやめる(空にすると元の名前に戻します)";
+    input.spellcheck = false;
+    input.autocomplete = "off";
+    this.renameInput = input;
+    this.titleEl.hidden = true;
+    this.titleEl.after(input);
+    input.focus();
+    input.select();
+    let done = false;
+    const finish = (commit, refocus) => {
+      if (done) {
+        return;
+      }
+      done = true;
+      const value = input.value.replace(/\s+/g, " ").trim();
+      input.remove();
+      this.renameInput = null;
+      this.titleEl.hidden = false;
+      if (commit) {
+        this.onRename(!value || value === original ? null : value);
+      }
+      this.updateTitle();
+      if (refocus) {
+        this.titleEl.focus({ preventScroll: true });
+      }
+    };
+    input.addEventListener("keydown", e => {
+      // ほかのショートカット(ページ移動など)に渡さない
+      e.stopPropagation();
+      if (e.key === "Enter" && !e.isComposing) {
+        e.preventDefault();
+        finish(true, true);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        finish(false, true);
+      }
+    });
+    input.addEventListener("blur", () => finish(true, false));
+    this.fitToWidth();
+  }
+
+  /** 付け直す前の名前(PDF の題名、無ければファイル名) */
+  originalTitle() {
+    const { app } = this;
+    let title = "";
+    try {
+      title = app._docTitle || "";
+    } catch {
+      title = "";
+    }
+    let filename = "";
+    try {
+      filename = app._docFilename || "";
+    } catch {}
+    return (title || filename || app._title || "").trim();
+  }
+
   updateTitle() {
     const { app } = this;
     let title = "";
@@ -242,8 +317,11 @@ export class Toolbar {
         return "";
       }
     })();
-    const shown = (title || filename || app._title || "").trim();
+    const override = this.getTitleOverride();
+    const shown = override ?? (title || filename || app._title || "").trim();
     this.titleEl.textContent = shown;
-    this.titleEl.title = filename && title ? `${title}\n${filename}` : shown;
+    const hint = app.pdfDocument && this.onRename ? "\nクリックで名前を変更" : "";
+    const detail = override ? `${shown}(名前を変更)\n${filename}` : filename && title ? `${title}\n${filename}` : shown;
+    this.titleEl.title = `${detail}${hint}`;
   }
 }

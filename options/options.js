@@ -21,7 +21,7 @@ import {
   storageUsage,
 } from "../common/db.js";
 import { BACKUP_MAX_BYTES, applyBackup, createBackup, describeBackup, parseBackup } from "../common/backup.js";
-import { saveBlob, timestampForFileName } from "../common/files.js";
+import { saveFile, timestampForFileName } from "../common/files.js";
 import { ROLES, ROLE_LABEL } from "../viewer/roles.js";
 import { applyThemePreference } from "../viewer/theme.js";
 import { HELPER_PERMISSION, helperStatus } from "../viewer/file-clipboard.js";
@@ -420,9 +420,17 @@ function bindBackup() {
       const data = await createBackup({ settings, roles });
       const blob = new Blob([`${JSON.stringify(data, null, 2)}\n`], { type: "application/json" });
       const name = `製本ビューアの設定_${timestampForFileName()}.json`;
-      await saveBlob(blob, name);
+      const res = await saveFile(blob, name);
+      if (res.canceled) {
+        showBackupStatus("書き出しをやめました。", "warn");
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(res.error || "保存できませんでした");
+      }
       const parts = [settings ? "詳細設定" : null, roles ? `ページ役割 ${data.roles.length} 件` : null].filter(Boolean);
-      showBackupStatus(`書き出しました: ${name}(${parts.join("、")})。Chrome のダウンロード先のフォルダに保存されます。`, "ok");
+      const where = res.picked ? "選んだ場所に保存しました" : "Chrome のダウンロード先のフォルダに保存されます";
+      showBackupStatus(`書き出しました: ${res.fileName || name}(${parts.join("、")})。${where}。`, "ok");
     } catch (e) {
       showBackupStatus(`書き出せませんでした: ${e?.message || e}`, "error");
     }

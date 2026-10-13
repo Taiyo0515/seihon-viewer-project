@@ -5,7 +5,7 @@
  * ツールバー・メニュー・製本表示などの独自部分をここで結び付ける。
  */
 
-import { sanitizeFileName, saveBlobAs } from "../common/files.js";
+import { sanitizeFileName, saveBlobAs, setSaveGestureAsker } from "../common/files.js";
 import { onSettingsChanged, saveSettings } from "../common/settings.js";
 import { matchesShortcut } from "../common/shortcut.js";
 import { viewerUrlFor } from "../common/viewer-url.js";
@@ -63,6 +63,26 @@ Object.defineProperty(app, "pagesCount", {
 // 部品の用意
 // ---------------------------------------------------------------------------
 const toast = new Toast();
+// 0.4.2: 保存する内容を作るのに時間がかかり、保存先を選ぶ画面をすぐに出せないときは、ボタンを押してもらう
+setSaveGestureAsker(
+  fileName =>
+    new Promise(resolve => {
+      let settled = false;
+      const done = v => {
+        if (!settled) {
+          settled = true;
+          resolve(v);
+        }
+      };
+      toast.show(`保存の準備ができました(${fileName})`, {
+        duration: 0,
+        actions: [
+          { label: "保存先を選ぶ", onClick: () => done(true) },
+          { label: "やめる", onClick: () => done(false) },
+        ],
+      });
+    })
+);
 const toolbar = new Toolbar(app);
 const sidebarTabs = new SidebarTabs(app);
 const annotations = new AnnotationTools(app, toast);
@@ -238,7 +258,8 @@ function sanitizeViewHistory() {
   const originalSetTitle = app.setTitle.bind(app);
   app.setTitle = (...args) => {
     originalSetTitle(...args);
-    const title = document.title.replace(/^\* /, "");
+    // 0.4.2: 名前を付け直していれば、タブの名前もそれにする
+    const title = pageEditor.title ?? document.title.replace(/^\* /, "");
     document.title = pageEditor.dirty ? `* ${title}` : title;
     toolbar.updateTitle();
   };
@@ -617,8 +638,23 @@ const downloadMenu = new PopupMenu({
 /** 元の PDF から変えたところがある(ページの削除・書き込み・フォームの入力。保存したかどうかは問わない) */
 function hasEdits() {
   const doc = app.pdfDocument;
-  return !!doc && (pageEditor.dirty || isRearranged(doc) || (doc.annotationStorage?.size || 0) > 0);
+  return !!doc && (pageEditor.dirty || pageEditor.title !== null || isRearranged(doc) || (doc.annotationStorage?.size || 0) > 0);
 }
+
+// 0.4.2: 左上の名前をクリックして、文書の名前(PDF の題名)を付け直す。保存するときに PDF に書き込む
+toolbar.getTitleOverride = () => pageEditor.title;
+toolbar.onRename = title => {
+  const before = pageEditor.title;
+  pageEditor.setTitle(title);
+  if (pageEditor.title === before) {
+    return;
+  }
+  app.setTitle();
+  toast.show(
+    pageEditor.title === null ? "名前を元に戻しました" : `名前を「${pageEditor.title}」にしました。保存すると、PDF の中の名前(題名)として書き込まれます`,
+    { duration: 5000, action: { label: "元に戻す", onClick: () => toolbar.onRename(before) } }
+  );
+};
 downloadButton.addEventListener("click", () => {
   if (!app.pdfDocument) {
     return;
@@ -732,7 +768,7 @@ async function printOriginal() {
     }
     // 題名の無い PDF は、「PDF に保存」のファイル名の候補が英数字の羅列にならないよう、ファイル名を題名にする
     const info = await doc.getMetadata().catch(() => null);
-    if (!String(info?.info?.Title || "").trim()) {
+    if (pageEditor.title === null && !String(info?.info?.Title || "").trim()) {
       const base = sanitizeFileName(docSource.baseName());
       bytes = await withTitle(bytes, edited ? `${base}_編集済み` : base);
     }

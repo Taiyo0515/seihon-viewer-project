@@ -18,6 +18,7 @@
 import { baseName, saveBlobAs, sanitizeFileName } from "../common/files.js";
 import { computePdfKey, editedDocumentBytes, extractPagesToPdf, loadPdfFromBytes } from "./page-export.js";
 import { isRearranged, mappingSignature, sourceOrder, viewPageCount } from "./page-map.js";
+import { withTitle } from "./print-native.js";
 import { choiceDialog, confirmDialog } from "./ui/dialog.js";
 
 /** PDF.js が書き込みを保存するときのキーの先頭(フォームの入力内容と区別する) */
@@ -49,6 +50,10 @@ export class PageEditor {
     /** 今回の削除で消える層(元に戻したら、削除したページの扱いをやめる) */
     this.pendingLayers = [];
     this.saving = false;
+    /** 0.4.2: 付け直した文書の名前(PDF の題名 /Title)。付け直していなければ null */
+    this.title = null;
+    /** 付け直した名前を保存した */
+    this.titleSaved = true;
     /** 「保存しない」を選んだ直後は、タブを離れるときの確認を出さない */
     this.leaveAllowedUntil = 0;
     this.patchedUi = new WeakSet();
@@ -86,7 +91,27 @@ export class PageEditor {
 
   /** 保存していない変更がある */
   get dirty() {
-    return this.structuralDirty || (this.annotDirty && !!this.app.pdfDocument);
+    return this.structuralDirty || (this.annotDirty && !!this.app.pdfDocument) || this.titleDirty;
+  }
+
+  /** 名前(PDF の題名)を付け直して、まだ保存していない */
+  get titleDirty() {
+    return this.title !== null && !this.titleSaved && !!this.app.pdfDocument;
+  }
+
+  /**
+   * 0.4.2: 文書の名前(PDF の中の題名 /Title)を付け直す。保存したときに PDF に書き込む(ファイルは保存するまで変えない)。
+   * @param {string|null} title null で付け直しをやめる(元の名前に戻す)
+   */
+  setTitle(title) {
+    const t = title === null ? null : String(title).replace(/\s+/g, " ").trim();
+    const next = t ? t : null;
+    if (next === this.title) {
+      return;
+    }
+    this.title = next;
+    this.titleSaved = next === null;
+    this.emit();
   }
 
   get canUndoDelete() {
@@ -108,6 +133,8 @@ export class PageEditor {
     this.doc = doc;
     this.savedSignature = doc ? mappingSignature(doc) : "";
     this.annotDirty = false;
+    this.title = null;
+    this.titleSaved = true;
     this.pendingDelete = null;
     this.pendingLayers = [];
     this.deletedLayers = new Set();
@@ -487,6 +514,19 @@ export class PageEditor {
    * - 並びを変えていれば、表示しているページだけを表示の順に抜き出す(書き込み・フォームの入力も含める)
    */
   async buildEditedBytes(doc) {
+    const bytes = await this.buildEditedBytesRaw(doc);
+    if (this.title === null || !bytes?.length) {
+      return bytes;
+    }
+    // 付け直した名前を、PDF の題名として書き込む(書き込めない PDF では元のまま)
+    const titled = await withTitle(bytes, this.title);
+    if (titled === bytes) {
+      this.titleFailed = true;
+    }
+    return titled;
+  }
+
+  async buildEditedBytesRaw(doc) {
     const storage = doc.annotationStorage;
     const hasEdits = (storage?.size || 0) > 0;
     if (!isRearranged(doc)) {
@@ -542,6 +582,8 @@ export class PageEditor {
     this.emit();
     const busy = this.toast.show("保存する PDF を作っています…", { duration: 0 });
     let bytes;
+    this.titleFailed = false;
+    const titleVersion = this.title;
     try {
       // 「元に戻す」の記録を確定して、削除したページの後始末をしてから作る
       this.finalizeDelete();
@@ -581,6 +623,9 @@ export class PageEditor {
       return false;
     }
     if (doc === app.pdfDocument) {
+      if (this.title === titleVersion && !this.titleFailed) {
+        this.titleSaved = true;
+      }
       this.savedSignature = signature;
       if (annotVersion && mappingSignature(doc) === signature) {
         this.annotDirty = false;
@@ -593,6 +638,9 @@ export class PageEditor {
       this.emit();
     }
     const savedName = baseName(result.filename || "") ? `${baseName(result.filename)}.pdf` : this.suggestedName();
+    if (this.titleFailed) {
+      this.toast.show("この PDF には名前(題名)を書き込めなかったため、名前は元のままで保存しました", { kind: "error", duration: 8000 });
+    }
     this.toast.show(`保存しました: ${savedName}`, {
       duration: 7000,
       action: result.id !== undefined ? { label: "フォルダを開く", onClick: () => chrome.downloads.show(result.id) } : undefined,
@@ -654,6 +702,9 @@ export class PageEditor {
     }
     if (this.annotDirty) {
       parts.push("書き込み・フォームの入力");
+    }
+    if (this.titleDirty) {
+      parts.push("名前の変更");
     }
     return parts.join("と") || "編集";
   }

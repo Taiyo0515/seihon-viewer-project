@@ -12,20 +12,54 @@ let pdfLibPromise = null;
 
 /**
  * PDF に題名(/Title)を付ける。Chrome の印刷画面の「PDF に保存」は、PDF の題名をファイル名の候補にするため、
- * 題名の無い PDF では、印刷用の仮の名前(英数字の羅列)になってしまう。付けられなければ、元のまま返す。
+ * 題名の無い PDF では、印刷用の仮の名前(英数字の羅列)になってしまう。付けられなければ、元のまま(同じもの)を返す。
  * (画像などの中身は作り直さずにそのまま写す)
+ * 0.4.2: XMP(PDF の中のもう1つの情報)に題名があれば、そちらも書き換える
+ * (PDF.js や Acrobat は XMP の題名を優先して表示するため)。
  */
 export async function withTitle(bytes, title) {
   try {
     pdfLibPromise ||= import("../lib/pdf-lib.esm.min.js");
-    const { PDFDocument } = await pdfLibPromise;
-    const pdf = await PDFDocument.load(bytes, { updateMetadata: false });
+    const lib = await pdfLibPromise;
+    const pdf = await lib.PDFDocument.load(bytes, { updateMetadata: false });
     pdf.setTitle(title);
+    updateXmpTitle(lib, pdf, title);
     return await pdf.save({ useObjectStreams: false });
   } catch (e) {
-    console.warn("[製本ビューア] 印刷用の PDF に題名を付けられませんでした", e);
+    console.warn("[製本ビューア] PDF に題名を付けられませんでした", e);
     return bytes;
   }
+}
+
+/** XMP の dc:title を書き換える(読めない XMP は外す。古い題名が残って表示されないように) */
+function updateXmpTitle(lib, pdf, title) {
+  const { PDFName, PDFRawStream, decodePDFRawStream } = lib;
+  const ref = pdf.catalog.get(PDFName.of("Metadata"));
+  if (!ref) {
+    return;
+  }
+  const stream = pdf.context.lookup(ref);
+  let xml = null;
+  try {
+    if (stream instanceof PDFRawStream) {
+      xml = new TextDecoder("utf-8", { fatal: true }).decode(decodePDFRawStream(stream).decode());
+    }
+  } catch {
+    xml = null;
+  }
+  if (xml === null || !/<dc:title\b/.test(xml)) {
+    if (xml === null) {
+      pdf.catalog.delete(PDFName.of("Metadata"));
+    }
+    return;
+  }
+  const esc = title.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  // 開きのタグ(xmlns:dc などの指定が付いていることがある)はそのまま残す
+  const alt = `<rdf:Alt><rdf:li xml:lang="x-default">${esc}</rdf:li></rdf:Alt>`;
+  const replaced = xml.replace(/(<dc:title\b[^>]*?)(\/>|>[\s\S]*?<\/dc:title>)/, (m, open) => `${open}>${alt}</dc:title>`);
+  const data = new TextEncoder().encode(replaced);
+  const next = pdf.context.stream(data, { Type: "Metadata", Subtype: "XML" });
+  pdf.catalog.set(PDFName.of("Metadata"), pdf.context.register(next));
 }
 let frameUrl = null;
 let cleanupTimer = 0;

@@ -9,7 +9,7 @@
  * - 画像の画質は設定 imageQuality(既定は最高画質 = 元の画質。image-export.js)。
  */
 
-import { createZip, sanitizeFileName, saveBlob, timestampForFileName } from "../common/files.js";
+import { createZip, sanitizeFileName, saveFile, timestampForFileName } from "../common/files.js";
 import { copyFilesToClipboard, revealInFolder } from "./file-clipboard.js";
 import { pageImageFile, renderPagePng } from "./image-export.js";
 import { editedDocumentBytes, extractPagesToPdf, loadPdfFromBytes } from "./page-export.js";
@@ -151,6 +151,10 @@ export class PageCopy {
         return false;
       } catch (e) {
         busy();
+        if (e?.canceled) {
+          this.toast.show("保存をやめました");
+          return false;
+        }
         this.toast.show(`コピーできませんでした: ${e.message || e}`, { kind: "error", duration: 8000 });
         return false;
       }
@@ -171,6 +175,10 @@ export class PageCopy {
         this.toast.show(`画像を保存しました: ${fileName}`);
       } catch (e) {
         busy();
+        if (e?.canceled) {
+          this.toast.show("保存をやめました");
+          return;
+        }
         this.toast.show(`画像を保存できませんでした: ${e.message || e}`, { kind: "error", duration: 8000 });
       }
     });
@@ -190,9 +198,18 @@ export class PageCopy {
       try {
         const file = await pageImageFile(doc, pageNumber, srcIndex, { settings, rotation, shrink });
         const fileName = `${base}_p${pageNumber}.${file.ext}`;
-        await saveBlob(file.blob, fileName);
-        return fileName;
+        const res = await saveFile(file.blob, fileName);
+        if (res.canceled) {
+          throw Object.assign(new Error("保存をやめました"), { canceled: true });
+        }
+        if (!res.ok) {
+          throw new Error(res.error || "保存できませんでした");
+        }
+        return res.fileName || fileName;
       } catch (e) {
+        if (e?.canceled) {
+          throw e; // 保存先を選ぶ画面でやめた(解像度を下げて作り直さない)
+        }
         lastError = e;
       }
     }
@@ -238,11 +255,19 @@ export class PageCopy {
       const busy = this.toast.show(`PDF を作成しています…(${pages.length}ページ)`, { duration: 0 });
       try {
         const bytes = await this.buildPdf(pages);
-        const id = await saveBlob(new Blob([bytes], { type: "application/pdf" }), fileName);
+        busy.update("保存しています…");
+        const res = await saveFile(new Blob([bytes], { type: "application/pdf" }), fileName);
         busy();
-        this.toast.show(`${pages.length}ページを PDF で保存しました: ${fileName}`, {
+        if (!res.ok) {
+          if (res.canceled) {
+            this.toast.show("保存をやめました");
+            return false;
+          }
+          throw new Error(res.error || "保存できませんでした");
+        }
+        this.toast.show(`${pages.length}ページを PDF で保存しました: ${res.fileName || fileName}`, {
           duration: 6000,
-          action: { label: "フォルダを開く", onClick: () => chrome.downloads.show(id) },
+          action: folderAction(res.id),
         });
         return true;
       } catch (e) {
@@ -314,11 +339,19 @@ export class PageCopy {
         const files = await this.buildImageFiles(pages, (i, n) => busy.update(`画像を作成しています… ${i}/${n}`));
         busy.update("ZIP にまとめています…");
         const zip = await createZip(files);
-        const id = await saveBlob(zip, fileName);
+        busy.update("保存しています…");
+        const res = await saveFile(zip, fileName);
         busy();
-        this.toast.show(`${pages.length}ページを画像(ZIP)で保存しました: ${fileName}`, {
+        if (!res.ok) {
+          if (res.canceled) {
+            this.toast.show("保存をやめました");
+            return false;
+          }
+          throw new Error(res.error || "保存できませんでした");
+        }
+        this.toast.show(`${pages.length}ページを画像(ZIP)で保存しました: ${res.fileName || fileName}`, {
           duration: 6000,
-          action: { label: "フォルダを開く", onClick: () => chrome.downloads.show(id) },
+          action: folderAction(res.id),
         });
         return true;
       } catch (e) {
@@ -459,4 +492,9 @@ export class PageCopy {
     const suffix = names.length > 1 ? "ほか" : "";
     return `${base}${suffix}_抜粋_${timestampForFileName(new Date(), { seconds })}.${ext}`;
   }
+}
+
+/** 「フォルダを開く」ボタン(ダウンロードフォルダに保存したときだけ) */
+function folderAction(id) {
+  return id !== undefined ? { label: "フォルダを開く", onClick: () => chrome.downloads.show(id) } : undefined;
 }

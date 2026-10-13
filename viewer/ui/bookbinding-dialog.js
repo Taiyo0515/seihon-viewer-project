@@ -5,7 +5,7 @@
  * 本体の並び(白紙の位置)と面付けの並びはプレビューで確認できる。
  */
 
-import { sanitizeFileName, saveBlob } from "../../common/files.js";
+import { sanitizeFileName, saveFiles } from "../../common/files.js";
 import { ACCESSORY_ROLES, ROLE_USES, ROLE_USE_LABEL, imposition, parseBlankPositions, planBook, referenceSize, resolvePaper, roleUseFromSettings, useOfRole } from "../bookbinding.js";
 import { buildBookbindingFiles, pageDisplaySizes } from "../bookbinding-export.js";
 import { sourceIndex, viewPageCount } from "../page-map.js";
@@ -711,11 +711,16 @@ export class BookbindingDialog {
         includeEdits: !this.docSource.passwordDocs.has(doc),
       });
       progress("保存しています…");
-      const saved = [];
-      for (const f of files) {
-        const id = await saveBlob(new Blob([f.bytes], { type: "application/pdf" }), f.fileName);
-        saved.push({ ...f, id });
+      const res = await saveFiles(files.map(f => ({ blob: new Blob([f.bytes], { type: "application/pdf" }), fileName: f.fileName })));
+      if (!res.ok) {
+        progress("");
+        if (res.canceled) {
+          this.toast.show(res.saved.length ? "残りのファイルの保存をやめました" : "保存をやめました");
+          return;
+        }
+        throw new Error(res.error || "保存できませんでした");
       }
+      const saved = files.map((f, i) => ({ ...f, fileName: res.saved[i]?.fileName || f.fileName, id: res.saved[i]?.id }));
       this.showResult(saved, { impose, duplex, plan });
     } catch (e) {
       console.error(e);
@@ -742,12 +747,14 @@ export class BookbindingDialog {
             ? `読む順の本体(${plan.N}ページ、白紙 ${plan.blanks}枚を含む)`
             : `付属(${f.pages}ページ)`;
       li.textContent = `${f.fileName} — ${what}`;
-      const open = document.createElement("button");
-      open.type = "button";
-      open.className = "sh-btn sh-btn-small sh-btn-text";
-      open.textContent = "フォルダを開く";
-      open.addEventListener("click", () => chrome.downloads.show(f.id));
-      li.append(" ", open);
+      if (f.id !== undefined) {
+        const open = document.createElement("button");
+        open.type = "button";
+        open.className = "sh-btn sh-btn-small sh-btn-text";
+        open.textContent = "フォルダを開く";
+        open.addEventListener("click", () => chrome.downloads.show(f.id));
+        li.append(" ", open);
+      }
       list.append(li);
     }
     const guide = $("shBindGuide");
