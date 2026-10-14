@@ -130,8 +130,7 @@ export class Toolbar {
       }
     });
 
-    // ---- 回転(Chrome と同じく、ボタンは反時計回り) ----
-    document.getElementById("shRotate").addEventListener("click", () => app.rotatePages(-90));
+    // ---- 回転: 0.5 から rotate-menu.js(右クリックで向きと角度を選べる) ----
 
     // ---- タイトル ----
     bus.on("metadataloaded", () => this.updateTitle());

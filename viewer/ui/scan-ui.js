@@ -128,7 +128,6 @@ export class ScanDialog {
     this.trim = $("shScanTrim");
     this.firstInner = $("shScanFirstInner");
     this.flipBacks = $("shScanFlipBacks");
-    this.reverse = $("shScanReverse");
     this.spreadBox = $("shScanSpreadOptions");
     this.bookletBox = $("shScanBookletOptions");
     this.ready = false;
@@ -172,7 +171,8 @@ export class ScanDialog {
       sheetOrder: radio("shScanSheetOrder") || "outer",
       firstSide: this.firstInner.checked ? "inner" : "outer",
       flipBacks: this.flipBacks.checked,
-      reverse: this.reverse.checked,
+      // 0.5: 「PDF の1ページ目」が本の最後のほうの見開きなら、見開きの順を逆にする
+      reverse: radio("shScanFirstPage") === "last",
     });
   }
 
@@ -189,7 +189,7 @@ export class ScanDialog {
     this.trim.checked = !!o.trim;
     this.firstInner.checked = o.firstSide === "inner";
     this.flipBacks.checked = !!o.flipBacks;
-    this.reverse.checked = !!o.reverse;
+    set("shScanFirstPage", o.reverse ? "last" : "first");
   }
 
   updateControls() {
@@ -395,6 +395,9 @@ export class ScanDialog {
       await this.arranger.restore({ remember: true });
       return;
     }
-    await this.arranger.arrange(o, { remember: true });
+    // 0.5: 「PDF の1ページ目」(順を逆にするか)を変えたときは、本の最初のページから表示する
+    const before = this.arranger.arranged?.options;
+    const fromStart = !before || before.reverse !== o.reverse || before.mode !== o.mode;
+    await this.arranger.arrange(o, { remember: true, fromStart });
   }
 }

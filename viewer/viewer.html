@@ -1390,17 +1390,19 @@
             </fieldset>
             <label class="sh-bind-check"><input type="checkbox" id="shScanTrim" /> 余白を除く(スキャンで入った余分なふち・影・本の縁やごみを切り取り、全部のページを同じ大きさにそろえる)</label>
             <div class="sh-bind-field">
-              <div class="sh-bind-field-label">綴じ方向</div>
+              <div class="sh-bind-field-label">本を読む向き</div>
               <div class="sh-bind-field-control">
-                <label><input type="radio" name="shScanDirection" value="ltr" /> 左綴じ(横書き。左のページが先・表紙が右)</label>
-                <label><input type="radio" name="shScanDirection" value="rtl" /> 右綴じ(縦書き・漫画。右のページが先・表紙が左)</label>
+                <label><input type="radio" name="shScanDirection" value="rtl" /> 右から左に読む(縦書きの本・漫画。見開きの右のページが先)</label>
+                <label><input type="radio" name="shScanDirection" value="ltr" /> 左から右に読む(横書きの本。見開きの左のページが先)</label>
+                <p class="sh-bind-help">選んだ向きで、見開きのどちらのページを先にするかと、ビューアでの見開きの並び(右綴じ・左綴じ)を決めます。</p>
               </div>
             </div>
             <div id="shScanSpreadOptions" class="sh-bind-field">
-              <div class="sh-bind-field-label">スキャンした順</div>
+              <div class="sh-bind-field-label">PDF の1ページ目</div>
               <div class="sh-bind-field-control">
-                <label><input type="checkbox" id="shScanReverse" /> 最後の見開きから順にスキャンした(ページの順を逆にする)</label>
-                <p class="sh-bind-help">右綴じ(縦書き)の本を、横書きの本と同じ向きにページをめくってスキャンすると、最後の見開きが先になります。1ページ目が最後のページになっているときは、ここをオンにしてください。</p>
+                <label><input type="radio" name="shScanFirstPage" value="first" /> 本の最初のほうの見開き(最初の見開きから順にスキャンした)</label>
+                <label><input type="radio" name="shScanFirstPage" value="last" /> 本の最後のほうの見開き(最後の見開きから順にスキャンした)</label>
+                <p class="sh-bind-help">1ページ目が最後のほうの見開きなら、見開きの順を逆にして、本の最初のページから表示します(見開きの中の順は、上の「本を読む向き」のまま)。右から左に読む本を、横書きの本と同じ向きにめくってスキャンすると、最後の見開きが先になります。</p>
               </div>
             </div>
             <div id="shScanBookletOptions" class="sh-bind-field" hidden>
@@ -1443,49 +1445,11 @@
                 <h3 id="shBindRolesTitle">カバー・表紙・帯などのページ</h3>
                 <button id="shBindOpenRoles" type="button" class="sh-link-btn">ページ役割の一覧を開く</button>
               </div>
-              <div class="sh-bind-grid">
-                <label for="shBindCover">カバーの表紙</label>
-                <select id="shBindCover" class="sh-select" data-role="cover"></select>
-                <label for="shBindBack">カバーの裏表紙</label>
-                <select id="shBindBack" class="sh-select" data-role="back"></select>
-                <label for="shBindObiFront">表紙</label>
-                <select id="shBindObiFront" class="sh-select" data-role="obiFront"></select>
-                <label for="shBindObiBack">裏表紙</label>
-                <select id="shBindObiBack" class="sh-select" data-role="obiBack"></select>
-                <label for="shBindObiAdd" id="shBindObiLabel">帯<span class="sh-bind-multi-mark">(複数可)</span></label>
-                <div id="shBindObiMulti" class="sh-multi" role="group" aria-labelledby="shBindObiLabel" data-role="obi">
-                  <span id="shBindObiItems" class="sh-multi-items"></span>
-                  <select id="shBindObiAdd" class="sh-select sh-multi-add" data-role="obi" aria-label="帯にするページを追加"></select>
-                </div>
-                <label for="shBindBookmark">しおり</label>
-                <select id="shBindBookmark" class="sh-select" data-role="bookmark"></select>
-                <label for="shBindFlapFront">表紙の折り返し</label>
-                <select id="shBindFlapFront" class="sh-select" data-role="flapFront"></select>
-                <label for="shBindFlapBack">裏表紙の折り返し</label>
-                <select id="shBindFlapBack" class="sh-select" data-role="flapBack"></select>
-              </div>
-              <p class="sh-bind-help">「カバーの表紙」「カバーの裏表紙」は、本の最初と最後のページになります。表紙・裏表紙・帯・折り返し・しおりのページは「付属」として、本体とは別に出力します(使い道は下の「詳細設定」で変えられます)。ページを選ぶと、そのページに役割を付けて保存します。同じ PDF を開き直しても残ります。サイドバー(左上の ☰)の「選択」から、まとめて付けることもできます。</p>
+              <!-- 0.5: 項目は詳細設定の「カバー・表紙・帯などの項目」に合わせて作る(bookbinding-dialog.js) -->
+              <div id="shBindRoleGrid" class="sh-bind-grid"></div>
+              <p class="sh-bind-help">「カバーの表紙」「カバーの裏表紙」は、本の最初と最後のページになります。そのほかの項目のページは「付属」として、本体とは別の PDF に出力します(使い道は下の「詳細設定」で変えられます)。ページを選ぶと、そのページに役割を付けて保存します。同じ PDF を開き直しても残ります。項目の追加・削除と、複数のページを選べるかどうかは、下の「詳細設定」の「カバー・表紙・帯などの項目」で決められます。</p>
             </section>
-            <label class="sh-bind-check"><input type="checkbox" id="shBindImpose" /> 面付けする(中綴じ用。用紙1枚の表裏に4ページ)</label>
-            <p id="shBindWarnings" class="sh-bind-warn" role="status" hidden></p>
-            <h3>プレビュー(読む順)</h3>
-            <div id="shBindPreview" class="sh-bind-preview" aria-label="本体のページの並び"></div>
-            <div id="shBindSheetsWrap">
-              <h3>面付け(用紙ごとの表・裏。左 | 右)</h3>
-              <div id="shBindSheets" class="sh-bind-sheets"></div>
-            </div>
-            <details id="shBindDetails" class="sh-bind-details">
-              <summary>詳細設定</summary>
-              <div class="sh-bind-field">
-                <div class="sh-bind-field-label">白紙を入れる位置</div>
-                <div class="sh-bind-field-control">
-                  <label><input type="radio" name="shBindBlankMode" value="beforeBack" /> 最後のページ(カバーの裏表紙)の直前</label>
-                  <label><input type="radio" name="shBindBlankMode" value="afterCover" /> 最初のページ(カバーの表紙)の直後</label>
-                  <label><input type="radio" name="shBindBlankMode" value="custom" /> 指定する:
-                    <input type="text" id="shBindBlankAfter" class="sh-bind-input" placeholder="例: 5, 12(5ページ目と12ページ目の後ろ)" autocomplete="off" spellcheck="false" /></label>
-                  <p class="sh-bind-help">何ページ目の後ろに入れるかを、ページ番号(サイドバーのサムネイルの番号)で書きます。複数の場所に分けられます(「5x2」で5ページ目の後ろに2枚)。足りない分は最後のページの直前に入れます。</p>
-                </div>
-              </div>
+            <div class="sh-bind-fields">
               <div class="sh-bind-field">
                 <div class="sh-bind-field-label">綴じ方向</div>
                 <div class="sh-bind-field-control">
@@ -1507,7 +1471,27 @@
                     <option value="Tabloid">タブロイド 横</option>
                     <option value="double">元のページ2枚分</option>
                   </select>
-                  <p class="sh-bind-help">自動では、元のページ2枚を並べて収まる用紙を選びます(A5 の本なら A4 横、B5 の本なら B4 横)。</p>
+                  <p class="sh-bind-help" id="shBindPaperHelp">面付けして印刷する用紙です。自動では、元のページ2枚を並べて収まる用紙を選びます(A5 の本なら A4 横、B5 の本なら B4 横)。</p>
+                </div>
+              </div>
+            </div>
+            <p id="shBindWarnings" class="sh-bind-warn" role="status" hidden></p>
+            <label class="sh-bind-check"><input type="checkbox" id="shBindHidePreview" /> 出力ページのプレビューを表示しない(サムネイル表示OFF)</label>
+            <div id="shBindPreviewWrap">
+              <h3>プレビュー(読む順)</h3>
+              <div id="shBindPreview" class="sh-bind-preview" aria-label="本体のページの並び"></div>
+              <div id="shBindSheetsWrap">
+                <h3>面付け(用紙ごとの表・裏。左 | 右)</h3>
+                <div id="shBindSheets" class="sh-bind-sheets"></div>
+              </div>
+            </div>
+            <details id="shBindDetails" class="sh-bind-details">
+              <summary>詳細設定</summary>
+              <div class="sh-bind-field">
+                <div class="sh-bind-field-label">面付け</div>
+                <div class="sh-bind-field-control">
+                  <label><input type="checkbox" id="shBindImpose" /> 面付けする(中綴じ用。用紙1枚の表裏に4ページ)</label>
+                  <p class="sh-bind-help">外すと、読む順に並べた本体の PDF を出力します(プリンターの「小冊子印刷」で印刷するとき)。</p>
                 </div>
               </div>
               <div class="sh-bind-field" id="shBindDuplexRow">
@@ -1517,11 +1501,24 @@
                   <label><input type="radio" name="shBindDuplex" value="long" /> 長辺とじ(プリンターが長辺とじしかできない場合。裏面を上下逆に作ります)</label>
                 </div>
               </div>
+              <div class="sh-bind-field">
+                <div class="sh-bind-field-label">白紙を入れる位置</div>
+                <div class="sh-bind-field-control">
+                  <label><input type="radio" name="shBindBlankMode" value="beforeBack" /> 最後のページ(カバーの裏表紙)の直前</label>
+                  <label><input type="radio" name="shBindBlankMode" value="afterCover" /> 最初のページ(カバーの表紙)の直後</label>
+                  <label><input type="radio" name="shBindBlankMode" value="custom" /> 指定する:
+                    <input type="text" id="shBindBlankAfter" class="sh-bind-input" placeholder="例: 5, 12(5ページ目と12ページ目の後ろ)" autocomplete="off" spellcheck="false" /></label>
+                  <p class="sh-bind-help">何ページ目の後ろに入れるかを、ページ番号(サイドバーのサムネイルの番号)で書きます。複数の場所に分けられます(「5x2」で5ページ目の後ろに2枚)。足りない分は最後のページの直前に入れます。</p>
+                </div>
+              </div>
               <div class="sh-bind-field" id="shBindSizeRefRow">
                 <div class="sh-bind-field-label">大きさの基準</div>
                 <div class="sh-bind-field-control">
                   <label><input type="radio" name="shBindSizeRef" value="mode" /> 最も多い大きさ</label>
                   <label><input type="radio" name="shBindSizeRef" value="first" /> 最初のページ</label>
+                  <label><input type="radio" name="shBindSizeRef" value="page" /> ページ指定:
+                    <select id="shBindSizeRefPage" class="sh-select sh-select-small" aria-label="大きさの基準にするページ"></select></label>
+                  <p class="sh-bind-help" id="shBindSizeRefHelp">ページの大きさがそろっていないとき、どのページの大きさに合わせて用紙を選び、ほかのページを拡大縮小するかを決めます。</p>
                 </div>
               </div>
               <div class="sh-bind-field" id="shBindObiRow">
@@ -1530,25 +1527,33 @@
                   <label><input type="radio" name="shBindObiOutput" value="separate" /> 別の PDF にする</label>
                   <label><input type="radio" name="shBindObiOutput" value="append" /> 本体の PDF の後ろに入れる(面付けはしない)</label>
                   <label><input type="radio" name="shBindObiOutput" value="none" /> 出力しない</label>
-                  <div class="sh-bind-uses" role="group" aria-label="付属の役割のページの使い道">
-                    <span class="sh-bind-uses-title">役割ごとの使い道:</span>
-                    <label data-role="obiFront">表紙 <select id="shBindUseObiFront" class="sh-select sh-select-small" data-role="obiFront"></select></label>
-                    <label data-role="obiBack">裏表紙 <select id="shBindUseObiBack" class="sh-select sh-select-small" data-role="obiBack"></select></label>
-                    <label data-role="obi">帯 <select id="shBindUseObi" class="sh-select sh-select-small" data-role="obi"></select></label>
-                    <label data-role="flapFront">表紙の折り返し <select id="shBindUseFlapFront" class="sh-select sh-select-small" data-role="flapFront"></select></label>
-                    <label data-role="flapBack">裏表紙の折り返し <select id="shBindUseFlapBack" class="sh-select sh-select-small" data-role="flapBack"></select></label>
-                    <label data-role="bookmark">しおり <select id="shBindUseBookmark" class="sh-select sh-select-small" data-role="bookmark"></select></label>
-                  </div>
-                  <p class="sh-bind-help">付属(表紙・裏表紙・帯・折り返し・しおり)のページは本体に入れず、付属として出力します。「最初のページの候補」「最後のページの候補」にすると、そのページを本の最初・最後のページとして使います(上の「カバーの表紙」「カバーの裏表紙」の欄で、候補のどれを使うか選べます)。使い道の初期値は、拡張機能の「詳細設定」で変えられます。</p>
+                  <div id="shBindUses" class="sh-bind-uses" role="group" aria-label="付属の役割のページの使い道"></div>
+                  <p class="sh-bind-help">付属(表紙・裏表紙・帯・折り返し・しおりなど)のページは本体に入れず、付属として出力します。「最初のページの候補」「最後のページの候補」にすると、そのページを本の最初・最後のページとして使います(上の「カバーの表紙」「カバーの裏表紙」の欄で、候補のどれを使うか選べます)。使い道の初期値は、拡張機能の「詳細設定」で変えられます。</p>
                 </div>
               </div>
               <div class="sh-bind-field">
                 <div class="sh-bind-field-label">ファイル名</div>
                 <div class="sh-bind-field-control sh-bind-names">
-                  <label>元名 <input type="text" id="shBindBase" class="sh-bind-input" autocomplete="off" spellcheck="false" /></label>
-                  <label>本体に付ける言葉 <input type="text" id="shBindSuffix" class="sh-bind-input sh-short" autocomplete="off" spellcheck="false" /></label>
-                  <label>付属に付ける言葉 <input type="text" id="shBindObiSuffix" class="sh-bind-input sh-short" autocomplete="off" spellcheck="false" /></label>
-                  <p class="sh-bind-help">同じ名前のファイルがあるときは「名前 (1).pdf」のように別の名前で保存します(上書きしません)。</p>
+                  <label>元の名前 <input type="text" id="shBindBase" class="sh-bind-input" autocomplete="off" spellcheck="false" /></label>
+                  <div class="sh-bind-name-row">
+                    <label for="shBindSuffix">本体の PDF:</label>
+                    <span class="sh-bind-name-base">元の名前 +</span>
+                    <input type="text" id="shBindSuffix" class="sh-bind-input sh-short" autocomplete="off" spellcheck="false" />
+                    <span class="sh-bind-name-result">→ <output id="shBindNameBook"></output></span>
+                  </div>
+                  <div class="sh-bind-name-row" id="shBindNameObiRow">
+                    <label for="shBindObiSuffix">付属の PDF:</label>
+                    <span class="sh-bind-name-base">元の名前 +</span>
+                    <input type="text" id="shBindObiSuffix" class="sh-bind-input sh-short" autocomplete="off" spellcheck="false" />
+                    <span class="sh-bind-name-result">→ <output id="shBindNameObi"></output></span>
+                  </div>
+                  <p class="sh-bind-help">出力される PDF は、<b>本体</b>(本のページを並べたもの。面付けすると名前の後ろに「_面付け」が付きます)と、<b>付属</b>(表紙・帯などの付属のページだけを集めたもの)の2種類です。付属の PDF は、付属のページがあって「付属の出力」が「別の PDF にする」のときだけ作ります。同じ名前のファイルがあるときは「名前 (1).pdf」のように別の名前で保存します(上書きしません)。</p>
+                </div>
+              </div>
+              <div class="sh-bind-field">
+                <div class="sh-bind-field-label">カバー・表紙・帯などの項目</div>
+                <div class="sh-bind-field-control">
+                  <div id="shBindRoleItems"></div>
                 </div>
               </div>
             </details>

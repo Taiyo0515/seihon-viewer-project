@@ -9,12 +9,26 @@ import { sanitizeFileName, saveFiles } from "../../common/files.js";
 import { ACCESSORY_ROLES, ROLE_USES, ROLE_USE_LABEL, imposition, parseBlankPositions, planBook, referenceSize, resolvePaper, roleUseFromSettings, useOfRole } from "../bookbinding.js";
 import { buildBookbindingFiles, pageDisplaySizes } from "../bookbinding-export.js";
 import { sourceIndex, viewPageCount } from "../page-map.js";
-import { ROLE_LABEL } from "../roles.js";
+import { ROLES, ROLE_LABEL } from "../roles.js";
+import { buildRoleItemsEditor } from "./role-items-editor.js";
 
 const $ = id => document.getElementById(id);
 const THUMB_W = 46;
-/** 付属の役割 → 使い道を選ぶ欄 */
-const USE_SELECTS = Object.freeze({
+/**
+ * 0.5: 「カバー・表紙・帯などのページ」の欄は、詳細設定の項目(表示・複数・追加した項目)に合わせて作る。
+ * 決まった項目の欄の id は 0.4 までと同じにする(試験・互換のため)。
+ */
+const SINGLE_IDS = Object.freeze({
+  cover: "shBindCover",
+  back: "shBindBack",
+  obiFront: "shBindObiFront",
+  obiBack: "shBindObiBack",
+  obi: "shBindObiSingle",
+  flapFront: "shBindFlapFront",
+  flapBack: "shBindFlapBack",
+  bookmark: "shBindBookmark",
+});
+const USE_IDS = Object.freeze({
   obiFront: "shBindUseObiFront",
   obiBack: "shBindUseObiBack",
   obi: "shBindUseObi",
@@ -22,16 +36,13 @@ const USE_SELECTS = Object.freeze({
   flapBack: "shBindUseFlapBack",
   bookmark: "shBindUseBookmark",
 });
-/** 付属のページを選ぶ欄(1つの役割につき1ページ。2ページ以上に付いていればそのまま残す選択肢も出す) */
-const OBI_SELECTS = Object.freeze({
-  obiFront: "shBindObiFront",
-  obiBack: "shBindObiBack",
-  flapFront: "shBindFlapFront",
-  flapBack: "shBindFlapBack",
-  bookmark: "shBindBookmark",
-});
-/** 複数のページを選べる役割(帯) */
-const MULTI_ROLE = "obi";
+const singleId = role => SINGLE_IDS[role] || `shBindRole-${role}`;
+const useId = role => USE_IDS[role] || `shBindUse-${role}`;
+/** 複数のページを選ぶ欄の部品の id(帯は 0.4 までと同じ) */
+const multiIds = role =>
+  role === "obi"
+    ? { box: "shBindObiMulti", items: "shBindObiItems", add: "shBindObiAdd", label: "shBindObiLabel" }
+    : { box: `shBindMulti-${role}`, items: `shBindMultiItems-${role}`, add: `shBindMultiAdd-${role}`, label: `shBindMultiLabel-${role}` };
 
 export class BookbindingDialog {
   /**
@@ -62,19 +73,23 @@ export class BookbindingDialog {
       $(id).addEventListener("input", refresh);
       $(id).addEventListener("change", refresh);
     }
-    // カバー・表紙・帯などのページの指定(選んだページに役割を付けて保存する)
-    $("shBindCover").addEventListener("change", () => this.onCoverBackChange("cover"));
-    $("shBindBack").addEventListener("change", () => this.onCoverBackChange("back"));
-    for (const [role, id] of Object.entries(OBI_SELECTS)) {
-      $(id).addEventListener("change", () => this.onObiChange(role, $(id).value));
-    }
-    // 帯(複数可): 「ページを追加」で選んだページを帯にする。付いているページは × で外す
-    $("shBindObiAdd").addEventListener("change", () => {
-      const value = $("shBindObiAdd").value;
-      $("shBindObiAdd").value = "";
-      if (value !== "") {
-        this.addMulti(Number(value));
-      }
+    // カバー・表紙・帯などのページの欄は buildRoleGrid で作る(項目は詳細設定で変えられる)
+    // 0.5: 出力ページのプレビューを出さない(初期値はオン。選んだものを覚えておく)
+    $("shBindHidePreview").addEventListener("change", () => {
+      this.saveSettings?.({ bindHidePreview: $("shBindHidePreview").checked });
+      this.refresh();
+    });
+    // 0.5: 大きさの基準を「ページ指定」にする
+    $("shBindSizeRefPage").addEventListener("change", () => {
+      this.setRadio("shBindSizeRef", "page");
+      refresh();
+    });
+    // 0.5: カバー・表紙・帯などの項目(追加・削除・表示・複数)
+    this.roleItemsEditor = buildRoleItemsEditor($("shBindRoleItems"), {
+      getItems: () => this.getSettings().bindRoleItems,
+      save: items => this.saveSettings?.({ bindRoleItems: items }),
+      idPrefix: "shBindRi",
+      notify: message => this.toast.show(message, { duration: 3000 }),
     });
     // 役割が変わったら(この画面・サイドバー・ほかのタブ)、表示を作り直す
     this.roles.onChange(() => {
@@ -94,20 +109,6 @@ export class BookbindingDialog {
       for (const r of document.querySelectorAll(`input[name="${name}"]`)) {
         r.addEventListener("change", refresh);
       }
-    }
-    for (const id of Object.values(USE_SELECTS)) {
-      const select = $(id);
-      for (const use of ROLE_USES) {
-        const opt = document.createElement("option");
-        opt.value = use;
-        opt.textContent = ROLE_USE_LABEL[use];
-        select.append(opt);
-      }
-      // 使い道が変わると最初・最後のページの候補も変わる
-      select.addEventListener("change", () => {
-        this.fillCandidates();
-        this.refresh();
-      });
     }
     $("shBindBlankAfter").addEventListener("input", () => {
       document.querySelector('input[name="shBindBlankMode"][value="custom"]').checked = true;
@@ -166,10 +167,11 @@ export class BookbindingDialog {
     this.setRadio("shBindDuplex", s.bindDuplex);
     this.setRadio("shBindSizeRef", s.bindSizeRef);
     this.setRadio("shBindObiOutput", s.bindObiOutput);
-    const use = roleUseFromSettings(s);
-    for (const [role, id] of Object.entries(USE_SELECTS)) {
-      $(id).value = use[role];
-    }
+    this.buildRoleGrid();
+    this.buildUses(roleUseFromSettings(s));
+    this.roleItemsEditor.reload();
+    $("shBindHidePreview").checked = s.bindHidePreview;
+    this.sizeRefPage = null;
     $("shBindBase").value = this.docSource.baseName();
     $("shBindSuffix").value = s.bindNameSuffix;
     $("shBindObiSuffix").value = s.bindObiSuffix;
@@ -186,7 +188,9 @@ export class BookbindingDialog {
       sel.textContent = "";
       sel.disabled = true;
     }
-    $("shBindObiItems").textContent = "";
+    for (const items of document.querySelectorAll(".sh-bind-roles .sh-multi-items")) {
+      items.textContent = "";
+    }
     const rolesReady = this.roles.whenLoaded().catch(() => {});
     if (!this.sizes) {
       // 表示しているページ(削除したページを除く)の大きさ。getPage は表示上のページ番号で引く
@@ -218,11 +222,129 @@ export class BookbindingDialog {
 
   /** 付属の役割のページの使い道(画面で選んだもの) */
   currentRoleUse() {
-    const use = {};
-    for (const [role, id] of Object.entries(USE_SELECTS)) {
-      use[role] = $(id).value || "obi";
+    const use = roleUseFromSettings(this.getSettings());
+    for (const role of ACCESSORY_ROLES) {
+      const select = $(useId(role));
+      if (select?.value) {
+        use[role] = select.value;
+      }
     }
     return use;
+  }
+
+  /**
+   * 0.5: 「カバー・表紙・帯などのページ」の欄を、項目の設定(表示・複数・追加した項目)に合わせて作る。
+   * 隠した項目でも、この PDF でページに付いていれば欄を出す(付いたページが分かるように)。
+   */
+  buildRoleGrid() {
+    const grid = $("shBindRoleGrid");
+    grid.textContent = "";
+    const present = new Set(this.app.pdfDocument ? [...this.roles.viewMap().values()] : []);
+    for (const role of ROLES) {
+      if (!role.visible && !present.has(role.id)) {
+        continue;
+      }
+      if (role.multi && role.id !== "cover" && role.id !== "back") {
+        const ids = multiIds(role.id);
+        const label = document.createElement("label");
+        label.htmlFor = ids.add;
+        label.id = ids.label;
+        label.textContent = role.label;
+        const mark = document.createElement("span");
+        mark.className = "sh-bind-multi-mark";
+        mark.textContent = "(複数可)";
+        label.append(mark);
+        const box = document.createElement("div");
+        box.id = ids.box;
+        box.className = "sh-multi";
+        box.setAttribute("role", "group");
+        box.setAttribute("aria-labelledby", ids.label);
+        box.dataset.role = role.id;
+        const items = document.createElement("span");
+        items.id = ids.items;
+        items.className = "sh-multi-items";
+        const add = document.createElement("select");
+        add.id = ids.add;
+        add.className = "sh-select sh-multi-add";
+        add.dataset.role = role.id;
+        add.setAttribute("aria-label", `${role.label}にするページを追加`);
+        add.addEventListener("change", () => {
+          const value = add.value;
+          add.value = "";
+          if (value !== "") {
+            this.addMulti(role.id, Number(value));
+          }
+        });
+        box.append(items, add);
+        grid.append(label, box);
+      } else {
+        const id = singleId(role.id);
+        const label = document.createElement("label");
+        label.htmlFor = id;
+        label.textContent = role.label;
+        const select = document.createElement("select");
+        select.id = id;
+        select.className = "sh-select";
+        select.dataset.role = role.id;
+        if (role.id === "cover" || role.id === "back") {
+          select.addEventListener("change", () => this.onCoverBackChange(role.id));
+        } else {
+          select.addEventListener("change", () => this.onObiChange(role.id, select.value));
+        }
+        grid.append(label, select);
+      }
+    }
+  }
+
+  /** 0.5: 付属の役割の使い道の欄を作る(追加した項目の分も) */
+  buildUses(initial) {
+    const box = $("shBindUses");
+    const keep = {};
+    for (const select of box.querySelectorAll("select[data-role]")) {
+      keep[select.dataset.role] = select.value;
+    }
+    box.textContent = "";
+    const title = document.createElement("span");
+    title.className = "sh-bind-uses-title";
+    title.textContent = "役割ごとの使い道:";
+    box.append(title);
+    for (const role of ACCESSORY_ROLES) {
+      const label = document.createElement("label");
+      label.dataset.role = role;
+      label.append(`${ROLE_LABEL[role] || role} `);
+      const select = document.createElement("select");
+      select.id = useId(role);
+      select.className = "sh-select sh-select-small";
+      select.dataset.role = role;
+      for (const use of ROLE_USES) {
+        const opt = document.createElement("option");
+        opt.value = use;
+        opt.textContent = ROLE_USE_LABEL[use];
+        select.append(opt);
+      }
+      select.value = (initial ? initial[role] : keep[role]) || keep[role] || "obi";
+      // 使い道が変わると最初・最後のページの候補も変わる
+      select.addEventListener("change", () => {
+        this.fillCandidates();
+        this.refresh();
+      });
+      label.append(select);
+      box.append(label);
+    }
+  }
+
+  /** 0.5: 項目の設定(詳細設定)が変わったとき: 欄を作り直す */
+  onRoleItemsChanged() {
+    if (!this.dialog.open) {
+      return;
+    }
+    this.buildRoleGrid();
+    this.buildUses(null);
+    this.roleItemsEditor.reload();
+    if (this.sizes) {
+      this.fillCandidates();
+      this.refresh();
+    }
   }
 
   /**
@@ -260,11 +382,18 @@ export class BookbindingDialog {
       select.value = choice === null || choice === undefined ? "" : String(choice);
       select.disabled = n === 0;
     };
-    fillCoverBack($("shBindCover"), "cover", this.coverChoice, plan.cover);
-    fillCoverBack($("shBindBack"), "back", this.backChoice, plan.back);
-    // ---- 表紙・裏表紙・折り返し・しおり: 「なし」+ 全部のページ ----
-    for (const [role, id] of Object.entries(OBI_SELECTS)) {
-      const select = $(id);
+    if ($("shBindCover")) {
+      fillCoverBack($("shBindCover"), "cover", this.coverChoice, plan.cover);
+    }
+    if ($("shBindBack")) {
+      fillCoverBack($("shBindBack"), "back", this.backChoice, plan.back);
+    }
+    // ---- 1ページを選ぶ項目(表紙・裏表紙・折り返し・しおりなど): 「なし」+ 全部のページ ----
+    for (const select of $("shBindRoleGrid").querySelectorAll("select.sh-select:not(.sh-multi-add)")) {
+      const role = select.dataset.role;
+      if (role === "cover" || role === "back") {
+        continue;
+      }
       select.textContent = "";
       const none = document.createElement("option");
       none.value = "";
@@ -284,16 +413,18 @@ export class BookbindingDialog {
       select.value = pages.length > 1 ? "multi" : pages.length === 1 ? String(pages[0]) : "";
       select.disabled = n === 0;
     }
-    // ---- 帯(複数可): 付いているページの一覧 +「ページを追加」 ----
-    this.fillMulti(n, view, pageOption);
+    // ---- 複数のページを選べる項目(帯など): 付いているページの一覧 +「ページを追加」 ----
+    for (const box of $("shBindRoleGrid").querySelectorAll(".sh-multi[data-role]")) {
+      this.fillMulti(box.dataset.role, n, view, pageOption);
+    }
   }
 
-  /** 帯(複数のページを選べる欄)を作る */
-  fillMulti(n, view, pageOption) {
-    const role = MULTI_ROLE;
+  /** 複数のページを選べる欄を作る */
+  fillMulti(role, n, view, pageOption) {
+    const ids = multiIds(role);
     const label = ROLE_LABEL[role];
     const pages = [...view.entries()].filter(([, r]) => r === role).map(([i]) => i).sort((a, b) => a - b);
-    const items = $("shBindObiItems");
+    const items = $(ids.items);
     items.textContent = "";
     if (!pages.length) {
       const none = document.createElement("span");
@@ -313,11 +444,11 @@ export class BookbindingDialog {
       del.textContent = "×";
       del.title = `${i + 1}ページ目を「${label}」から外す`;
       del.setAttribute("aria-label", del.title);
-      del.addEventListener("click", () => this.removeMulti(i));
+      del.addEventListener("click", () => this.removeMulti(role, i));
       chip.append(text, del);
       items.append(chip);
     }
-    const add = $("shBindObiAdd");
+    const add = $(ids.add);
     add.textContent = "";
     const head = document.createElement("option");
     head.value = "";
@@ -332,8 +463,8 @@ export class BookbindingDialog {
     add.disabled = n === 0;
   }
 
-  /** 帯にページを加える(ほかの役割が付いていれば置き換える) */
-  addMulti(pageIndex) {
+  /** 複数のページを選べる項目にページを加える(ほかの役割が付いていれば置き換える) */
+  addMulti(role, pageIndex) {
     const n = pageIndex + 1;
     if (this.coverChoice === pageIndex) {
       this.coverChoice = null;
@@ -341,22 +472,22 @@ export class BookbindingDialog {
     if (this.backChoice === pageIndex) {
       this.backChoice = null;
     }
-    this.roles.setMany([{ pages: [n], role: MULTI_ROLE }]).then(() => {
-      this.toast.show(`${n}ページ目を「${ROLE_LABEL[MULTI_ROLE]}」にしました`, { duration: 2500 });
+    this.roles.setMany([{ pages: [n], role }]).then(() => {
+      this.toast.show(`${n}ページ目を「${ROLE_LABEL[role]}」にしました`, { duration: 2500 });
     });
   }
 
-  /** 帯からページを外す */
-  removeMulti(pageIndex) {
+  /** 複数のページを選べる項目からページを外す */
+  removeMulti(role, pageIndex) {
     const n = pageIndex + 1;
     this.roles.setMany([{ pages: [n], role: null }]).then(() => {
-      this.toast.show(`${n}ページ目を「${ROLE_LABEL[MULTI_ROLE]}」から外しました`, { duration: 2500 });
+      this.toast.show(`${n}ページ目を「${ROLE_LABEL[role]}」から外しました`, { duration: 2500 });
     });
   }
 
   /** カバーの表紙・裏表紙の欄を変えたとき: 選んだページが候補でなければ、そのページにその役割を付ける */
   onCoverBackChange(target) {
-    const select = $(target === "cover" ? "shBindCover" : "shBindBack");
+    const select = $(singleId(target));
     const value = select.value;
     const choice = value === "" ? null : Number(value);
     if (target === "cover") {
@@ -455,9 +586,13 @@ export class BookbindingDialog {
     this.plan = plan;
     const impose = $("shBindImpose").checked;
     const pageItems = plan.sequence.filter(s => s.kind === "page");
+    const sizeRef = this.radio("shBindSizeRef") || "mode";
+    this.fillSizeRefPages();
+    const refPage = Number($("shBindSizeRefPage").value);
     const ref = referenceSize(
       pageItems.map(s => this.sizes[s.pageIndex]),
-      this.radio("shBindSizeRef") || "mode"
+      sizeRef,
+      sizeRef === "page" && this.sizes[refPage] ? this.sizes[refPage] : null
     );
     this.ref = ref;
     const paperChoice = $("shBindPaper").value;
@@ -501,8 +636,9 @@ export class BookbindingDialog {
     // ---- 注意 ----
     const warnings = [...plan.warnings];
     if (ref.mixed) {
+      const basis = sizeRef === "first" ? "最初のページ" : sizeRef === "page" ? `${refPage + 1}ページ目の大きさ` : "最も多い大きさ";
       warnings.push(
-        `ページの大きさがそろっていません(${ref.kinds}種類)。${this.radio("shBindSizeRef") === "first" ? "最初のページ" : "最も多い大きさ"}を基準に用紙を選び、各ページを用紙の半分に収まるよう拡大縮小します。`
+        `ページの大きさがそろっていません(${ref.kinds}種類)。${basis}を基準に用紙を選び、各ページを用紙の半分に収まるよう拡大縮小します(詳細設定の「大きさの基準」で変えられます)。`
       );
     }
     if (impose && Math.abs(paper.scale - 1) > 0.03) {
@@ -513,20 +649,31 @@ export class BookbindingDialog {
     }
     $("shBindWarnings").hidden = !warnings.length;
     $("shBindWarnings").textContent = warnings.join("\n");
-    $("shBindSizeRefRow").hidden = !ref.mixed;
+    $("shBindSizeRefHelp").textContent = ref.mixed
+      ? `この PDF はページの大きさがそろっていません(${ref.kinds}種類)。どのページの大きさに合わせて用紙を選び、ほかのページを拡大縮小するかを決めます。`
+      : "この PDF のページの大きさはそろっています(大きさがそろっていないときに使います)。";
     $("shBindDuplexRow").hidden = !impose;
-    $("shBindPaperRow").hidden = !impose;
+    // 0.5: 用紙は詳細設定の外。面付けしないときは使わないので、選べなくする
+    $("shBindPaper").disabled = !impose;
+    $("shBindPaperHelp").textContent = impose
+      ? "面付けして印刷する用紙です。自動では、元のページ2枚を並べて収まる用紙を選びます(A5 の本なら A4 横、B5 の本なら B4 横)。"
+      : "面付けしないため、用紙は使いません(面付けは「詳細設定」で選べます)。";
     // 付属の欄は、付属の役割のページがあるときだけ出す(使い道の欄も、その PDF にある役割の分だけ)
     const presentObiRoles = ACCESSORY_ROLES.filter(r => this.roles.pages(r).length);
     // 自動の欄の「自動(○ページ目)」を、いまの計画に合わせる
     this.updateAutoLabels(plan);
-    $("shBindObiRow").hidden = !presentObiRoles.length;
+    // 0.5: 付属の出力の欄はいつも出す(使い道の欄は、この PDF で付いている役割の分だけ)
+    $("shBindObiRow").hidden = false;
+    $("shBindUses").hidden = !presentObiRoles.length;
+    $("shBindNameObiRow").hidden = false;
     for (const label of document.querySelectorAll(".sh-bind-uses label[data-role]")) {
       label.hidden = !presentObiRoles.includes(label.dataset.role);
     }
 
     // ---- 保存するファイル ----
     const names = this.fileNames();
+    $("shBindNameBook").textContent = impose ? names.imposed : names.book;
+    $("shBindNameObi").textContent = plan.obi.length && obiOutput === "separate" ? names.obi : `${names.obi}(いまは作りません)`;
     const files = [impose ? names.imposed : names.book];
     if (plan.obi.length && obiOutput === "separate") {
       files.push(names.obi);
@@ -534,8 +681,35 @@ export class BookbindingDialog {
     $("shBindFiles").textContent = `保存するファイル: ${files.join("、")}`;
     $("shBindRun").disabled = this.busy;
 
+    // 0.5: プレビューを出さない設定のときは、サムネイルも作らない
+    const hide = $("shBindHidePreview").checked;
+    $("shBindPreviewWrap").hidden = hide;
+    if (hide) {
+      this.observer?.disconnect();
+      $("shBindPreview").textContent = "";
+      $("shBindSheets").textContent = "";
+      return;
+    }
     this.renderPreview(plan);
     this.renderSheets(plan, impose);
+  }
+
+  /** 0.5: 大きさの基準の「ページ指定」の欄(全部のページ。大きさも出す) */
+  fillSizeRefPages() {
+    const select = $("shBindSizeRefPage");
+    const n = this.sizes.length;
+    if (select.options.length !== n) {
+      const keep = select.value;
+      select.textContent = "";
+      for (let i = 0; i < n; i++) {
+        const o = document.createElement("option");
+        o.value = String(i);
+        const { width, height } = this.sizes[i];
+        o.textContent = `${i + 1}ページ目(${Math.round((width * 25.4) / 72)}×${Math.round((height * 25.4) / 72)} mm)`;
+        select.append(o);
+      }
+      select.value = keep && Number(keep) < n ? keep : "0";
+    }
   }
 
   updateAutoLabels(plan) {
@@ -543,7 +717,7 @@ export class BookbindingDialog {
       ["shBindCover", plan.cover, this.coverChoice],
       ["shBindBack", plan.back, this.backChoice],
     ]) {
-      const auto = $(id).querySelector('option[value=""]');
+      const auto = $(id)?.querySelector('option[value=""]');
       if (auto && choice === null && resolved !== null && resolved !== undefined && !auto.textContent.includes(`${resolved + 1}ページ目`)) {
         auto.textContent = `自動(${resolved + 1}ページ目)`;
       }

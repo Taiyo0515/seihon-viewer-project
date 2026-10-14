@@ -7,6 +7,7 @@
  *   古い版の設定や手で壊れた値が入っていても初期値に戻して動く。
  */
 
+import { DEFAULT_ROLE_ITEMS, normalizeRoleItems } from "./role-items.js";
 import { parseShortcut } from "./shortcut.js";
 
 export const SETTINGS_KEY = "settings";
@@ -26,6 +27,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   initialView: "book",
   /** 綴じ方向: "ltr" 左綴じ / "rtl" 右綴じ */
   bindingDirection: "ltr",
+  /** 0.5: 回転ボタンを押したときの回転(負は左 = 反時計回り)。ボタンの右クリックで変えられる */
+  rotateStep: -90,
   /** 同じPDFを再び開いたとき、前回見ていた位置から表示する */
   restorePosition: true,
   /** テーマ: "system" システムに従う / "light" / "dark" */
@@ -87,8 +90,15 @@ export const DEFAULT_SETTINGS = Object.freeze({
   bindPaper: "auto",
   /** 両面の綴じ方向: "short" 短辺とじ(横向きの用紙に合う)/ "long" 長辺とじ */
   bindDuplex: "short",
-  /** ページの大きさがそろっていないときの基準: "mode" 最も多い大きさ / "first" 最初のページ */
+  /**
+   * ページの大きさがそろっていないときの基準: "mode" 最も多い大きさ / "first" 最初のページ /
+   * "page" ページを指定する(0.5。何ページ目かは製本用PDF出力の画面で、PDF ごとに選ぶ)
+   */
   bindSizeRef: "mode",
+  /** 0.5: 製本用PDF出力の画面で、出力するページのプレビュー(サムネイル)を出さない */
+  bindHidePreview: true,
+  /** 0.5: 「カバー・表紙・帯などのページ」の項目(並び・表示・複数選択・追加した項目。common/role-items.js) */
+  bindRoleItems: DEFAULT_ROLE_ITEMS,
   /** 付属(表紙・裏表紙・帯・折り返し・しおり)の出力: "separate" 別の PDF / "append" 本体の後ろに同梱 / "none" 出力しない */
   bindObiOutput: "separate",
   /**
@@ -117,6 +127,13 @@ export const DEFAULT_SETTINGS = Object.freeze({
   scanArrange: "auto",
   /** 見開きを分けるとき、スキャンで入った余分なふち(余白・影・本の縁・ごみ)を除いて、ページの大きさをそろえる */
   scanTrim: true,
+  /**
+   * 0.5: スキャンした見開きの本を読む向きの初期値: "binding" ビューアの綴じ方向(設定)に合わせる /
+   * "rtl" 右から左(縦書き) / "ltr" 左から右(横書き)。PDF ごとに「スキャンを整える」の画面で変えられる(覚えておく)
+   */
+  scanDirection: "binding",
+  /** 0.5: PDF の1ページ目の初期値: "first" 本の最初のほうの見開き / "last" 本の最後のほうの見開き(順を逆にする) */
+  scanFirstPage: "first",
 
   // ---- 電子書籍・コミック(0.4) ----
   /**
@@ -146,6 +163,7 @@ export const SETTING_LABELS = Object.freeze({
   initialView: "開いたときの表示",
   bindingDirection: "綴じ方向",
   restorePosition: "表示位置",
+  rotateStep: "回転ボタンの動き",
   theme: "テーマ",
   printQuality: "印刷の画質",
   guardEnabled: "強制ダウンロード対策",
@@ -165,7 +183,9 @@ export const SETTING_LABELS = Object.freeze({
   bindImpose: "面付け",
   bindPaper: "出力用紙",
   bindDuplex: "両面の綴じ方向",
-  bindSizeRef: "大きさがそろっていないとき",
+  bindSizeRef: "大きさの基準",
+  bindHidePreview: "出力ページのプレビュー",
+  bindRoleItems: "カバー・表紙・帯などの項目",
   bindObiOutput: "付属の出力",
   bindUseObiFront: "表紙の使い道",
   bindUseObiBack: "裏表紙の使い道",
@@ -177,6 +197,8 @@ export const SETTING_LABELS = Object.freeze({
   bindObiSuffix: "出力ファイル名(付属)",
   scanArrange: "スキャンした見開き",
   scanTrim: "スキャンの余白を除く",
+  scanDirection: "スキャンした本を読む向き",
+  scanFirstPage: "スキャンの1ページ目",
   comicDirection: "コミックの読む向き",
   comicSplitSpreads: "コミックの見開きの画像を分ける",
   openLocalEbooks: "パソコン内の電子書籍・コミックを開く",
@@ -186,6 +208,7 @@ export const SETTING_LABELS = Object.freeze({
 const ENUMS = {
   launchMode: ["auto", "manual"],
   initialView: ["book", "spread", "single"],
+  rotateStep: [-90, -180, -270, 90, 180, 270],
   bindingDirection: ["ltr", "rtl"],
   theme: ["system", "light", "dark"],
   printQuality: ["max", "auto", "standard", "high"],
@@ -198,7 +221,7 @@ const ENUMS = {
   bindBlankPosition: ["beforeBack", "afterCover", "custom"],
   bindPaper: ["auto", "A3", "A4", "A5", "B4", "B5", "Letter", "Tabloid", "double"],
   bindDuplex: ["short", "long"],
-  bindSizeRef: ["mode", "first"],
+  bindSizeRef: ["mode", "first", "page"],
   bindObiOutput: ["separate", "append", "none"],
   bindUseObiFront: ["obi", "cover", "back", "none"],
   bindUseObiBack: ["obi", "cover", "back", "none"],
@@ -207,6 +230,8 @@ const ENUMS = {
   bindUseFlapBack: ["obi", "cover", "back", "none"],
   bindUseBookmark: ["obi", "cover", "back", "none"],
   scanArrange: ["auto", "ask", "off"],
+  scanDirection: ["binding", "rtl", "ltr"],
+  scanFirstPage: ["first", "last"],
   comicDirection: ["auto", "rtl", "ltr"],
 };
 
@@ -270,7 +295,9 @@ export function normalizeSettings(stored) {
     }
     const def = DEFAULT_SETTINGS[key];
     const val = src[key];
-    if (ENUMS[key]) {
+    if (key === "bindRoleItems") {
+      out[key] = normalizeRoleItems(val);
+    } else if (ENUMS[key]) {
       if (ENUMS[key].includes(val)) {
         out[key] = val;
       }
@@ -297,6 +324,7 @@ export function normalizeSettings(stored) {
       out[key] = val;
     }
   }
+  out.bindRoleItems = normalizeRoleItems(out.bindRoleItems);
   return out;
 }
 

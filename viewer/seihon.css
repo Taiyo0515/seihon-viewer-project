@@ -2610,3 +2610,172 @@ body.sh-has-error #viewerContainer {
   font-size: 11px;
   color: var(--sh-panel-fg2);
 }
+
+/* 0.5: 回転の向きと角度を選ぶ吹き出し(回転ボタンの右クリック) */
+.sh-rotate-popover {
+  width: 280px;
+}
+.sh-rotate-title {
+  font-weight: 500;
+  font-size: 14px;
+  margin-bottom: 10px;
+}
+.sh-rotate-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.sh-rotate-row .sh-select {
+  padding: 6px 8px;
+}
+.sh-rotate-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin: 12px 0 8px;
+}
+.sh-rotate-default {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--sh-menu-sep);
+  cursor: pointer;
+}
+.sh-rotate-note {
+  display: block;
+  margin: 4px 0 0 26px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--sh-muted);
+}
+
+/* 0.5: 選択欄の一覧(ドロップダウン)の文字色。ダークモードで一覧が白地・白い文字になって読めなかったため、
+   一覧の地と文字の色を、メニューと同じ色に決めておく */
+select.sh-select option,
+select.sh-select optgroup {
+  background-color: var(--sh-menu-bg);
+  color: var(--sh-menu-fg);
+}
+select.sh-select option:disabled {
+  color: var(--sh-muted);
+}
+
+/* 0.5: 製本用PDF出力の画面(詳細設定の外に出した綴じ方向・用紙、ファイル名、項目の表) */
+.sh-bind-fields {
+  margin: 8px 0 4px;
+}
+.sh-bind-fields .sh-bind-field:last-child {
+  border-bottom: none;
+}
+#shBindPreviewWrap[hidden] {
+  display: none;
+}
+.sh-bind-field-control .sh-bind-name-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0;
+}
+.sh-bind-field-control .sh-bind-name-row[hidden] {
+  display: none;
+}
+.sh-bind-field-control .sh-bind-name-row label {
+  display: inline;
+  margin: 0;
+  min-width: 6.5em;
+  font-weight: 500;
+}
+.sh-bind-name-base {
+  color: var(--sh-panel-fg2);
+}
+.sh-bind-name-result output {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+#shBindSizeRefPage {
+  margin-left: 4px;
+  max-width: 240px;
+}
+
+/* 項目の表(製本用PDF出力の詳細設定。詳細設定の画面は page.css) */
+.sh-ri-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12.5px;
+}
+.sh-ri-table th {
+  text-align: start;
+  font-weight: 500;
+  color: var(--sh-panel-fg2);
+  padding: 2px 6px 4px;
+  border-bottom: 1px solid var(--sh-menu-sep);
+}
+.sh-ri-table td {
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--sh-menu-sep);
+  vertical-align: middle;
+}
+.sh-ri-table .sh-ri-c-show,
+.sh-ri-table .sh-ri-c-multi {
+  width: 3em;
+  text-align: center;
+}
+.sh-ri-table .sh-ri-c-ops {
+  white-space: nowrap;
+  text-align: end;
+}
+.sh-ri-muted {
+  color: var(--sh-muted);
+}
+.sh-ri .sh-ri-name {
+  height: 26px;
+  box-sizing: border-box;
+  padding: 0 6px;
+  border: 1px solid var(--sh-btn-border);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: 12.5px var(--sh-font);
+  min-width: 8em;
+}
+.sh-ri-btn {
+  min-width: 26px;
+  height: 24px;
+  margin-inline-start: 2px;
+  border: 1px solid var(--sh-btn-border);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: 12px var(--sh-font);
+  cursor: pointer;
+}
+.sh-ri-btn:hover:not(:disabled) {
+  background: var(--sh-btn-hover);
+}
+.sh-ri-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.sh-ri-btn.sh-ri-del {
+  color: var(--sh-danger, #f28b82);
+}
+.sh-ri-add {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+.sh-ri-help {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  color: var(--sh-muted);
+}
+:root[data-theme="light"] .sh-ri-btn.sh-ri-del {
+  color: #c5221f;
+}
+.sh-bind-uses[hidden] {
+  display: none;
+}

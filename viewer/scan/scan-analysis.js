@@ -154,6 +154,199 @@ export function findGutter(img, { from = 0.3, to = 0.7 } = {}) {
 }
 
 /**
+ * 0.5: ノドの影が、ページの中(上下の端を除いた本文の高さ)でノドからどこまで続くか(mm)。
+ * 列ごとの明るさの中央値が、紙の明るさに戻るところまでの距離。影が無ければ 0。
+ * @param {number} dir -1: 左のページ(ノドから左へ) / 1: 右のページ
+ */
+export function gutterShadowMm(img, x, dir) {
+  const { gray, width: W, height: H } = img;
+  const y0 = Math.floor(H * 0.15);
+  const y1 = Math.floor(H * 0.85);
+  const hist = new Int32Array(256);
+  const half = (y1 - y0) >> 1;
+  const colMedian = cx => {
+    hist.fill(0);
+    for (let y = y0; y < y1; y++) {
+      hist[gray[y * W + cx]]++;
+    }
+    let acc = 0;
+    for (let i = 0; i < 256; i++) {
+      acc += hist[i];
+      if (acc > half) {
+        return i;
+      }
+    }
+    return 255;
+  };
+  const span = Math.round(mmToPx(img, 60));
+  const meds = [];
+  for (let k = 0; k <= span; k++) {
+    const cx = Math.round(x + dir * k);
+    if (cx < 0 || cx >= W) {
+      break;
+    }
+    meds.push(colMedian(cx));
+  }
+  if (meds.length < mmToPx(img, 10)) {
+    return 0;
+  }
+  const sorted = [...meds].sort((a, b) => a - b);
+  const paper = sorted[Math.floor(sorted.length * 0.9)];
+  // ノドのそばが紙よりはっきり暗いときだけ(影の無い平らな紙などでは 0)
+  const near = meds.slice(0, Math.max(2, Math.round(mmToPx(img, 2))));
+  if (paper - Math.min(...near) < 25) {
+    return 0;
+  }
+  const cap = Math.round(mmToPx(img, 25));
+  for (let k = 0; k < Math.min(meds.length, cap); k++) {
+    if (meds[k] >= paper - 10) {
+      return k / img.pxPerMm;
+    }
+  }
+  return cap / img.pxPerMm;
+}
+
+/**
+ * 0.5: 紙の上の端・下の端に出るノドの影を探す。
+ * 本を強く押さえてスキャンすると、ノドは真ん中あたりでは白く写り、紙の上の端・下の端にだけ影が残る
+ * (findGutter は上下の端を見ないので見つけられず、太い罫線などをノドと間違えることがある)。
+ * 上の端・下の端の帯(高さの 7%)で、列ごとの明るさの中央値を取り、真ん中あたりでいちばん暗い所を探す。
+ * @returns {{x:number, depth:number, width:number, top:object|null, bottom:object|null, ok:boolean}|null}
+ *   x: ノドの位置(画素) / depth: 影の濃さ(紙の明るさとの差) / width: 影の幅(濃さが半分になる所まで。画素)
+ */
+export function findEdgeShadow(img, { from = 0.35, to = 0.65 } = {}) {
+  const { gray, width: W, height: H } = img;
+  if (H < 40 || W < 40) {
+    return null;
+  }
+  const bandH = Math.max(4, Math.round(H * 0.07));
+  const lo = Math.max(1, Math.floor(W * from));
+  const hi = Math.min(W - 2, Math.ceil(W * to));
+  const hist = new Int32Array(256);
+  const smoothR = Math.max(1, Math.round(mmToPx(img, 0.7)));
+  const measure = (y0, y1) => {
+    const col = new Float32Array(W);
+    const half = (y1 - y0) >> 1;
+    for (let x = lo - smoothR; x <= hi + smoothR; x++) {
+      if (x < 0 || x >= W) {
+        continue;
+      }
+      hist.fill(0);
+      for (let y = y0; y < y1; y++) {
+        hist[gray[y * W + x]]++;
+      }
+      let acc = 0;
+      let v = 255;
+      for (let i = 0; i < 256; i++) {
+        acc += hist[i];
+        if (acc > half) {
+          v = i;
+          break;
+        }
+      }
+      col[x] = v;
+    }
+    // ならす(文字の縦の線などの細かい凹凸を消す)
+    const sm = new Float32Array(W);
+    for (let x = lo; x <= hi; x++) {
+      let sum = 0;
+      let n = 0;
+      for (let d = -smoothR; d <= smoothR; d++) {
+        const xx = x + d;
+        if (xx >= 0 && xx < W) {
+          sum += col[xx];
+          n++;
+        }
+      }
+      sm[x] = sum / n;
+    }
+    let minX = lo;
+    for (let x = lo; x <= hi; x++) {
+      if (sm[x] < sm[minX]) {
+        minX = x;
+      }
+    }
+    const vals = Array.from(sm.subarray(lo, hi + 1)).sort((a, b) => a - b);
+    const paper = vals[Math.floor(vals.length * 0.8)];
+    const depth = paper - sm[minX];
+    const limit = paper - depth / 2;
+    let a = minX;
+    let b = minX;
+    while (a > lo && sm[a - 1] < limit) {
+      a--;
+    }
+    while (b < hi && sm[b + 1] < limit) {
+      b++;
+    }
+    // 影は暗い所の真ん中(端の影は片側に長く尾を引くので、いちばん暗い所と暗い範囲の真ん中の間を取る)
+    const x = Math.round((minX * 2 + (a + b) / 2) / 3);
+    const width = b - a + 1;
+    const ok = depth >= 35 && width >= mmToPx(img, 1.5) && width <= mmToPx(img, 25) && a > lo && b < hi;
+    // 薄い影の範囲(白く覆う範囲。紙の明るさより少しでも暗い所まで)
+    const faint = paper - Math.max(10, depth * 0.12);
+    let fa = a;
+    let fb = b;
+    while (fa > lo && sm[fa - 1] < faint) {
+      fa--;
+    }
+    while (fb < hi && sm[fb + 1] < faint) {
+      fb++;
+    }
+    return { x, depth, width, paper, ok, a, b, fa, fb };
+  };
+  const top = measure(0, bandH);
+  const bottom = measure(H - bandH, H);
+  // 影の範囲(上の端・下の端からどこまで暗いか)。整えるときに白く覆う
+  const extent = (t, fromTop) => {
+    if (!t.ok) {
+      return null;
+    }
+    const pad = Math.round(mmToPx(img, 1));
+    const x0 = Math.max(0, t.fa - pad);
+    const x1 = Math.min(W - 1, t.fb + pad);
+    const lim = t.paper - Math.max(12, t.depth * 0.2);
+    const rowDark = y => {
+      // その行の、影の範囲の列の明るさの中央値
+      const vals = [];
+      for (let x = x0; x <= x1; x++) {
+        vals.push(gray[y * W + x]);
+      }
+      vals.sort((p, q) => p - q);
+      return vals[vals.length >> 1] < lim;
+    };
+    const maxRows = Math.round(H * 0.3);
+    let n = 0;
+    let miss = 0;
+    for (let k = 0; k < maxRows && miss < 3; k++) {
+      const y = fromTop ? k : H - 1 - k;
+      if (rowDark(y)) {
+        n = k + 1;
+        miss = 0;
+      } else {
+        miss++;
+      }
+    }
+    if (!n) {
+      return null;
+    }
+    return fromTop ? [x0, 0, x1 + 1, n + pad] : [x0, H - n - pad, x1 + 1, H];
+  };
+  const near = Math.max(2, mmToPx(img, 6));
+  let pick = null;
+  if (top.ok && bottom.ok && Math.abs(top.x - bottom.x) <= near) {
+    pick = { x: Math.round((top.x + bottom.x) / 2), depth: Math.max(top.depth, bottom.depth), width: Math.max(top.width, bottom.width) };
+  } else {
+    // 片方だけなら、はっきりした影のときだけ
+    const one = [top, bottom].filter(t => t.ok && t.depth >= 60).sort((p, q) => q.depth - p.depth)[0];
+    if (one) {
+      pick = { x: one.x, depth: one.depth, width: one.width };
+    }
+  }
+  const boxes = pick ? [extent(top, true), extent(bottom, false)].filter(Boolean) : [];
+  return pick ? { ...pick, top, bottom, boxes, ok: true } : { x: null, depth: 0, width: 0, top, bottom, boxes, ok: false };
+}
+
+/**
  * 真ん中あたりの、何も書かれていない縦の帯を探す。
  * @returns {{from:number, to:number, x:number}|null} x: 分ける位置(帯が真ん中を含めば真ん中)
  */
@@ -792,6 +985,25 @@ export function analyzeScan(img) {
   }
   result.gutter = findGutter(img);
   result.gap = findCenterGap(img);
+  // 0.5: 上の端・下の端のノドの影。見つかれば、ノドの位置はこちらを使う
+  // (ノドの影が端にしか無いスキャンや、太い罫線をノドと間違えたとき。罫線とノドが近ければ、線の位置のまま)
+  const shadow = findEdgeShadow(img);
+  result.shadow = shadow;
+  if (shadow?.ok) {
+    const g = result.gutter;
+    if (!g?.ok || Math.abs(g.x - shadow.x) > mmToPx(img, 6)) {
+      result.gutter = {
+        x: shadow.x,
+        score: shadow.depth,
+        k: 0,
+        top: shadow.top?.ok ? shadow.top.x : shadow.x,
+        bottom: shadow.bottom?.ok ? shadow.bottom.x : shadow.x,
+        ok: true,
+        band: Math.round(mmToPx(img, 1.5)),
+        by: "shadow",
+      };
+    }
+  }
   return result;
 }
 
@@ -805,6 +1017,9 @@ export function analyzeHalves(img, x, band) {
   const left = contentBox(img, 0, x - band, "L");
   const right = contentBox(img, x + band, img.width, "R");
   return {
+    // 0.5: ノドの影がページの中へどこまで続くか(mm。整えるときに、内側の端を影の外へ寄せる)
+    shadowMmL: gutterShadowMm(img, x, -1),
+    shadowMmR: gutterShadowMm(img, x, 1),
     L: left.box,
     R: right.box,
     inkL: left.ink,
@@ -999,6 +1214,29 @@ export function cropRects(scans, splits, halves, { trim, marginMm = DEFAULT_MARG
   }
   const bandMm = Math.max(0, ...splits.filter(Boolean).map((sp, i) => sp.band / (scans.find(Boolean)?.pxPerMm || 1)));
   const inner = Math.max(bandMm, Math.min(...innerList) - marginMm);
+  // 0.5: ノドの影がページの中まで続くときは、内側の端を影の外へ寄せる(中身には 1mm 以上の余白を残す)。
+  // ページの大きさは変えずに、左右のページごとに位置をずらす(外側の余白が増える)
+  const innerSide = {};
+  for (const side of ["L", "R"]) {
+    const contentInner = [];
+    const shadow = [];
+    scans.forEach((s, i) => {
+      const sp = splits[i];
+      const h = halves[i];
+      if (!s || !sp || !h || !h[side] || sp.by === "center") {
+        return;
+      }
+      contentInner.push(side === "L" ? (sp.x - h.L[2]) / s.pxPerMm : (h.R[0] - sp.x) / s.pxPerMm);
+      shadow.push(h[`shadowMm${side}`] || 0);
+    });
+    if (!contentInner.length) {
+      innerSide[side] = inner;
+      continue;
+    }
+    // 影の幅は、ページによる違いを考えて多め(4分の3の位置)を使う
+    const sh = [...shadow].sort((a, b) => a - b)[Math.floor((shadow.length - 1) * 0.75)];
+    innerSide[side] = Math.max(inner, Math.min(sh + 0.5, Math.min(...contentInner) - 1));
+  }
   // 縦: 本のように、どの見開きにも上下いっぱいの中身(見出し・ページ番号など)があるときは、見開きごとに中身の範囲に合わせる
   // (手で置いたときの上下のずれを直す)。ノートのように中身の量がまちまちなときは、どのページも同じ位置で切る
   // (中身の真ん中に合わせると、書き込みの量でページが上下にずれて見えるため)。
@@ -1078,19 +1316,52 @@ export function cropRects(scans, splits, halves, { trim, marginMm = DEFAULT_MARG
       }
     }
     // ノドからの距離で、左右の範囲を決める(スキャンの外にはみ出す分は白い余白になる)
-    const innerPx = Math.max(sp.band, px(inner));
     const h = halves[i] || {};
-    const frameL = [sp.x - px(outer), y0, sp.x - innerPx, y1];
-    const frameR = [sp.x + innerPx, y0, sp.x + px(outer), y1];
+    const width = px(outer - inner);
+    const innerL = Math.max(sp.band, px(innerSide.L));
+    const innerR = Math.max(sp.band, px(innerSide.R));
+    const frameL = [sp.x - innerL - width, y0, sp.x - innerL, y1];
+    const frameR = [sp.x + innerR, y0, sp.x + innerR + width, y1];
     // 大きさはそろえたまま、縁に入ったもの(本の縁の線・影)にかかる部分は白く覆う
     rects[i] = {
       L: frameL,
       R: frameR,
-      masksL: [...masksOutside(frameL, avoidJunk(frameL, h.L, h.limitsL, "L", s.pxPerMm)), ...blobMasks(frameL, h.L, h.blobsL, s.pxPerMm)],
-      masksR: [...masksOutside(frameR, avoidJunk(frameR, h.R, h.limitsR, "R", s.pxPerMm)), ...blobMasks(frameR, h.R, h.blobsR, s.pxPerMm)],
+      masksL: [
+        ...masksOutside(frameL, avoidJunk(frameL, h.L, h.limitsL, "L", s.pxPerMm)),
+        ...blobMasks(frameL, h.L, h.blobsL, s.pxPerMm),
+        ...shadowMasks(frameL, h.L, s.shadow?.boxes),
+      ],
+      masksR: [
+        ...masksOutside(frameR, avoidJunk(frameR, h.R, h.limitsR, "R", s.pxPerMm)),
+        ...blobMasks(frameR, h.R, h.blobsR, s.pxPerMm),
+        ...shadowMasks(frameR, h.R, s.shadow?.boxes),
+      ],
     };
   });
   return rects;
+}
+
+/**
+ * 0.5: 紙の上の端・下の端のノドの影を、切り取った範囲の中で白く覆う(中身にはかけない)。
+ * @returns {number[][]} 覆う範囲 [x0, y0, x1, y1](画素)
+ */
+function shadowMasks(frame, box, shadowBoxes) {
+  const out = [];
+  for (const sb of shadowBoxes || []) {
+    let r = [Math.max(frame[0], sb[0]), Math.max(frame[1], sb[1]), Math.min(frame[2], sb[2]), Math.min(frame[3], sb[3])];
+    if (r[2] <= r[0] || r[3] <= r[1]) {
+      continue;
+    }
+    if (box && r[0] < box[2] && r[2] > box[0] && r[1] < box[3] && r[3] > box[1]) {
+      // 中身と重なる: 上の影なら中身より上だけ、下の影なら中身より下だけ
+      r = sb[1] <= frame[1] + 1 || sb[1] === 0 ? [r[0], r[1], r[2], Math.min(r[3], box[1] - 1)] : [r[0], Math.max(r[1], box[3] + 1), r[2], r[3]];
+      if (r[3] <= r[1]) {
+        continue;
+      }
+    }
+    out.push(r);
+  }
+  return out;
 }
 
 /**

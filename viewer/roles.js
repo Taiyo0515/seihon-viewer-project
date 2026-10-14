@@ -19,20 +19,53 @@
 
 import { deleteRoles, getRoles, onDataChanged, putRoles } from "../common/db.js";
 import { sourceIndex, viewPageCount, viewPageNumber } from "./page-map.js";
+import { BUILTIN_ROLES, isBuiltinRole, normalizeRoleItems, roleItemLabel, roleItemShort } from "../common/role-items.js";
+import { setCustomAccessoryRoles } from "./bookbinding.js";
 
-export const ROLES = Object.freeze([
-  { id: "cover", label: "カバーの表紙", short: "カバー表" },
-  { id: "back", label: "カバーの裏表紙", short: "カバー裏" },
-  { id: "obiFront", label: "表紙", short: "表紙" },
-  { id: "obiBack", label: "裏表紙", short: "裏表紙" },
-  { id: "obi", label: "帯", short: "帯" },
-  { id: "flapFront", label: "表紙の折り返し", short: "表折返" },
-  { id: "flapBack", label: "裏表紙の折り返し", short: "裏折返" },
-  { id: "bookmark", label: "しおり", short: "しおり" },
-]);
+/**
+ * 役割の一覧(0.5 から、詳細設定で項目を追加・削除・非表示にできるため、applyRoleItems で中身を入れ替える)。
+ * ほかのファイルはこの配列・表をそのまま参照する(入れ替えても同じオブジェクト)。
+ * 隠した項目も、すでにページに付いている役割の名前を出すために残し、visible を false にする。
+ */
+export const ROLES = BUILTIN_ROLES.map(r => ({ ...r, visible: true, multi: r.id === "obi", custom: false }));
+export const ROLE_LABEL = Object.fromEntries(ROLES.map(r => [r.id, r.label]));
+export const ROLE_SHORT = Object.fromEntries(ROLES.map(r => [r.id, r.short]));
+/** 追加した項目の使い道(id → "obi" | "cover" | "back" | "none") */
+export const CUSTOM_ROLE_USE = {};
 
-export const ROLE_LABEL = Object.freeze(Object.fromEntries(ROLES.map(r => [r.id, r.label])));
-export const ROLE_SHORT = Object.freeze(Object.fromEntries(ROLES.map(r => [r.id, r.short])));
+/** 設定 bindRoleItems を役割の一覧に反映する(ビューア・詳細設定の起動時と、設定が変わったとき) */
+export function applyRoleItems(items) {
+  const list = normalizeRoleItems(items);
+  ROLES.splice(0, ROLES.length, ...list.map(item => ({
+    id: item.id,
+    label: roleItemLabel(item),
+    short: roleItemShort(item),
+    visible: item.show,
+    multi: item.multi,
+    custom: !isBuiltinRole(item.id),
+  })));
+  for (const t of [ROLE_LABEL, ROLE_SHORT, CUSTOM_ROLE_USE]) {
+    for (const k of Object.keys(t)) {
+      delete t[k];
+    }
+  }
+  for (const r of ROLES) {
+    ROLE_LABEL[r.id] = r.label;
+    ROLE_SHORT[r.id] = r.short;
+  }
+  for (const item of list) {
+    if (!isBuiltinRole(item.id)) {
+      CUSTOM_ROLE_USE[item.id] = item.use;
+    }
+  }
+  setCustomAccessoryRoles(list.filter(i => !isBuiltinRole(i.id)).map(i => i.id));
+  return ROLES;
+}
+
+/** 表示する(隠していない)役割 */
+export function visibleRoles() {
+  return ROLES.filter(r => r.visible);
+}
 
 export class PageRoles {
   /**

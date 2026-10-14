@@ -343,3 +343,7 @@ body.rd-empty .rd-menu [data-needs-book] { display: none; }
   .rd-font-size, #rdFontMinus, #rdFontPlus { display: none; }
   .rd-btn-text { font-size: 0; padding: 0 8px; }
 }
+
+/* 0.5: 選択欄の一覧の色(ダークモードで白地・白い文字にならないように) */
+select option,
+select optgroup { background-color: var(--panel); color: var(--fg); }

@@ -22,7 +22,8 @@ import {
 } from "../common/db.js";
 import { BACKUP_MAX_BYTES, applyBackup, createBackup, describeBackup, parseBackup } from "../common/backup.js";
 import { saveFile, timestampForFileName } from "../common/files.js";
-import { ROLES, ROLE_LABEL } from "../viewer/roles.js";
+import { ROLES, ROLE_LABEL, applyRoleItems } from "../viewer/roles.js";
+import { buildRoleItemsEditor } from "../viewer/ui/role-items-editor.js";
 import { applyThemePreference } from "../viewer/theme.js";
 import { HELPER_PERMISSION, helperStatus } from "../viewer/file-clipboard.js";
 
@@ -44,8 +45,10 @@ const RADIO_SETTINGS = [
   "bindObiOutput",
   "scanArrange",
   "comicDirection",
+  "scanDirection",
+  "scanFirstPage",
 ];
-const CHECK_SETTINGS = ["openLocalFiles", "restorePosition", "guardEnabled", "perfLog", "collectClearAfterExport", "bindImpose", "scanTrim", "comicSplitSpreads", "openLocalEbooks"];
+const CHECK_SETTINGS = ["openLocalFiles", "restorePosition", "guardEnabled", "perfLog", "collectClearAfterExport", "bindImpose", "scanTrim", "comicSplitSpreads", "openLocalEbooks", "bindHidePreview"];
 const SELECT_SETTINGS = [
   "bindPaper",
   "bindUseObiFront",
@@ -71,6 +74,7 @@ function toast(message) {
 
 /** 画面に設定値を反映する */
 function render(settings) {
+  currentSettings = settings;
   for (const name of RADIO_SETTINGS) {
     for (const input of document.querySelectorAll(`input[name="${name}"]`)) {
       input.checked = input.value === settings[name];
@@ -95,7 +99,18 @@ function render(settings) {
       $(id).value = settings[id];
     }
   }
-  $("bindNameSuffixEcho").textContent = settings.bindNameSuffix;
+  $("bindNameSuffixEcho").textContent = `→ 元の名前${settings.bindNameSuffix}.pdf(面付けすると 元の名前${settings.bindNameSuffix}_面付け.pdf)`;
+  $("bindObiSuffixEcho").textContent = `→ 元の名前${settings.bindObiSuffix}.pdf`;
+  if (document.activeElement !== $("rotateStep")) {
+    $("rotateStep").value = String(settings.rotateStep);
+  }
+  // 0.5: カバー・表紙・帯などの項目(ほかの画面で変えたときも作り直す)
+  applyRoleItems(settings.bindRoleItems);
+  const items = JSON.stringify(settings.bindRoleItems);
+  if (roleItemsEditor && items !== lastRoleItems) {
+    roleItemsEditor.reload();
+  }
+  lastRoleItems = items;
   for (const input of document.querySelectorAll('input[name="guardOriginalFile"]')) {
     input.disabled = !settings.guardEnabled;
   }
@@ -120,6 +135,9 @@ async function save(patch, message = "保存しました") {
 }
 
 let capturing = false;
+let roleItemsEditor = null;
+let lastRoleItems = "";
+let currentSettings = null;
 
 function bind() {
   for (const name of RADIO_SETTINGS) {
@@ -149,6 +167,14 @@ function bind() {
     });
   }
   bindShortcut();
+  $("rotateStep").addEventListener("change", () => save({ rotateStep: Number($("rotateStep").value) }));
+  roleItemsEditor = buildRoleItemsEditor($("roleItemsEditor"), {
+    getItems: () => currentSettings?.bindRoleItems || DEFAULT_SETTINGS.bindRoleItems,
+    save: items => save({ bindRoleItems: items }),
+    idPrefix: "optRi",
+    notify: toast,
+  });
+  lastRoleItems = JSON.stringify(currentSettings?.bindRoleItems);
   for (const id of SELECT_SETTINGS) {
     $(id).addEventListener("change", () => save({ [id]: $(id).value }));
   }
@@ -706,3 +732,32 @@ chrome.storage.onChanged.addListener((changes, area) => {
     renderScanChoices();
   }
 });
+
+// ---- 0.5: 4つの分類を入口にした画面の切り替え ---------------------------------
+// アドレスの # で表示する分類を決める(# なし = 入口、#read など = 分類、#sec-copy など = その項目のある分類を開いて、その項目へ)
+const CATEGORIES = ["read", "pages", "print", "manage"];
+
+function route() {
+  const hash = decodeURIComponent(location.hash.slice(1));
+  let cat = CATEGORIES.includes(hash) ? hash : null;
+  let target = null;
+  if (!cat && hash) {
+    target = document.getElementById(hash);
+    cat = target?.closest(".cat")?.dataset.cat || null;
+  }
+  $("catHome").hidden = !!cat;
+  for (const el of document.querySelectorAll(".cat")) {
+    el.hidden = el.dataset.cat !== cat;
+  }
+  const title = cat ? document.querySelector(`#cat-${cat} h2`)?.textContent.replace(/^\d/, "") : "";
+  document.title = cat ? `製本ビューア - 詳細設定 - ${title}` : "製本ビューア - 詳細設定";
+  if (target) {
+    target.scrollIntoView({ block: "start" });
+    target.classList.add("flash");
+    setTimeout(() => target.classList.remove("flash"), 1500);
+  } else {
+    window.scrollTo(0, 0);
+  }
+}
+window.addEventListener("hashchange", route);
+route();

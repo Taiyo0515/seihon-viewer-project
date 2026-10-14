@@ -68,7 +68,6 @@ export class ViewerContextMenu {
         onSelect: () => this.pageCopy.copySinglePage(pageNumber),
       },
       { label: "画像として保存", icon: "file-png", onSelect: () => this.pageCopy.savePageImage(pageNumber) },
-      { label: "このページだけの PDF として保存", icon: "file-pdf", onSelect: () => this.pageCopy.savePagePdf(pageNumber) },
       { separator: true },
       collected
         ? { label: "収集から外す", icon: "collect-remove", onSelect: () => this.collection.removeCurrentPage(pageNumber) }
@@ -116,7 +115,8 @@ export class ViewerContextMenu {
     const all = id => current.every(r => r === id);
     const items = [
       { header: pages.length === 1 ? `${pages[0]}ページ目の役割` : `選んだ${pages.length}ページの役割` },
-      ...ROLES.map(r => ({
+      // 0.5: 詳細設定で隠した項目は出さない(選んだページに付いていれば出す)
+      ...ROLES.filter(r => r.visible || current.includes(r.id)).map(r => ({
         label: r.label,
         checked: all(r.id),
         radio: true,

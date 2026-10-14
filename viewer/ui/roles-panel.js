@@ -86,6 +86,10 @@ export class RolesPanel {
         : "PDF の読み込みが終わると、保存されている役割を読み込みます…";
     this.body.textContent = "";
     for (const role of ROLES) {
+      // 0.5: 詳細設定で隠した項目は、ページに付いているときだけ出す
+      if (!role.visible && !this.roles.pages(role.id).length) {
+        continue;
+      }
       const section = document.createElement("section");
       section.className = "sh-role-section";
       const head = document.createElement("div");

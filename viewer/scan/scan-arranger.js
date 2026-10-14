@@ -294,6 +294,19 @@ export class ScanArranger {
       return;
     }
     // ほかの PDF を開いた
+    // 0.5: 読む向きに合わせて綴じ方向を変えていたら、設定の綴じ方向に戻す
+    if (this.directionOverridden && this.book) {
+      this.directionOverridden = false;
+      const dir = this.getSettings().bindingDirection;
+      if (this.book.direction !== dir) {
+        this.directionChanging = true;
+        try {
+          this.book.setDirection(dir);
+        } finally {
+          this.directionChanging = false;
+        }
+      }
+    }
     this.base?.analysisDoc?.destroy().catch(() => {});
     this.base = null;
     this.arranged = null;
@@ -404,10 +417,12 @@ export class ScanArranger {
   /** 整え方の初期値 */
   defaultOptions(kind = this.base?.kind) {
     const settings = this.getSettings();
+    // 0.5: 読む向き・1ページ目の初期値は設定から(「ビューアの綴じ方向に合わせる」なら、いまの綴じ方向)
+    const direction = settings.scanDirection === "rtl" || settings.scanDirection === "ltr" ? settings.scanDirection : this.getDirection();
     if (kind === "sheets") {
-      return normalizeOptions({ mode: "booklet", trim: false, direction: this.getDirection() });
+      return normalizeOptions({ mode: "booklet", trim: false, direction });
     }
-    return normalizeOptions({ mode: "spread", trim: settings.scanTrim, direction: this.getDirection() });
+    return normalizeOptions({ mode: "spread", trim: settings.scanTrim, direction, reverse: settings.scanFirstPage === "last" });
   }
 
   /** いま選ばれている(または選ぶとよい)整え方 */
@@ -416,7 +431,8 @@ export class ScanArranger {
       return { ...this.arranged.options };
     }
     if (this.base?.choice && this.base.choice.mode !== "none") {
-      return { ...this.base.choice, direction: this.getDirection() };
+      // 0.5: 選んだ読む向きを覚えているので、そのまま使う
+      return { ...this.base.choice };
     }
     return this.defaultOptions();
   }
@@ -755,6 +771,16 @@ export class ScanArranger {
       this.arranged = { options, pages: plan.pages, fileName, key: `${base.key}#scan:${sig}`, doc: null, auto, size: bytes.length };
       // 1ページ目でも指定する(PDF.js が前回見ていた位置に戻さないように。0.4.1)
       this.app.initialBookmark = `page=${target}`;
+      // 0.5: 読む向きに合わせて、ビューアの綴じ方向を変える(右から左に読むなら右綴じ。設定は変えない)
+      if (this.book && this.book.direction !== options.direction) {
+        this.directionOverridden = true;
+        this.directionChanging = true;
+        try {
+          this.book.setDirection(options.direction);
+        } finally {
+          this.directionChanging = false;
+        }
+      }
       // 見開きを分けたとき: 1ページ目が見開きの片側なら、元のスキャンと同じ組み合わせ(1-2、3-4…)で並ぶ「見開き」で表示する
       // (製本表示では1ページ目が表紙として単独になり、組み合わせが1つずれるため)。冊子は製本表示のまま
       if (this.book) {
@@ -879,7 +905,7 @@ export class ScanArranger {
 
   /** 綴じ方向を変えたとき: 整えて表示していれば、新しい向きで並べ直す */
   async onDirectionChanged(direction) {
-    if (!this.isArranged || this.state === "busy" || this.arranged.options.direction === direction) {
+    if (this.directionChanging || !this.isArranged || this.state === "busy" || this.arranged.options.direction === direction) {
       return;
     }
     const ok = await this.arrange({ ...this.arranged.options, direction }, { remember: true });

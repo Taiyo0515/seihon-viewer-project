@@ -16,7 +16,7 @@ import { PageCopy } from "./page-copy.js";
 import { PageEditor } from "./page-edit.js";
 import { canPrintWithChrome, printWithChrome, removePrintFrame, withTitle } from "./print-native.js";
 import { isRearranged, viewPageCount } from "./page-map.js";
-import { PageRoles } from "./roles.js";
+import { PageRoles, applyRoleItems } from "./roles.js";
 import { hydrateIcons, setIcon } from "./icons.js";
 import { PerfLog } from "./perf.js";
 import { RenderBudget } from "./render-budget.js";
@@ -24,10 +24,11 @@ import { applyThemePreference } from "./theme.js";
 import { AnnotationTools } from "./ui/annotate.js";
 import { BookbindingDialog } from "./ui/bookbinding-dialog.js";
 import { CollectPanel } from "./ui/collect-panel.js";
-import { ViewerContextMenu, shortcutLabel } from "./ui/context-menu.js";
+import { ViewerContextMenu } from "./ui/context-menu.js";
 import { EmptyState, ErrorPanel, Toast, setupDropZone } from "./ui/panels.js";
 import { PopupMenu } from "./ui/popup.js";
 import { RolesPanel } from "./ui/roles-panel.js";
+import { RotateButton } from "./ui/rotate-menu.js";
 import { ScanArranger } from "./scan/scan-arranger.js";
 import { EbookRouter } from "./ebook/ebook-router.js";
 import { PdfConvertDialog } from "./ui/convert-dialog.js";
@@ -48,6 +49,8 @@ await app.initializedPromise;
 boot.marks.push(["PDF.js 初期化完了", performance.now()]);
 
 let settings = await boot.settingsPromise;
+// 0.5: ページ役割の項目(詳細設定で追加・削除・非表示にしたもの)を、役割を読み込む前に反映する
+applyRoleItems(settings.bindRoleItems);
 applyThemePreference(settings.theme);
 
 // ページを削除した後も「最後のページ」(End キーなど)が正しく動くよう、
@@ -87,6 +90,7 @@ const toolbar = new Toolbar(app);
 const sidebarTabs = new SidebarTabs(app);
 const annotations = new AnnotationTools(app, toast);
 const book = new BookLayout(app);
+const rotateButton = new RotateButton({ app, getSettings: () => settings, saveSettings, toast });
 const perf = new PerfLog(app, boot);
 const budget = new RenderBudget(app);
 const errorPanel = new ErrorPanel();
@@ -187,6 +191,7 @@ bindDialog = new BookbindingDialog({
   docSource,
   toast,
   getSettings,
+  saveSettings,
   getDirection: () => book.direction,
   onOpenRoles: () => rolesPanel.open(),
 });
@@ -907,6 +912,8 @@ updateViewButtons();
 
 // ---------------------------------------------------------------------------
 // ⋮ メニュー
+// 0.5: 「ファイルを開く」「PDFを閉じる」「回転」「表示中のページをコピー」「元のリンク・ファイルの場所をコピー」「ページを選ぶ」は
+// メニューから外した(Ctrl+O・Ctrl+[・Ctrl+]・コピーのショートカット・ツールバーのボタンは残す)
 // ---------------------------------------------------------------------------
 const moreButton = document.getElementById("shMore");
 const moreMenu = new PopupMenu({
@@ -915,13 +922,8 @@ const moreMenu = new PopupMenu({
     const hasDoc = !!app.pdfDocument;
     const handOn = app.pdfCursorTools?.activeTool === 1;
     return [
-      { label: "ファイルを開く…(PDF・電子書籍・コミック)", icon: "folder-open", shortcut: "Ctrl+O", onSelect: () => openFilePicker() },
-      { label: "PDFを閉じる", icon: "close", hint: "このタブを閉じます(保存していない変更があれば、先に保存するか聞きます)", onSelect: () => closeViewer() },
-      { separator: true },
       { label: "最初のページ", icon: "first-page", shortcut: "Home", disabled: !hasDoc, onSelect: () => (app.page = 1) },
       { label: "最後のページ", icon: "last-page", shortcut: "End", disabled: !hasDoc, onSelect: () => (app.page = app.pagesCount) },
-      { label: "右に回転(時計回り)", icon: "rotate-cw", shortcut: "Ctrl+]", disabled: !hasDoc, onSelect: () => app.rotatePages(90) },
-      { label: "左に回転(反時計回り)", icon: "rotate-ccw", shortcut: "Ctrl+[", disabled: !hasDoc, onSelect: () => app.rotatePages(-90) },
       {
         label: handOn ? "テキスト選択ツールに戻す" : "手のひらツール(ドラッグで移動)",
         icon: handOn ? "text-cursor" : "hand",
@@ -933,14 +935,6 @@ const moreMenu = new PopupMenu({
       { label: "Chrome標準ビューアで開いて印刷", icon: "print", disabled: !hasDoc && current.kind !== "url", hint: "巨大なPDFで印刷が遅い・崩れる場合に", onSelect: () => openNativeForPrint() },
       { label: "ドキュメントのプロパティ", icon: "info", disabled: !hasDoc, onSelect: () => app.pdfDocumentProperties?.open() },
       { separator: true },
-      {
-        label: "表示中のページをコピー",
-        icon: "copy",
-        shortcut: shortcutLabel(settings.aiCopyShortcut),
-        disabled: !hasDoc,
-        onSelect: () => pageCopy.copySinglePage(app.page),
-      },
-      { label: "元のリンク・ファイルの場所をコピー…", icon: "link", disabled: sourceButton.disabled, onSelect: () => sourceMenu.open() },
       { label: "表示中のページを収集に追加", icon: "collect", disabled: !hasDoc, onSelect: () => collection.addCurrentPages([app.page]) },
       { label: `ページ収集を表示(${collection.count}ページ)`, icon: "collect", onSelect: () => collectPanel.open() },
       { separator: true },
@@ -959,13 +953,6 @@ const moreMenu = new PopupMenu({
         hint: "画像(ZIP)・コミック(CBZ)・EPUB・テキストにして保存します",
         onSelect: () => convertDialog.open(),
       },
-      {
-        label: "ページを選ぶ(削除・カバーや帯などの指定)",
-        icon: "select",
-        disabled: !hasDoc,
-        hint: "サイドバーのサムネイルでページを選び、まとめて削除したり、役割を付けたりします",
-        onSelect: () => openPageSelect(),
-      },
       { label: "ページ役割(カバー・表紙・帯など)の一覧", icon: "label", disabled: !hasDoc, onSelect: () => rolesPanel.open() },
       ...(settings.perfLog ? [{ label: "速度ログを表示", icon: "speed", disabled: !perf.done, onSelect: () => perf.render() }] : []),
       { separator: true },
@@ -974,33 +961,6 @@ const moreMenu = new PopupMenu({
   },
 });
 moreButton.addEventListener("click", () => moreMenu.toggle());
-
-/**
- * このタブを閉じる(⋮ →「PDFを閉じる」)。保存していない変更があれば、先に「変更を保存しますか?」を聞く。
- * (タブの × で閉じるときは、ブラウザの決まりで Chrome の決まった確認画面しか出せないため、この操作を用意している)
- */
-async function closeViewer() {
-  if (app.pdfDocument && !(await pageEditor.guard("閉じる"))) {
-    return;
-  }
-  pageEditor.allowLeave(); // 「保存しない」を選んだ後に、Chrome の確認を重ねて出さない
-  try {
-    const tab = await chrome.tabs.getCurrent();
-    if (tab?.id !== undefined) {
-      await chrome.tabs.remove(tab.id);
-      return;
-    }
-  } catch (e) {
-    console.warn("[製本ビューア] タブを閉じられませんでした", e);
-  }
-  window.close();
-}
-
-/** サイドバーのサムネイルを開き、ページを選ぶ状態にする */
-function openPageSelect() {
-  app.viewsManager?.switchView(1, true); // 1 = サムネイル(閉じていれば開く)
-  thumbSelection.setSelectMode(true);
-}
 
 // ---------------------------------------------------------------------------
 // 検索バー
@@ -1174,6 +1134,14 @@ onSettingsChanged(next => {
   }
   if (next.bindingDirection !== book.direction) {
     book.setDirection(next.bindingDirection);
+  }
+  if (JSON.stringify(next.bindRoleItems) !== JSON.stringify(prev.bindRoleItems)) {
+    applyRoleItems(next.bindRoleItems);
+    pageRoles.emit();
+    bindDialog.onRoleItemsChanged();
+  }
+  if (next.rotateStep !== prev.rotateStep) {
+    rotateButton.update();
   }
   if (next.perfLog !== prev.perfLog) {
     perf.setEnabled(next.perfLog);

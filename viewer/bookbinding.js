@@ -22,8 +22,18 @@ export const ROLE_IDS = Object.freeze({
   flapBack: "flapBack",
   bookmark: "bookmark",
 });
-/** 付属の役割(本体には入れず、付属として出力する。使い道は設定で変えられる)。並びは画面に出す順 */
-export const ACCESSORY_ROLES = Object.freeze(["obiFront", "obiBack", "obi", "flapFront", "flapBack", "bookmark"]);
+/** 決まった付属の役割 */
+export const BUILTIN_ACCESSORY_ROLES = Object.freeze(["obiFront", "obiBack", "obi", "flapFront", "flapBack", "bookmark"]);
+/**
+ * 付属の役割(本体には入れず、付属として出力する。使い道は設定で変えられる)。並びは画面に出す順。
+ * 0.5: 詳細設定で追加した項目(custom1 など)も入る(setCustomAccessoryRoles で入れ替える。同じ配列のまま)
+ */
+export const ACCESSORY_ROLES = [...BUILTIN_ACCESSORY_ROLES];
+
+/** 追加した項目を付属の役割に加える(roles.js の applyRoleItems から呼ぶ) */
+export function setCustomAccessoryRoles(ids) {
+  ACCESSORY_ROLES.splice(0, ACCESSORY_ROLES.length, ...BUILTIN_ACCESSORY_ROLES, ...ids);
+}
 /** 0.1 までの名前(互換のため) */
 export const OBI_ROLES = ACCESSORY_ROLES;
 
@@ -42,7 +52,7 @@ export const ROLE_USE_SETTING = Object.freeze({
  * "obi" 付属として出力 / "cover" 最初のページ(カバーの表紙)の候補 / "back" 最後のページ(カバーの裏表紙)の候補 / "none" 出力しない
  */
 export const ROLE_USES = Object.freeze(["obi", "cover", "back", "none"]);
-export const DEFAULT_ROLE_USE = Object.freeze(Object.fromEntries(ACCESSORY_ROLES.map(r => [r, "obi"])));
+export const DEFAULT_ROLE_USE = Object.freeze(Object.fromEntries(BUILTIN_ACCESSORY_ROLES.map(r => [r, "obi"])));
 export const ROLE_USE_LABEL = Object.freeze({
   obi: "付属として出力",
   cover: "最初のページの候補",
@@ -52,7 +62,14 @@ export const ROLE_USE_LABEL = Object.freeze({
 
 /** 設定から使い道の割り当てを作る */
 export function roleUseFromSettings(s) {
-  return Object.fromEntries(ACCESSORY_ROLES.map(r => [r, s?.[ROLE_USE_SETTING[r]] || "obi"]));
+  const use = Object.fromEntries(BUILTIN_ACCESSORY_ROLES.map(r => [r, s?.[ROLE_USE_SETTING[r]] || "obi"]));
+  // 0.5: 追加した項目の使い道は、項目の中に持つ
+  for (const item of Array.isArray(s?.bindRoleItems) ? s.bindRoleItems : []) {
+    if (/^custom\d+$/.test(item?.id || "")) {
+      use[item.id] = ROLE_USES.includes(item.use) ? item.use : "obi";
+    }
+  }
+  return use;
 }
 
 /** 役割 → 出力での使い道("cover" "back" "obi" "none")。役割が無ければ null(本文) */
@@ -226,9 +243,10 @@ export function displaySize(width, height, rotate = 0) {
 /**
  * ページの大きさがそろっているかを調べ、基準の大きさを決める。
  * @param {Array<{width:number,height:number}>} sizes 本体のページの見た目の大きさ(並び順)
- * @param {"mode"|"first"} ref 最も多い大きさ / 最初のページ
+ * @param {"mode"|"first"|"page"} ref 最も多い大きさ / 最初のページ / 指定したページ(0.5)
+ * @param {{width:number,height:number}|null} [pageSize] ref が "page" のときの、指定したページの大きさ
  */
-export function referenceSize(sizes, ref = "mode") {
+export function referenceSize(sizes, ref = "mode", pageSize = null) {
   const TOL = 2; // pt(スキャンの端数などの誤差は同じ大きさとみなす)
   const groups = [];
   for (const s of sizes) {
@@ -241,6 +259,9 @@ export function referenceSize(sizes, ref = "mode") {
   }
   if (!groups.length) {
     return { width: 595.28, height: 841.89, mixed: false, kinds: 0 };
+  }
+  if (ref === "page" && pageSize) {
+    return { width: pageSize.width, height: pageSize.height, mixed: groups.length > 1, kinds: groups.length };
   }
   const chosen = ref === "first" ? groups.find(g => Math.abs(g.width - sizes[0].width) <= TOL && Math.abs(g.height - sizes[0].height) <= TOL) : [...groups].sort((a, b) => b.count - a.count)[0];
   return { width: chosen.width, height: chosen.height, mixed: groups.length > 1, kinds: groups.length };
