@@ -6,14 +6,13 @@
  * 返す: {id, scan, preview} / {id, error}
  */
 
-import { analyzeScan, candidateHalves, shrinkGray } from "./scan-analysis.js";
+import { analyzeFull, shrinkGray } from "./scan-analysis.js";
 
 self.onmessage = ({ data }) => {
   const { id, width, height, pxPerMm, previewWidth } = data;
   try {
     const img = { gray: new Uint8Array(data.gray), width, height, pxPerMm };
-    const scan = analyzeScan(img);
-    scan.candidates = candidateHalves(img, scan);
+    const scan = analyzeFull(img);
     const preview = shrinkGray(img.gray, width, height, previewWidth);
     self.postMessage({ id, scan, preview }, [preview.data.buffer]);
   } catch (e) {

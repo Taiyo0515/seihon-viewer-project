@@ -134,6 +134,11 @@ export const DEFAULT_SETTINGS = Object.freeze({
   scanDirection: "binding",
   /** 0.5: PDF の1ページ目の初期値: "first" 本の最初のほうの見開き / "last" 本の最後のほうの見開き(順を逆にする) */
   scanFirstPage: "first",
+  /**
+   * 0.6: 傾きをまっすぐにする: "auto" 見開きの分割・冊子の並べ替えでは傾きも直し、縦長のスキャンが傾いていればボタンで知らせる /
+   * "off" 自動では直さない(「スキャンを整える」の画面からは使える)
+   */
+  scanDeskew: "auto",
 
   // ---- 電子書籍・コミック(0.4) ----
   /**
@@ -199,6 +204,7 @@ export const SETTING_LABELS = Object.freeze({
   scanTrim: "スキャンの余白を除く",
   scanDirection: "スキャンした本を読む向き",
   scanFirstPage: "スキャンの1ページ目",
+  scanDeskew: "スキャンの傾きを直す",
   comicDirection: "コミックの読む向き",
   comicSplitSpreads: "コミックの見開きの画像を分ける",
   openLocalEbooks: "パソコン内の電子書籍・コミックを開く",
@@ -232,6 +238,7 @@ const ENUMS = {
   scanArrange: ["auto", "ask", "off"],
   scanDirection: ["binding", "rtl", "ltr"],
   scanFirstPage: ["first", "last"],
+  scanDeskew: ["auto", "off"],
   comicDirection: ["auto", "rtl", "ltr"],
 };
 

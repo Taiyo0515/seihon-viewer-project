@@ -15,12 +15,13 @@ import { decryptedCopy } from "../doc-source.js";
 import { loadPdfFromBytes } from "../page-export.js";
 import { isRearranged, sourceIndex } from "../page-map.js";
 import {
-  analyzeScan,
-  candidateHalves,
+  SKEW_MIN_DEG,
+  analyzeFull,
   chooseSplits,
   classifyDocument,
   cropRects,
   halvesFor,
+  isSkewed,
   orderBooklet,
   orderSpread,
   shrinkGray,
@@ -31,6 +32,8 @@ import { ScanSource, arrangedId, buildArrangedPdf } from "./scan-pages.js";
 /** PDF ごとに選んだ整え方(chrome.storage.local) */
 const CHOICES_KEY = "scanChoices";
 const MAX_CHOICES = 300;
+/** 角度を指定できる範囲(度) */
+const SKEW_LIMIT = 8;
 /** 調べるときの画像の長辺(画素) */
 const ANALYSIS_LONG_SIDE = 1100;
 /** プレビューに使う小さな画像の幅(画素) */
@@ -39,8 +42,10 @@ const PREVIEW_WIDTH = 240;
 const QUICK_PAGES = 4;
 /** これより大きな PDF は、開いたときには調べない(メニューからは整えられる) */
 const AUTO_LIMIT_BYTES = 400 * 1024 * 1024;
+/** 縦長の PDF は、これより大きければ傾きを調べない(ふつうの文書を開くのを遅くしないため) */
+const PORTRAIT_LIMIT_BYTES = 150 * 1024 * 1024;
 
-export const MODE_SUFFIX = Object.freeze({ spread: "_分割", booklet: "_並べ替え" });
+export const MODE_SUFFIX = Object.freeze({ spread: "_分割", booklet: "_並べ替え", straighten: "_傾き補正" });
 
 // ---------------------------------------------------------------------------
 // 整え方
@@ -48,14 +53,15 @@ export const MODE_SUFFIX = Object.freeze({ spread: "_分割", booklet: "_並べ�
 
 /**
  * 整え方を検証する。
- * @returns {{mode:"spread"|"booklet"|"none", trim:boolean, direction:"ltr"|"rtl", sheetOrder:"outer"|"inner",
- *   firstSide:"outer"|"inner", flipBacks:boolean}|null}
+ * @returns {{mode:"spread"|"booklet"|"straighten"|"none", trim:boolean, direction:"ltr"|"rtl", sheetOrder:"outer"|"inner",
+ *   firstSide:"outer"|"inner", flipBacks:boolean, reverse:boolean, deskew:boolean, angle:number|null}|null}
+ *   deskew: 傾きをまっすぐにする(0.6。"straighten" は常に)/ angle: "straighten" で、全部のページに使う角度(度。null なら検出した傾き)
  */
 export function normalizeOptions(o) {
   if (!o || typeof o !== "object") {
     return null;
   }
-  const mode = ["spread", "booklet", "none"].includes(o.mode) ? o.mode : null;
+  const mode = ["spread", "booklet", "straighten", "none"].includes(o.mode) ? o.mode : null;
   if (!mode) {
     return null;
   }
@@ -68,12 +74,24 @@ export function normalizeOptions(o) {
     flipBacks: !!o.flipBacks,
     // 0.4.1: 見開きのスキャンが、最後の見開きから順に並んでいる
     reverse: !!o.reverse,
+    // 0.6: 傾きをまっすぐにする
+    deskew: mode === "straighten" ? true : !!o.deskew,
+    angle: mode === "straighten" && Number.isFinite(o.angle) && Math.abs(o.angle) <= SKEW_LIMIT ? Math.round(o.angle * 100) / 100 : null,
   };
 }
 
 /** 整え方を表す文字列(整えた PDF の ID と指紋に使う。同じ整え方なら同じ) */
 function signature(o) {
-  return [o.mode, o.trim ? 1 : 0, o.direction, o.sheetOrder, o.firstSide, o.flipBacks ? 1 : 0, ...(o.reverse ? ["rev"] : [])].join("|");
+  return [
+    o.mode,
+    o.trim ? 1 : 0,
+    o.direction,
+    o.sheetOrder,
+    o.firstSide,
+    o.flipBacks ? 1 : 0,
+    ...(o.reverse ? ["rev"] : []),
+    ...(o.deskew ? ["skew", o.angle ?? "auto"] : []),
+  ].join("|");
 }
 
 async function loadChoices() {
@@ -177,6 +195,53 @@ function toPdfRect(t, rect) {
   return [Math.min(p[0], q[0]), Math.min(p[1], q[1]), Math.max(p[0], q[0]), Math.max(p[1], q[1])];
 }
 
+/** 画像の座標(ビューポート)の点を、中心のまわりに phi 度(画面で時計回りが正)回す */
+function rotateAbout(x, y, cx, cy, phiDeg) {
+  const t = (phiDeg * Math.PI) / 180;
+  const c = Math.cos(t);
+  const s = Math.sin(t);
+  const dx = x - cx;
+  const dy = y - cy;
+  return [dx * c - dy * s + cx, dx * s + dy * c + cy];
+}
+
+/**
+ * 傾きを直すために、ページの中身にかける変換(PDF の cm。元のページのユーザー空間の点 → 直したあとの点)。
+ * 調べた画像(幅 W・高さ H 画素。ページ全体を覆う)の中心のまわりに、画像を phi 度回すのと同じ動きになる。
+ * @param {number[]} transform 画像の座標へのビューポートの変換(scan.transform)
+ */
+export function deskewMatrix(transform, W, H, phiDeg) {
+  const f = (ux, uy) => {
+    const [a, b, c, d, e, g] = transform;
+    const px = a * ux + c * uy + e;
+    const py = b * ux + d * uy + g;
+    const [qx, qy] = rotateAbout(px, py, W / 2, H / 2, phiDeg);
+    return toPdfPoint(transform, qx, qy);
+  };
+  const p0 = f(0, 0);
+  const p1 = f(1, 0);
+  const p2 = f(0, 1);
+  return [p1[0] - p0[0], p1[1] - p0[1], p2[0] - p0[0], p2[1] - p0[1], p0[0], p0[1]];
+}
+
+/** 調べた結果から、直す傾き(度)を決める。直さないページは 0 */
+function pageAngle(scan, options) {
+  if (options.mode === "straighten" && options.angle !== null) {
+    return Math.abs(options.angle) >= 0.01 ? options.angle : 0;
+  }
+  return isSkewed(scan?.skew) ? scan.skew.angle : 0;
+}
+
+/** 調べ終えたページの傾きのまとめ: 直すページの数と、その角度の中央値 */
+export function skewSummary(scans) {
+  const list = scans.filter(Boolean);
+  const angles = list.filter(s => isSkewed(s.skew)).map(s => s.skew.angle);
+  angles.sort((a, b) => a - b);
+  const mid = angles.length >> 1;
+  const median = angles.length ? (angles.length % 2 ? angles[mid] : (angles[mid - 1] + angles[mid]) / 2) : 0;
+  return { pages: list.length, skewed: angles.length, median: Math.round(median * 100) / 100 };
+}
+
 const idle = (timeout = 1500) =>
   new Promise(resolve => {
     if ("requestIdleCallback" in window) {
@@ -187,6 +252,7 @@ const idle = (timeout = 1500) =>
   });
 
 const PLAN_ERRORS = {
+  noskew: "傾いているページが見つかりませんでした(角度を指定して直すこともできます)。",
   odd: "スキャンの枚数が奇数のため、冊子の順に並べ替えられません(両面スキャンした冊子なら偶数になります)。",
   unsplit: "縦長のページなど、2つに分けられないページがあるため、冊子の順に並べ替えられません。",
   mapping: "冊子の順に並べ替えられませんでした。",
@@ -354,6 +420,26 @@ export class ScanArranger {
     return land >= Math.max(1, Math.ceil(sample * 0.6));
   }
 
+  /**
+   * 開いている PDF のページが横長か(分けたり並べ替えたりできるか)。整えて表示しているときは、元の文書(手放している)を読まず、
+   * 調べた結果から答える。
+   */
+  async isLandscape(base = this.base) {
+    if (base.landscape === undefined) {
+      const scans = base.scans.filter(Boolean);
+      if (scans.length) {
+        base.landscape = scans.filter(s => s.landscape).length >= Math.ceil(scans.length * 0.6);
+      } else {
+        try {
+          base.landscape = await this.mostlyLandscape(base.doc);
+        } catch {
+          return true;
+        }
+      }
+    }
+    return base.landscape;
+  }
+
   /** 開いた PDF が、スキャンした見開き・冊子の紙かを調べる */
   async detect(base) {
     await idle();
@@ -361,7 +447,19 @@ export class ScanArranger {
       return;
     }
     const settings = this.getSettings();
-    if (settings.scanArrange === "off" || !(await this.mostlyLandscape(base.doc)) || !this.alive(base)) {
+    if (settings.scanArrange === "off" && settings.scanDeskew === "off") {
+      return;
+    }
+    const landscape = await this.isLandscape(base);
+    if (!this.alive(base)) {
+      return;
+    }
+    if (!landscape) {
+      // 0.6: 縦長のスキャン。傾いていれば、まっすぐにして表示できると知らせる
+      await this.detectPortrait(base);
+      return;
+    }
+    if (settings.scanArrange === "off") {
       return;
     }
     const info = await base.doc.getDownloadInfo().catch(() => null);
@@ -414,15 +512,83 @@ export class ScanArranger {
     }
   }
 
+  /**
+   * 縦長のページの PDF が、傾いたスキャンかを調べる(0.6)。文字のある PDF や大きな PDF は調べない(ふつうの文書を遅くしないため)。
+   */
+  async detectPortrait(base) {
+    const settings = this.getSettings();
+    if (settings.scanDeskew === "off") {
+      return;
+    }
+    const info = await base.doc.getDownloadInfo().catch(() => null);
+    if ((info?.length || 0) > PORTRAIT_LIMIT_BYTES) {
+      return;
+    }
+    // 文字(テキスト)のあるページは、スキャンではない(OCR の文字があるスキャンは、メニューの「スキャンを整える…」から使える)
+    for (let i = 1; i <= Math.min(base.pageCount, 2); i++) {
+      const page = await base.doc.getPage(i);
+      const text = await page.getTextContent().catch(() => null);
+      if (!this.alive(base)) {
+        return;
+      }
+      if (text?.items?.some(t => t.str?.trim())) {
+        return;
+      }
+    }
+    base.key = await this.docSource.key(base.doc);
+    base.choice = await loadChoice(base.key);
+    if (!this.alive(base) || !(await this.prepareSource(base))) {
+      return;
+    }
+    const quick = [...Array(Math.min(base.pageCount, QUICK_PAGES + 2)).keys()];
+    const pure = quick.filter(i => base.source.inspect(i).pureImage);
+    if (pure.length < Math.ceil(quick.length * 0.6)) {
+      return; // スキャンではない(図・写真の PDF)
+    }
+    for (const i of quick) {
+      await this.analyzePage(base, i);
+      if (!this.alive(base)) {
+        return;
+      }
+    }
+    const sum = skewSummary(quick.map(i => base.scans[i]));
+    base.checked = true;
+    const choice = base.choice;
+    if (choice && choice.mode === "straighten") {
+      base.kind = "skewed";
+      await this.arrange(choice, { auto: true });
+      return;
+    }
+    if (sum.skewed < Math.ceil(quick.length * 0.5)) {
+      return; // 傾いていない
+    }
+    base.kind = "skewed";
+    base.skew = sum;
+    this.setState("suggest");
+    if (!choice) {
+      this.suggestToast = this.toast.show(`傾いたスキャンのようです(約 ${Math.abs(sum.median)}° ${sum.median > 0 ? "反時計回り" : "時計回り"}に傾いています)。まっすぐにして表示できます`, {
+        duration: 10000,
+        actions: [
+          { label: "まっすぐにする", onClick: () => this.arrange(this.defaultOptions("skewed")) },
+          { label: "整え方…", onClick: () => this.openDialog?.() },
+        ],
+      });
+    }
+  }
+
   /** 整え方の初期値 */
   defaultOptions(kind = this.base?.kind) {
     const settings = this.getSettings();
     // 0.5: 読む向き・1ページ目の初期値は設定から(「ビューアの綴じ方向に合わせる」なら、いまの綴じ方向)
     const direction = settings.scanDirection === "rtl" || settings.scanDirection === "ltr" ? settings.scanDirection : this.getDirection();
-    if (kind === "sheets") {
-      return normalizeOptions({ mode: "booklet", trim: false, direction });
+    const deskew = settings.scanDeskew !== "off";
+    if (kind === "skewed" || kind === "portrait") {
+      return normalizeOptions({ mode: "straighten", direction });
     }
-    return normalizeOptions({ mode: "spread", trim: settings.scanTrim, direction, reverse: settings.scanFirstPage === "last" });
+    if (kind === "sheets") {
+      return normalizeOptions({ mode: "booklet", trim: false, direction, deskew });
+    }
+    return normalizeOptions({ mode: "spread", trim: settings.scanTrim, direction, reverse: settings.scanFirstPage === "last", deskew });
   }
 
   /** いま選ばれている(または選ぶとよい)整え方 */
@@ -611,8 +777,7 @@ export class ScanArranger {
         }
       }
     }
-    const scan = analyzeScan(img);
-    scan.candidates = candidateHalves(img, scan);
+    const scan = analyzeFull(img);
     return { scan, preview: shrinkGray(img.gray, img.width, img.height, PREVIEW_WIDTH) };
   }
 
@@ -662,7 +827,28 @@ export class ScanArranger {
    * @returns {{pages:Array<{src:number, rect:number[]|null, rotate:number, scan:number, half:string|null}>}|{error:string}}
    */
   plan(options, base = this.base) {
-    const scans = base.scans;
+    if (options.mode === "straighten") {
+      // 0.6: 分けず・並べ替えず、ページごとに傾きだけを直す
+      const pages = base.scans.map((s, i) => {
+        const angle = pageAngle(s, options);
+        return {
+          src: i,
+          scan: i,
+          half: null,
+          rotate: 0,
+          rectPx: null,
+          rect: null,
+          masksPx: [],
+          masks: [],
+          angle,
+          matrix: angle ? deskewMatrix(s.transform, s.width, s.height, angle) : null,
+        };
+      });
+      return pages.some(p => p.angle) ? { pages } : { error: "noskew" };
+    }
+    // 傾きを直すときは、まっすぐにした画像で調べた結果(分ける位置・余白の範囲)を使う
+    const raw = base.scans;
+    const scans = options.deskew ? raw.map(s => (s?.deskewed ? { ...s.deskewed, transform: s.transform, pure: s.pure } : s)) : raw;
     const kind = options.mode === "booklet" ? "sheets" : "spread";
     const splits = chooseSplits(scans, kind);
     if (!splits.some(Boolean)) {
@@ -681,16 +867,22 @@ export class ScanArranger {
       order = orderSpread(rects, options.direction, options.reverse);
     }
     return {
-      pages: order.map(o => ({
+      pages: order.map(o => {
+        const raws = raw[o.scan];
+        const angle = options.deskew && raws?.deskewed ? raws.skew.angle : 0;
+        return {
         src: o.scan,
         scan: o.scan,
         half: o.half,
+        angle,
+        matrix: angle ? deskewMatrix(raws.transform, raws.width, raws.height, angle) : null,
         rotate: o.rotate || 0,
         rectPx: o.rect,
         rect: o.rect ? toPdfRect(scans[o.scan].transform, o.rect) : null,
         masksPx: o.masks || [],
         masks: (o.masks || []).map(m => toPdfRect(scans[o.scan].transform, m)),
-      })),
+        };
+      }),
     };
   }
 
@@ -772,7 +964,7 @@ export class ScanArranger {
       // 1ページ目でも指定する(PDF.js が前回見ていた位置に戻さないように。0.4.1)
       this.app.initialBookmark = `page=${target}`;
       // 0.5: 読む向きに合わせて、ビューアの綴じ方向を変える(右から左に読むなら右綴じ。設定は変えない)
-      if (this.book && this.book.direction !== options.direction) {
+      if (this.book && options.mode !== "straighten" && this.book.direction !== options.direction) {
         this.directionOverridden = true;
         this.directionChanging = true;
         try {
@@ -829,12 +1021,15 @@ export class ScanArranger {
     this.arranged.doc = doc;
     this.setState("arranged");
     const { options, auto } = this.arranged;
+    const skewed = this.arranged.pages.filter(p => p.angle).length;
     const what =
-      options.mode === "booklet"
-        ? "冊子を、表紙から順に並べ替えて表示しています"
-        : options.trim
-          ? "見開きを1ページずつに分け、余白を除いて表示しています"
-          : "見開きを1ページずつに分けて表示しています";
+      options.mode === "straighten"
+        ? `傾きをまっすぐにして表示しています(${skewed}ページ)`
+        : (options.mode === "booklet"
+            ? "冊子を、表紙から順に並べ替えて表示しています"
+            : options.trim
+              ? "見開きを1ページずつに分け、余白を除いて表示しています"
+              : "見開きを1ページずつに分けて表示しています") + (options.deskew && skewed ? `(傾きも直しました)` : "");
     this.toast.show(`${what}(画質は元のまま)`, {
       duration: auto ? 9000 : 5000,
       actions: [
@@ -905,7 +1100,7 @@ export class ScanArranger {
 
   /** 綴じ方向を変えたとき: 整えて表示していれば、新しい向きで並べ直す */
   async onDirectionChanged(direction) {
-    if (this.directionChanging || !this.isArranged || this.state === "busy" || this.arranged.options.direction === direction) {
+    if (this.directionChanging || !this.isArranged || this.state === "busy" || this.arranged.options.mode === "straighten" || this.arranged.options.direction === direction) {
       return;
     }
     const ok = await this.arrange({ ...this.arranged.options, direction }, { remember: true });

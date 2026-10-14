@@ -2,7 +2,7 @@
  * スキャンの整え(0.3)の画面: ツールバーのボタンと、整え方を選ぶダイアログ。
  */
 
-import { normalizeOptions } from "../scan/scan-arranger.js";
+import { normalizeOptions, skewSummary } from "../scan/scan-arranger.js";
 import { PopupMenu } from "./popup.js";
 
 const $ = id => document.getElementById(id);
@@ -39,18 +39,20 @@ export class ScanChip {
     let title = "";
     switch (a.state) {
       case "suggest":
-        label = a.kind === "sheets" ? "冊子を並べ替える" : "見開きを分ける";
+        label = a.kind === "sheets" ? "冊子を並べ替える" : a.kind === "skewed" ? "傾きを直す" : "見開きを分ける";
         title =
           a.kind === "sheets"
             ? "2ページ分が並んだスキャンです。2つに分けて、表紙から順に並べ替えられます"
-            : "スキャンした見開きです。1ページずつに分けて、余白を除いて表示できます";
+            : a.kind === "skewed"
+              ? "傾いたスキャンです。まっすぐにして表示できます(画質は元のままです)"
+              : "スキャンした見開きです。1ページずつに分けて、余白を除いて表示できます";
         break;
       case "busy":
         label = "整えています…";
         title = a.progress || "スキャンを整えています";
         break;
       case "arranged":
-        label = a.arranged?.options.mode === "booklet" ? "並べ替え表示" : "分割表示";
+        label = { booklet: "並べ替え表示", straighten: "傾き補正表示" }[a.arranged?.options.mode] || "分割表示";
         title = "スキャンを整えて表示しています(画質は元のまま)。押すと、元に戻す・整え方を変える・保存ができます";
         break;
       default:
@@ -92,6 +94,12 @@ export class ScanChip {
         },
       ];
     }
+    const straighten = {
+      label: "傾きをまっすぐにする",
+      icon: "scan-split",
+      hint: "文字の行がまっすぐになるよう、ページごとに回します(分けたり並べ替えたりしません)",
+      onSelect: () => a.arrange(a.defaultOptions("skewed")),
+    };
     const spread = {
       label: "見開きを1ページずつに分ける",
       icon: "scan-split",
@@ -105,7 +113,7 @@ export class ScanChip {
       onSelect: () => a.arrange(a.defaultOptions("sheets")),
     };
     return [
-      ...(a.kind === "sheets" ? [booklet, spread] : [spread, booklet]),
+      ...(a.kind === "skewed" ? [straighten] : a.kind === "sheets" ? [booklet, spread, straighten] : [spread, booklet, straighten]),
       { label: "整え方を選ぶ…", icon: "tune", onSelect: () => this.dialog.open() },
     ];
   }
@@ -128,6 +136,10 @@ export class ScanDialog {
     this.trim = $("shScanTrim");
     this.firstInner = $("shScanFirstInner");
     this.flipBacks = $("shScanFlipBacks");
+    this.deskew = $("shScanDeskew");
+    this.angle = $("shScanAngle");
+    this.skewInfo = $("shScanSkewInfo");
+    this.landscape = true;
     this.spreadBox = $("shScanSpreadOptions");
     this.bookletBox = $("shScanBookletOptions");
     this.ready = false;
@@ -173,6 +185,8 @@ export class ScanDialog {
       flipBacks: this.flipBacks.checked,
       // 0.5: 「PDF の1ページ目」が本の最後のほうの見開きなら、見開きの順を逆にする
       reverse: radio("shScanFirstPage") === "last",
+      deskew: this.deskew.checked,
+      angle: this.angle.value.trim() === "" ? null : Number(this.angle.value),
     });
   }
 
@@ -190,14 +204,30 @@ export class ScanDialog {
     this.firstInner.checked = o.firstSide === "inner";
     this.flipBacks.checked = !!o.flipBacks;
     set("shScanFirstPage", o.reverse ? "last" : "first");
+    this.deskew.checked = !!o.deskew;
+    this.angle.value = o.angle === null || o.angle === undefined ? "" : String(o.angle);
   }
 
   updateControls() {
     const o = this.options();
+    const split = o.mode === "spread" || o.mode === "booklet";
     this.bookletBox.hidden = o.mode !== "booklet";
     this.spreadBox.hidden = o.mode !== "spread";
-    this.trim.disabled = o.mode === "none";
-    this.dialog.querySelectorAll('input[name="shScanDirection"]').forEach(el => (el.disabled = o.mode === "none"));
+    this.trim.disabled = !split;
+    $("shScanTrimRow").hidden = !split;
+    // 0.6: 傾き。「傾きだけを直す」では常に直す(角度を指定できる)
+    $("shScanDeskewRow").hidden = !split;
+    $("shScanStraightenOptions").hidden = o.mode !== "straighten";
+    $("shScanDirectionRow").hidden = !split;
+    this.dialog.querySelectorAll('input[name="shScanDirection"]').forEach(el => (el.disabled = !split));
+    // 縦長のページの PDF は、分けたり並べ替えたりできない
+    $("shScanPortraitNote").hidden = this.landscape;
+    for (const v of ["spread", "booklet"]) {
+      const el = this.dialog.querySelector(`input[name="shScanMode"][value="${v}"]`);
+      if (el) {
+        el.disabled = !this.landscape;
+      }
+    }
     this.applyButton.disabled = !this.ready;
     this.applyButton.textContent = o.mode === "none" ? "元のまま表示" : "この方法で表示";
   }
@@ -215,6 +245,10 @@ export class ScanDialog {
     } else {
       initial = a.currentOptions();
     }
+    this.landscape = await a.isLandscape();
+    if (!this.landscape && (initial.mode === "spread" || initial.mode === "booklet")) {
+      initial = a.defaultOptions("skewed");
+    }
     this.setOptions(initial);
     this.ready = a.base.analyzed;
     this.message.hidden = true;
@@ -224,13 +258,6 @@ export class ScanDialog {
     this.preview.textContent = "";
     if (!this.dialog.open) {
       this.dialog.showModal();
-    }
-    if (!a.base.analyzed && !(await a.mostlyLandscape(a.base.doc))) {
-      // 縦長のページの PDF(ふつうの文書): 分けられない
-      this.ready = false;
-      this.updateControls();
-      this.showMessage("この PDF は横長のページではないため、見開きの分割・冊子の並べ替えはできません(スキャンした見開きは横長のページになります)。");
-      return;
     }
     if (!a.base.analyzed) {
       this.progress.textContent = "スキャンを調べています…";
@@ -251,6 +278,8 @@ export class ScanDialog {
       // 調べた結果に合わせて、初めて選ぶときの整え方を決め直す
       if (a.state !== "arranged" && !a.base.choice && a.kind) {
         this.setOptions(a.defaultOptions());
+      } else if (!this.landscape && this.options().mode === "none" && !a.base.choice) {
+        this.setOptions(a.defaultOptions("skewed"));
       }
       this.ready = true;
       this.updateControls();
@@ -310,6 +339,12 @@ export class ScanDialog {
     const o = this.options();
     this.preview.textContent = "";
     this.showMessage("");
+    // 検出した傾きのまとめ
+    const sum = skewSummary(base.scans);
+    this.skewInfo.hidden = o.mode === "none";
+    this.skewInfo.textContent = sum.skewed
+      ? `傾きを検出したページ: ${sum.pages}ページ中 ${sum.skewed}ページ(中央値 約 ${Math.abs(sum.median)}°)`
+      : "傾きは見つかりませんでした(0.2° 未満、または文字・線が少なくて調べられないページです)";
     let pages;
     if (o.mode === "none") {
       pages = base.scans.map((s, i) => ({ scan: i, rectPx: null, rotate: 0 }));
@@ -322,6 +357,7 @@ export class ScanDialog {
             odd: "スキャンの枚数が奇数のため、冊子の順に並べ替えられません(両面スキャンした冊子なら偶数になります)。",
             unsplit: "縦長のページなど、2つに分けられないページがあるため、冊子の順に並べ替えられません。",
             empty: "分けられるページが見つかりませんでした(横長のスキャンではないようです)。",
+            noskew: "傾いているページが見つかりませんでした。上の「傾きの角度」を指定すると、全部のページをその角度だけ回せます。",
           }[plan.error] || "この方法では整えられません。"
         );
         this.applyButton.disabled = true;
@@ -329,10 +365,17 @@ export class ScanDialog {
         return;
       }
       pages = plan.pages;
+      if (o.mode === "straighten") {
+        const n = pages.filter(p => p.angle).length;
+        this.summary.textContent = `元のスキャン ${base.pageCount}ページのうち ${n}ページの傾きを直します(ページの数・順は変わりません)。`;
+        this.applyButton.disabled = false;
+      }
       const split = pages.filter(p => p.rectPx);
       const s0 = split[0] && base.scans[split[0].scan];
       const size = s0 ? `(1ページの大きさ 約 ${Math.round((split[0].rectPx[2] - split[0].rectPx[0]) / s0.pxPerMm)} × ${Math.round((split[0].rectPx[3] - split[0].rectPx[1]) / s0.pxPerMm)} mm)` : "";
-      this.summary.textContent = `元のスキャン ${base.pageCount}ページ → ${pages.length}ページ${size}`;
+      if (o.mode !== "straighten") {
+        this.summary.textContent = `元のスキャン ${base.pageCount}ページ → ${pages.length}ページ${size}`;
+      }
       this.applyButton.disabled = false;
     }
     const limit = 24;
@@ -366,7 +409,23 @@ export class ScanDialog {
           ctx.translate(W, H);
           ctx.rotate(Math.PI);
         }
-        ctx.drawImage(src.canvas, rect[0], rect[1], rw, rh, 0, 0, W, H);
+        if (p.angle) {
+          // 0.6: 傾きを直す(画像の中心のまわりに回してから、範囲を切り出す)
+          ctx.save();
+          const k = W / rw;
+          const cx = src.canvas.width / 2;
+          const cy = src.canvas.height / 2;
+          ctx.scale(k, k);
+          ctx.translate(-rect[0], -rect[1]);
+          ctx.translate(cx, cy);
+          ctx.rotate((p.angle * Math.PI) / 180);
+          ctx.translate(-cx, -cy);
+          ctx.imageSmoothingQuality = "high";
+          ctx.drawImage(src.canvas, 0, 0);
+          ctx.restore();
+        } else {
+          ctx.drawImage(src.canvas, rect[0], rect[1], rw, rh, 0, 0, W, H);
+        }
         // 白く覆う範囲(スキャンで入った本の縁など)
         ctx.fillStyle = "#ffffff";
         for (const m of p.masksPx || []) {

@@ -220,6 +220,18 @@
             </div>
           </div>
           <div class="row">
+            <div class="label">傾き</div>
+            <div class="control radios">
+              <label><input type="radio" name="scanDeskew" value="auto" /> 傾きを見つけたら、まっすぐにする<span class="default-mark">初期値</span></label>
+              <label><input type="radio" name="scanDeskew" value="off" /> 自動では直さない(「スキャンを整える」の画面からは直せます)</label>
+              <p class="help">
+                見開きを分けるときや冊子を並べ替えるときに、ページごとの傾き(約 0.2° 以上)も直します。
+                縦長のスキャン(1ページずつのスキャン)が傾いていれば、ツールバーの「傾きを直す」のボタンで知らせます(文字のある PDF は調べません)。
+                傾きは、画像を作り直さずに、ページの中身を回して直します(画質は元のまま)。
+              </p>
+            </div>
+          </div>
+          <div class="row">
             <div class="label">PDF ごとの整え方</div>
             <div class="control">
               <p class="help">PDF ごとに選んだ整え方(「元に戻す」を選んだことも含む)を覚えておき、次に開いたときも同じように表示します。</p>

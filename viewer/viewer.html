@@ -1385,11 +1385,23 @@
                 <span><b>見開きを1ページずつに分ける</b><span class="sh-scan-note">本・ノートを開いてスキャンしたもの。ノド(綴じ目)の位置で分けます</span></span></label>
               <label class="sh-scan-mode"><input type="radio" name="shScanMode" value="booklet" />
                 <span><b>冊子の順に並べ替える</b><span class="sh-scan-note">中綴じの冊子をばらして、両面スキャンしたもの。真ん中で分けて、表紙から裏表紙の順に並べます</span></span></label>
+              <label class="sh-scan-mode"><input type="radio" name="shScanMode" value="straighten" />
+                <span><b>傾きだけをまっすぐにする</b><span class="sh-scan-note">分けたり並べ替えたりせず、ページごとに、文字の行がまっすぐになるよう回します</span></span></label>
               <label class="sh-scan-mode"><input type="radio" name="shScanMode" value="none" />
                 <span><b>元のまま</b><span class="sh-scan-note">スキャンしたページをそのまま表示します</span></span></label>
             </fieldset>
-            <label class="sh-bind-check"><input type="checkbox" id="shScanTrim" /> 余白を除く(スキャンで入った余分なふち・影・本の縁やごみを切り取り、全部のページを同じ大きさにそろえる)</label>
-            <div class="sh-bind-field">
+            <p id="shScanPortraitNote" class="sh-bind-help" hidden>この PDF は縦長のページなので、見開きの分割・冊子の並べ替えは選べません(スキャンした見開きは横長のページになります)。</p>
+            <label class="sh-bind-check" id="shScanTrimRow"><input type="checkbox" id="shScanTrim" /> 余白を除く(スキャンで入った余分なふち・影・本の縁やごみを切り取り、全部のページを同じ大きさにそろえる)</label>
+            <label class="sh-bind-check" id="shScanDeskewRow"><input type="checkbox" id="shScanDeskew" /> 傾きをまっすぐにする(ページごとに、文字の行・罫線がまっすぐになるよう回す)</label>
+            <div id="shScanStraightenOptions" class="sh-bind-field" hidden>
+              <label class="sh-bind-field-label" for="shScanAngle">傾きの角度</label>
+              <div class="sh-bind-field-control">
+                <input type="number" id="shScanAngle" class="sh-bind-input sh-short" min="-8" max="8" step="0.1" placeholder="自動" aria-label="傾きを直す角度(度)" /> 度
+                <p class="sh-bind-help">空欄なら、ページごとに検出した傾きを直します。指定すると、全部のページをその角度だけ回します(プラスが時計回り。プレビューで確かめてください)。</p>
+              </div>
+            </div>
+            <p id="shScanSkewInfo" class="sh-bind-help" hidden></p>
+            <div class="sh-bind-field" id="shScanDirectionRow">
               <div class="sh-bind-field-label">本を読む向き</div>
               <div class="sh-bind-field-control">
                 <label><input type="radio" name="shScanDirection" value="rtl" /> 右から左に読む(縦書きの本・漫画。見開きの右のページが先)</label>

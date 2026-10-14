@@ -300,7 +300,7 @@ const fmt = v => {
  * @param {Uint8Array} bytes 元の PDF(暗号化されていないもの)
  * @param {Array<{src:number, rect:number[]|null, rotate:number, masks?:number[][]}>} pages 作るページ(順に)。
  *   src: 元のページ(0始まり)/ rect: 表示する範囲(元のページのユーザー空間 [x0 y0 x1 y1]。null ならそのまま)/
- *   rotate: 元の回転に足す回転(度)/ masks: 白く覆う範囲(元のページのユーザー空間。スキャンで入った本の縁など)
+ *   rotate: 元の回転に足す回転(度)/ matrix: 中身にかける変換 [a b c d e f](傾きを直す。0.6)/ masks: 白く覆う範囲(元のページのユーザー空間。スキャンで入った本の縁など)
  * @param {{id:string, onProgress?:Function, pdf?:object}} o id: 32桁の16進(文書の ID)/
  *   pdf: bytes を pdf-lib で読み込んだ文書(あれば読み直さずに使う。中身を書き換えるので、使えるのは1回だけ)
  * @returns {Promise<Uint8Array>}
@@ -376,7 +376,9 @@ export async function buildArrangedPdf(bytes, pages, { id, onProgress = null, pd
       dict.set(N("Rotate"), PDFNumber.of(rotate));
     }
     // 中身: 範囲の左下が (0, 0) になるようにずらす。元の中身は q … Q で囲み、その後で白く覆う範囲を塗る
-    const head = `q 1 0 0 1 ${fmt(-x0)} ${fmt(-y0)} cm\nq\n`;
+    // 傾きを直すときは、その後で、中身をまっすぐにする変換(out.matrix)をかける
+    const m = out.matrix && out.matrix.length === 6 && out.matrix.every(Number.isFinite) ? out.matrix : null;
+    const head = `q 1 0 0 1 ${fmt(-x0)} ${fmt(-y0)} cm\nq\n${m ? `${m.map(v => (Math.round(v * 1e6) / 1e6).toString()).join(" ")} cm\n` : ""}`;
     const masks = (out.masks || []).filter(m => m[2] > m[0] && m[3] > m[1]);
     const maskOps = masks.map(m => `${fmt(m[0])} ${fmt(m[1])} ${fmt(m[2] - m[0])} ${fmt(m[3] - m[1])} re`).join("\n");
     const tail = `\nQ\n${masks.length ? `q 1 g\n${maskOps}\nf\nQ\n` : ""}Q\n`;
@@ -386,7 +388,12 @@ export async function buildArrangedPdf(bytes, pages, { id, onProgress = null, pd
     if (p && p.texts.length) {
       // 範囲の外の文字(もう片方のページの OCR の文字)を取り除いた中身を作る
       const margin = 2; // pt(文字の書き始めが少しはみ出していても残す)
-      const keep = (x, y) => x >= x0 - margin && x <= x1 + margin && y >= y0 - margin && y <= y1 + margin;
+      const keep = (tx, ty) => {
+        // 文字の位置は、傾きを直したあとの位置で調べる
+        const x = m ? m[0] * tx + m[2] * ty + m[4] : tx;
+        const y = m ? m[1] * tx + m[3] * ty + m[5] : ty;
+        return x >= x0 - margin && x <= x1 + margin && y >= y0 - margin && y <= y1 + margin;
+      };
       const filtered = removeTextOutside(p.data, p.ops, p.texts, keep);
       const enc = new TextEncoder();
       const headBytes = enc.encode(head);

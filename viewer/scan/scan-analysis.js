@@ -969,6 +969,187 @@ export function paperEdges(img, x0, x1, side, box) {
 // 1ページ分の調べ
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// 傾き(0.6)
+// ---------------------------------------------------------------------------
+
+/** 傾きを探す範囲(度。これより大きく傾いたスキャンは、向きの間違いとみなして直さない) */
+export const SKEW_MAX_DEG = 8;
+/** これより小さい傾きは、直さない(度) */
+export const SKEW_MIN_DEG = 0.2;
+/** これより確からしさ(findSkew の conf)が低い傾きは、直さない */
+export const SKEW_MIN_CONF = 3;
+
+/** 傾きを直すページか(検出した傾きが、直すだけの大きさと確からしさを持つ) */
+export function isSkewed(skew) {
+  return !!skew && Math.abs(skew.angle) >= SKEW_MIN_DEG && skew.conf >= SKEW_MIN_CONF;
+}
+
+/**
+ * 文字・罫線のように、まわりより濃い画素の位置を集める(影・ノド・紙の縁のような広い暗い部分は、まわりと変わらないので入らない)。
+ * @returns {{xs:Float32Array, ys:Float32Array, n:number}}
+ */
+function inkPoints(img, limit = 140000) {
+  const { gray, width: W, height: H } = img;
+  // まわり(縦横およそ 8mm)の平均を、積分画像で求める
+  const r = Math.max(4, Math.round(mmToPx(img, 4)));
+  const stride = W + 1;
+  const sat = new Float64Array(stride * (H + 1));
+  for (let y = 0; y < H; y++) {
+    let row = 0;
+    for (let x = 0; x < W; x++) {
+      row += gray[y * W + x];
+      sat[(y + 1) * stride + x + 1] = sat[y * stride + x + 1] + row;
+    }
+  }
+  const pts = [];
+  for (let y = 0; y < H; y++) {
+    const y0 = Math.max(0, y - r);
+    const y1 = Math.min(H, y + r + 1);
+    for (let x = 0; x < W; x++) {
+      const v = gray[y * W + x];
+      if (v > 170) {
+        continue;
+      }
+      const x0 = Math.max(0, x - r);
+      const x1 = Math.min(W, x + r + 1);
+      const mean = (sat[y1 * stride + x1] - sat[y0 * stride + x1] - sat[y1 * stride + x0] + sat[y0 * stride + x0]) / ((x1 - x0) * (y1 - y0));
+      if (v < mean - 45) {
+        pts.push(x, y);
+      }
+    }
+  }
+  let n = pts.length >> 1;
+  const step = Math.max(1, Math.ceil(n / limit));
+  const xs = new Float32Array(Math.ceil(n / step));
+  const ys = new Float32Array(xs.length);
+  let k = 0;
+  for (let i = 0; i < n; i += step) {
+    xs[k] = pts[2 * i];
+    ys[k] = pts[2 * i + 1];
+    k++;
+  }
+  return { xs: xs.subarray(0, k), ys: ys.subarray(0, k), n: k };
+}
+
+/**
+ * 点を(cx, cy)のまわりに phi 度(画面で時計回りが正)回したときの、行(または列)ごとの点の数の「くっきり度」。
+ * 文字の行(縦書きなら列)がそろうほど、行ごとの点の数が大きく上下する。
+ */
+function profileSharpness(pts, cx, cy, phiDeg, vertical, size) {
+  const t = (phiDeg * Math.PI) / 180;
+  const cos = Math.cos(t);
+  const sin = Math.sin(t);
+  const bins = new Int32Array(size + 2);
+  const off = size / 2;
+  const { xs, ys, n } = pts;
+  for (let i = 0; i < n; i++) {
+    const dx = xs[i] - cx;
+    const dy = ys[i] - cy;
+    const v = vertical ? dx * cos - dy * sin : dx * sin + dy * cos;
+    const b = Math.round(v + off);
+    if (b >= 0 && b <= size) {
+      bins[b]++;
+    }
+  }
+  let s = 0;
+  for (let i = 1; i < bins.length; i++) {
+    const d = bins[i] - bins[i - 1];
+    s += d * d;
+  }
+  return s;
+}
+
+/**
+ * スキャンの傾きを調べる。文字の行(縦書きなら列)・罫線がまっすぐ並ぶ角度を探す。
+ * @returns {{angle:number, conf:number, vertical:boolean}} angle: まっすぐにするために画像を回す角度(度。画面で時計回りが正)/
+ *   conf: 確からしさ(0〜。2以上ならほぼ確か)/ vertical: 縦書き(列でそろえた)か
+ */
+export function findSkew(img, { maxDeg = SKEW_MAX_DEG } = {}) {
+  const none = { angle: 0, conf: 0, vertical: false };
+  const { width: W, height: H } = img;
+  const pts = inkPoints(img);
+  // 文字・線がほとんど無いページ(白紙・写真だけ)は調べない
+  if (pts.n < Math.max(400, W * H * 0.0015)) {
+    return none;
+  }
+  const cx = W / 2;
+  const cy = H / 2;
+  const size = Math.ceil(Math.hypot(W, H));
+  let best = null;
+  for (const vertical of [false, true]) {
+    // 粗く(0.25度ずつ)→細かく(0.05度ずつ)→さらに細かく(0.01度ずつ)
+    const scores = [];
+    let top = { phi: 0, s: -1 };
+    for (let phi = -maxDeg; phi <= maxDeg + 1e-9; phi += 0.25) {
+      const s = profileSharpness(pts, cx, cy, phi, vertical, size);
+      scores.push(s);
+      if (s > top.s) {
+        top = { phi, s };
+      }
+    }
+    const sorted = [...scores].sort((a, b) => a - b);
+    const med = sorted[sorted.length >> 1] || 1;
+    for (const [span, step] of [
+      [0.3, 0.05],
+      [0.06, 0.01],
+    ]) {
+      const c = top.phi;
+      for (let phi = c - span; phi <= c + span + 1e-9; phi += step) {
+        const s = profileSharpness(pts, cx, cy, phi, vertical, size);
+        if (s > top.s) {
+          top = { phi, s };
+        }
+      }
+    }
+    const conf = top.s / med - 1;
+    if (!best || conf > best.conf) {
+      best = { angle: top.phi, conf, vertical };
+    }
+  }
+  // 探す範囲の端で見つかったものは、ほかの向きの紙・斜めの図で、傾きではない
+  if (!best || Math.abs(best.angle) > maxDeg - 0.3) {
+    return none;
+  }
+  return { angle: Math.round(best.angle * 100) / 100, conf: Math.round(best.conf * 100) / 100, vertical: best.vertical };
+}
+
+/**
+ * 灰色の画像を、中心のまわりに phi 度(画面で時計回りが正)回す。はみ出した部分は白。
+ * 傾きを直したあとの画像で、余白・ノドを調べるのに使う(元の画像の大きさのまま)。
+ */
+export function rotateGray(gray, W, H, phiDeg) {
+  const t = (phiDeg * Math.PI) / 180;
+  const cos = Math.cos(t);
+  const sin = Math.sin(t);
+  const cx = (W - 1) / 2;
+  const cy = (H - 1) / 2;
+  const out = new Uint8Array(W * H);
+  for (let y = 0; y < H; y++) {
+    const dy = y - cy;
+    for (let x = 0; x < W; x++) {
+      const dx = x - cx;
+      // 出来上がりの (x, y) に来る元の位置(逆向きに回す)
+      const sx = dx * cos + dy * sin + cx;
+      const sy = -dx * sin + dy * cos + cy;
+      if (sx < 0 || sy < 0 || sx > W - 1 || sy > H - 1) {
+        out[y * W + x] = 255;
+        continue;
+      }
+      const x0 = sx | 0;
+      const y0 = sy | 0;
+      const x1 = Math.min(W - 1, x0 + 1);
+      const y1 = Math.min(H - 1, y0 + 1);
+      const fx = sx - x0;
+      const fy = sy - y0;
+      const a = gray[y0 * W + x0] * (1 - fx) + gray[y0 * W + x1] * fx;
+      const b = gray[y1 * W + x0] * (1 - fx) + gray[y1 * W + x1] * fx;
+      out[y * W + x] = (a * (1 - fy) + b * fy + 0.5) | 0;
+    }
+  }
+  return out;
+}
+
 /**
  * 1枚のスキャンを調べる。
  * @param {object} img {gray, width, height, pxPerMm}
@@ -1005,6 +1186,26 @@ export function analyzeScan(img) {
     }
   }
   return result;
+}
+
+/**
+ * 1枚のスキャンを、傾きも含めて調べる(Worker と、Worker が使えないときの画面から呼ぶ)。
+ * 傾きがあるページは、まっすぐにした画像でも調べ直して scan.deskewed に入れる
+ * (見開きを分ける位置・余白の範囲を、まっすぐにしたあとの座標で決めるため)。
+ */
+export function analyzeFull(img) {
+  const skew = findSkew(img);
+  const scan = analyzeScan(img);
+  scan.skew = skew;
+  scan.candidates = candidateHalves(img, scan);
+  if (isSkewed(skew)) {
+    const straight = { ...img, gray: rotateGray(img.gray, img.width, img.height, skew.angle) };
+    const d = analyzeScan(straight);
+    d.skew = skew;
+    d.candidates = candidateHalves(straight, d);
+    scan.deskewed = d;
+  }
+  return scan;
 }
 
 /**
