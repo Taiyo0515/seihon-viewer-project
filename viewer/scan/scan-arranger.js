@@ -621,9 +621,10 @@ export class ScanArranger {
     const sum = skewSummary(quick.map(i => base.scans[i]));
     base.checked = true;
     const choice = base.choice;
-    // 横に置いてスキャンした見開き(回すとノドが見つかるページが多い)
+    // 横に置いてスキャンした見開き(回すとノドが見つかるページが多い)。
+    // 設定「スキャンした見開き」が「何もしない」なら、横長の見開きと同じく案内も自動の分割もしない(⋮ メニューからは使える)
     const turned = quick.filter(i => base.scans[i]?.turned).length;
-    if (turned >= Math.ceil(quick.length * 0.5)) {
+    if (settings.scanArrange !== "off" && turned >= Math.ceil(quick.length * 0.5)) {
       base.kind = "turned";
       base.turnable = true;
       await this.forceTurned(base);

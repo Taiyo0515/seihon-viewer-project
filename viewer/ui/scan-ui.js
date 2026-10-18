@@ -253,6 +253,12 @@ export class ScanDialog {
     if (!a.base) {
       return;
     }
+    if (a.state === "busy" && !this.dialog.open) {
+      // 整えている(調べている)途中に開くと、同じスキャンを2か所で調べることになり、
+      // 閉じたときに整えるのも止まってしまう。終わるまで待ってもらう
+      a.toast.show("スキャンを整えています。終わってから選んでください", { duration: 3000 });
+      return;
+    }
     let initial;
     if (a.state === "arranged" && a.arranged) {
       initial = a.arranged.options;

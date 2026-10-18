@@ -15,6 +15,7 @@
  */
 
 import { listRoles, putRoles } from "./db.js";
+import { isCustomRoleId } from "./role-items.js";
 import { DEFAULT_SETTINGS, SETTING_LABELS, loadSettings, normalizeSettings, saveSettings } from "./settings.js";
 
 export const BACKUP_FORMAT = "seihon-viewer-backup";
@@ -97,7 +98,8 @@ export function parseBackup(text) {
     const roles = {};
     for (const [index, role] of Object.entries(r.roles)) {
       const i = Number(index);
-      if (Number.isInteger(i) && i >= 0 && i < 100000 && ROLE_IDS.has(role)) {
+      // 0.5 で追加できるようにした項目(custom1 など)の役割も読み込む(書き出したものがそのまま戻るように)
+      if (Number.isInteger(i) && i >= 0 && i < 100000 && (ROLE_IDS.has(role) || isCustomRoleId(role))) {
         roles[String(i)] = role;
       }
     }

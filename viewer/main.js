@@ -942,7 +942,7 @@ const moreMenu = new PopupMenu({
       {
         label: "スキャンを整える(見開きの分割・冊子の並べ替え)…",
         icon: "scan-split",
-        disabled: !hasDoc || !scanArranger.base,
+        disabled: !hasDoc || !scanArranger.base || scanArranger.state === "busy",
         hint: "スキャンした見開きを1ページずつに分けたり、ばらした冊子を表紙から順に並べ替えたりします(画質は元のまま)",
         onSelect: () => scanDialog.open(),
       },
@@ -1132,7 +1132,8 @@ onSettingsChanged(next => {
   if (next.theme !== prev.theme) {
     applyThemePreference(next.theme);
   }
-  if (next.bindingDirection !== book.direction) {
+  // 設定の綴じ方向を変えたときだけ合わせる(コミック・整えたスキャンで一時的に変えている向きを、ほかの設定の変更で戻さない)
+  if (next.bindingDirection !== prev.bindingDirection && next.bindingDirection !== book.direction) {
     book.setDirection(next.bindingDirection);
   }
   if (JSON.stringify(next.bindRoleItems) !== JSON.stringify(prev.bindRoleItems)) {

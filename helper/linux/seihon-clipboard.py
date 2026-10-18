@@ -138,9 +138,16 @@ def temp_copy_dir():
 
 def new_temp_copy_dir():
     import shutil
+    import stat
     import time
     base = temp_copy_dir()
     base.mkdir(mode=0o700, parents=True, exist_ok=True)
+    # /tmp はほかのユーザーも使う場所なので、同じ名前のリンク・ほかのユーザーのフォルダが先に作られていたら使わない
+    # (リンクをたどって、リンク先のファイルを消したり、ほかの人に見える場所に置いたりしないため)
+    st = os.lstat(base)
+    if stat.S_ISLNK(st.st_mode) or not stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid():
+        raise RuntimeError("一時フォルダを安全に使えません(%s)" % base)
+    os.chmod(base, 0o700)
     for child in base.iterdir():  # 前回のコピーを消す
         try:
             if child.is_dir() and not child.is_symlink():

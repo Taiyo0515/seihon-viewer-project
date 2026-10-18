@@ -14,6 +14,8 @@ export class PerfLog {
   constructor(app, bootState) {
     this.app = app;
     this.marks = bootState.marks; // [[名前, ms], ...]
+    /** 時刻の起点(1つ目の文書はページの読み込み開始 = 0。2つ目以降は、その文書を開き始めた時点) */
+    this.origin = 0;
     this.enabled = false;
     this.done = false;
     this.panel = document.getElementById("shPerfPanel");
@@ -31,7 +33,7 @@ export class PerfLog {
   }
 
   mark(name) {
-    this.marks.push([name, performance.now()]);
+    this.marks.push([name, performance.now() - this.origin]);
   }
 
   setEnabled(enabled) {
@@ -49,6 +51,7 @@ export class PerfLog {
     if (this.marks.length > 1 && this.marks.some(([n]) => n.startsWith("最初のページ表示"))) {
       // 2つ目以降の文書は、開く操作の時点から測り直す
       this.marks.length = 0;
+      this.origin = performance.now();
     }
     this.info = { label, startedAt: performance.now() };
     this.mark("PDFの読み込み開始");
