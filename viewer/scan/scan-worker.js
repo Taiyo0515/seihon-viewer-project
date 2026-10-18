@@ -9,10 +9,10 @@
 import { analyzeFull, shrinkGray } from "./scan-analysis.js";
 
 self.onmessage = ({ data }) => {
-  const { id, width, height, pxPerMm, previewWidth } = data;
+  const { id, width, height, pxPerMm, previewWidth, turn } = data;
   try {
     const img = { gray: new Uint8Array(data.gray), width, height, pxPerMm };
-    const scan = analyzeFull(img);
+    const scan = analyzeFull(img, { turn: turn ?? true });
     const preview = shrinkGray(img.gray, width, height, previewWidth);
     self.postMessage({ id, scan, preview }, [preview.data.buffer]);
   } catch (e) {

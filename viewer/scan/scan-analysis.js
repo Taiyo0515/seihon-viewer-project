@@ -1115,7 +1115,7 @@ export function findSkew(img, { maxDeg = SKEW_MAX_DEG } = {}) {
 }
 
 /**
- * 灰色の画像を、中心のまわりに phi 度(画面で時計回りが正)回す。はみ出した部分は白。
+ * 灰色の画像を、中心のまわりに phi 度(画面で時計回りが正)回す。はみ出した部分は、いちばん近い端の画素で埋める。
  * 傾きを直したあとの画像で、余白・ノドを調べるのに使う(元の画像の大きさのまま)。
  */
 export function rotateGray(gray, W, H, phiDeg) {
@@ -1130,12 +1130,12 @@ export function rotateGray(gray, W, H, phiDeg) {
     for (let x = 0; x < W; x++) {
       const dx = x - cx;
       // 出来上がりの (x, y) に来る元の位置(逆向きに回す)
-      const sx = dx * cos + dy * sin + cx;
-      const sy = -dx * sin + dy * cos + cy;
-      if (sx < 0 || sy < 0 || sx > W - 1 || sy > H - 1) {
-        out[y * W + x] = 255;
-        continue;
-      }
+      let sx = dx * cos + dy * sin + cx;
+      let sy = -dx * sin + dy * cos + cy;
+      // はみ出した部分は、いちばん近い端の画素で埋める(白で埋めると、画像の端に触れていた縁の影が端から離れ、
+      // 「縁に触れているもの」として除けなくなる)
+      sx = sx < 0 ? 0 : sx > W - 1 ? W - 1 : sx;
+      sy = sy < 0 ? 0 : sy > H - 1 ? H - 1 : sy;
       const x0 = sx | 0;
       const y0 = sy | 0;
       const x1 = Math.min(W - 1, x0 + 1);
@@ -1188,16 +1188,185 @@ export function analyzeScan(img) {
   return result;
 }
 
+// ---------------------------------------------------------------------------
+// 横に置いてスキャンした見開き(0.6)
+// ---------------------------------------------------------------------------
+
+/**
+ * 灰色の画像を 90° 回す("cw" 時計回り / "ccw" 反時計回り)。幅と高さが入れ替わる。
+ */
+export function turnGray(gray, W, H, dir) {
+  const out = new Uint8Array(W * H);
+  // 出来上がりの幅は H、高さは W
+  if (dir === "cw") {
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        out[x * H + (H - 1 - y)] = gray[y * W + x];
+      }
+    }
+  } else {
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        out[(W - 1 - x) * H + y] = gray[y * W + x];
+      }
+    }
+  }
+  return out;
+}
+
+/** 90° 回した画像の座標へ変える変換(キャンバスの [a b c d e f]。元の画像の大きさ W×H) */
+export function turnMatrix(W, H, dir) {
+  return dir === "cw" ? [0, 1, -1, 0, H, 0] : [0, -1, 1, 0, 0, W];
+}
+
+const percentile = (sorted, p) => sorted[Math.min(sorted.length - 1, Math.max(0, Math.floor(sorted.length * p)))];
+const stdev = list => {
+  const m = list.reduce((a, b) => a + b, 0) / list.length;
+  return Math.sqrt(list.reduce((a, b) => a + (b - m) * (b - m), 0) / list.length);
+};
+
+/**
+ * 文字の行の「書き出しの側」で、画像の上下・左右が正しい向きかを見る。
+ * 行の書き出しはそろっていて、終わりはばらつく(段落の終わりで短くなる)ので、
+ * 横書きなら行の左端、縦書きなら列の上端がそろっていれば、正しい向き。
+ * @param {object} img 調べる画像(見開きが横に広がる向きの画像)
+ * @param {number[][]} boxes 左右のページの中身の範囲 [x0,y0,x1,y1]
+ * @returns {{score:number, bands:number}} score: 正なら今の向きが正しい、負なら上下左右が逆(-1〜1)/ bands: 根拠にした行の数
+ */
+export function textStartScore(img, boxes) {
+  const pts = inkPoints(img, 90000);
+  let sum = 0;
+  let weight = 0;
+  for (const box of boxes) {
+    if (!box) {
+      continue;
+    }
+    const [x0, y0, x1, y1] = box;
+    const bw = x1 - x0;
+    const bh = y1 - y0;
+    if (bw < 50 || bh < 50) {
+      continue;
+    }
+    const inside = [];
+    for (let i = 0; i < pts.n; i++) {
+      const x = pts.xs[i];
+      const y = pts.ys[i];
+      if (x >= x0 && x <= x1 && y >= y0 && y <= y1) {
+        inside.push(x, y);
+      }
+    }
+    if (inside.length < 800) {
+      continue;
+    }
+    // 行(横書き)か列(縦書き)か: 点の数が行ごと・列ごとにはっきり上下するほうが、行の向き
+    const rows = new Float64Array(Math.ceil(bh) + 1);
+    const cols = new Float64Array(Math.ceil(bw) + 1);
+    for (let i = 0; i < inside.length; i += 2) {
+      cols[Math.min(cols.length - 1, Math.floor(inside[i] - x0))]++;
+      rows[Math.min(rows.length - 1, Math.floor(inside[i + 1] - y0))]++;
+    }
+    const cv = a => {
+      const m = a.reduce((p, q) => p + q, 0) / a.length || 1;
+      return stdev(a) / m;
+    };
+    const horizontal = cv(rows) >= cv(cols);
+    const along = horizontal ? rows : cols; // 行(列)の並ぶ方向の点の数
+    const sm = along.map((_, i) => (along[i - 1] || 0) + along[i] + (along[i + 1] || 0));
+    const sortedCounts = [...sm].filter(v => v > 0).sort((a, b) => a - b);
+    if (sortedCounts.length < 20) {
+      continue;
+    }
+    const thr = Math.max(3, percentile(sortedCounts, 0.9) * 0.2);
+    // 行(列)ごとに、書き出しの側・終わりの側の端を集める
+    const starts = [];
+    const ends = [];
+    const minLen = Math.max(3, Math.round(img.pxPerMm * 1.2));
+    let from = -1;
+    for (let k = 0; k <= sm.length; k++) {
+      const on = k < sm.length && sm[k] >= thr;
+      if (on && from < 0) {
+        from = k;
+      } else if (!on && from >= 0) {
+        if (k - from >= minLen && k - from <= img.pxPerMm * 14) {
+          const vals = [];
+          for (let i = 0; i < inside.length; i += 2) {
+            const a = horizontal ? inside[i + 1] - y0 : inside[i] - x0;
+            if (a >= from && a < k) {
+              vals.push(horizontal ? inside[i] : inside[i + 1]);
+            }
+          }
+          if (vals.length >= 30) {
+            vals.sort((a, b) => a - b);
+            starts.push(percentile(vals, 0.03));
+            ends.push(percentile(vals, 0.97));
+          }
+        }
+        from = -1;
+      }
+    }
+    if (starts.length < 5) {
+      continue;
+    }
+    const sStart = stdev(starts);
+    const sEnd = stdev(ends);
+    const score = (sEnd - sStart) / (sEnd + sStart + 1e-6);
+    sum += score * starts.length;
+    weight += starts.length;
+  }
+  return { score: weight ? Math.round((sum / weight) * 1000) / 1000 : 0, bands: weight };
+}
+
+/** 横に置いた見開きとみなすノドの確からしさの下限(findGutter の score) */
+const TURN_MIN_GUTTER_SCORE = 40;
+
+/**
+ * 縦長のページを 90° 回した見開き(横に置いてスキャンしたもの)として調べる。
+ * @returns {{cw:object, ccw:object, score:number, bands:number, strong:boolean}|null} 回した画像の調べた結果(時計回り・反時計回り)と、
+ *   文字の向きから見た向き(score が正なら時計回りが正しい)。strong: ノドがはっきり見つかった。見開きと思えなければ null
+ *   (force のときは、ノドが見つからなくても調べる。そのときは scan.forced が true で、分けるときは真ん中で分ける)
+ */
+function analyzeTurned(img, force = false) {
+  const { width: W, height: H } = img;
+  const cw = { gray: turnGray(img.gray, W, H, "cw"), width: H, height: W, pxPerMm: img.pxPerMm };
+  // まず、ノドの線・影があるかだけを手早く調べる(ふつうの縦長の文書では、ここで終わる)
+  if (!force && !findGutter(cw)?.ok && !findEdgeShadow(cw)?.ok) {
+    return null;
+  }
+  const cwScan = analyzeFull(cw, { turn: false });
+  // ノドがはっきりしているか(罫線の枠・太い線を、ノドと間違えない。本物のノドの影・線は、この値が 100 前後以上になる)
+  const strong = !!cwScan.gutter?.ok && cwScan.gutter.score >= TURN_MIN_GUTTER_SCORE;
+  if (!force && !strong) {
+    return null;
+  }
+  cwScan.forced = !strong;
+  const ccw = { gray: turnGray(img.gray, W, H, "ccw"), width: H, height: W, pxPerMm: img.pxPerMm };
+  const ccwScan = analyzeFull(ccw, { turn: false });
+  ccwScan.forced = !strong;
+  const d = cwScan.deskewed || cwScan;
+  const straight = cwScan.deskewed ? { ...cw, gray: rotateGray(cw.gray, cw.width, cw.height, cwScan.skew.angle) } : cw;
+  const half = candidateHalves(straight, d)[0];
+  const start = textStartScore(straight, half ? [half.L, half.R] : []);
+  return { cw: cwScan, ccw: ccwScan, score: start.score, bands: start.bands, strong };
+}
+
 /**
  * 1枚のスキャンを、傾きも含めて調べる(Worker と、Worker が使えないときの画面から呼ぶ)。
  * 傾きがあるページは、まっすぐにした画像でも調べ直して scan.deskewed に入れる
  * (見開きを分ける位置・余白の範囲を、まっすぐにしたあとの座標で決めるため)。
  */
-export function analyzeFull(img) {
+export function analyzeFull(img, { turn = true } = {}) {
   const skew = findSkew(img);
   const scan = analyzeScan(img);
   scan.skew = skew;
   scan.candidates = candidateHalves(img, scan);
+  if (turn && !scan.landscape) {
+    // 縦長のページ: 見開きを横に置いてスキャンしたものかも(回してノドが見つかれば、そうだとみなす。
+    // turn が "force" のときは、ノドが見つからなくても、横に置いた見開きとして調べる)
+    const turned = analyzeTurned(img, turn === "force");
+    if (turned) {
+      scan.turned = turned;
+    }
+  }
   if (isSkewed(skew)) {
     const straight = { ...img, gray: rotateGray(img.gray, img.width, img.height, skew.angle) };
     const d = analyzeScan(straight);
@@ -1286,8 +1455,9 @@ export function chooseSplits(scans, kind) {
       if (s.gutter?.ok) {
         return { x: s.gutter.x, band: s.gutter.band, by: "gutter" };
       }
-      // ノドが見つからないページ: 真ん中あたりの何も無い帯があれば、そこで分ける(無ければ分けない)
-      return s.gap ? { x: s.gap.x, band: 0, by: "gap" } : null;
+      // ノドが見つからないページ: 真ん中あたりの何も無い帯があれば、そこで分ける(無ければ分けない。
+      // 横に置いた見開きと決まった文書(forced)のページは、真ん中で分ける)
+      return s.gap ? { x: s.gap.x, band: 0, by: "gap" } : s.forced ? { x: s.width / 2, band: 0, by: "center" } : null;
     }
     // 平らな紙: ふつうは紙の真ん中が折り目。何も無い帯がどのページでも真ん中から外れているときだけ、帯の中で分ける
     if (centered || !s.gap) {

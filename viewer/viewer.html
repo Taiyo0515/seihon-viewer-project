@@ -1390,7 +1390,16 @@
               <label class="sh-scan-mode"><input type="radio" name="shScanMode" value="none" />
                 <span><b>元のまま</b><span class="sh-scan-note">スキャンしたページをそのまま表示します</span></span></label>
             </fieldset>
-            <p id="shScanPortraitNote" class="sh-bind-help" hidden>この PDF は縦長のページなので、見開きの分割・冊子の並べ替えは選べません(スキャンした見開きは横長のページになります)。</p>
+            <p id="shScanPortraitNote" class="sh-bind-help" hidden>この PDF は縦長のページなので、見開きの分割・冊子の並べ替えは選べません(スキャンした見開きは横長のページになります。見開きを横に置いてスキャンしたものは、ノドが見つかれば分けられます)。</p>
+            <div id="shScanTurnRow" class="sh-bind-field" hidden>
+              <div class="sh-bind-field-label">ページの向き</div>
+              <div class="sh-bind-field-control">
+                <label><input type="radio" name="shScanTurn" value="auto" /> 自動(文字の向きから決める)</label>
+                <label><input type="radio" name="shScanTurn" value="cw" /> 時計回りに回す(文字の上が、左を向いているとき)</label>
+                <label><input type="radio" name="shScanTurn" value="ccw" /> 反時計回りに回す(文字の上が、右を向いているとき)</label>
+                <p class="sh-bind-help">見開きを横に置いてスキャンした(縦長のページに、見開きが横向きに写っている)ときの、回す向きです。回したあとで1ページずつに分けます。プレビューが上下逆さまなら、もう一方を選んでください。</p>
+              </div>
+            </div>
             <label class="sh-bind-check" id="shScanTrimRow"><input type="checkbox" id="shScanTrim" /> 余白を除く(スキャンで入った余分なふち・影・本の縁やごみを切り取り、全部のページを同じ大きさにそろえる)</label>
             <label class="sh-bind-check" id="shScanDeskewRow"><input type="checkbox" id="shScanDeskew" /> 傾きをまっすぐにする(ページごとに、文字の行・罫線がまっすぐになるよう回す)</label>
             <div id="shScanStraightenOptions" class="sh-bind-field" hidden>

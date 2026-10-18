@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "製本ビューア",
   "short_name": "製本ビューア",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "製本表示(表紙単独+見開き)に対応したPDFビューア。電子書籍(EPUB・MOBI・AZW3)とコミック(CBZ・CBR)も表示できます。",
   "minimum_chrome_version": "128",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqF1qN85jmrT0v3TcpKNv3ybB2yZx4voFA60QEldR5gcR0XKJLVC55czUlk8aOKZf2uuHxbNUoSNpiAeOJRgSM6ryK0YkSxz9nwgacj84FYczkYtjYDZd+UTXiAgnn9eClTBFgn5ASTuSVnvR2J/ki3xIWql8PSH0SuappL/ugoPR9ikOsRnA6h7okntKxTklf/KIsSWS92AHXShIfaDuVHSFJGKI1RPiHis+mKkj1uEuc7i70Wzek0+udx4BIfYNLVccUCujHndGtSTonxbdOuFDfN/29a2cQRrrNVelhnGfXGYi+XrYz4d5OqY8ENWRspeRWPzo52gH/1Kl37NYowIDAQAB",
