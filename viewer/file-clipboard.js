@@ -205,7 +205,8 @@ export async function revealInFolder(path) {
  * @param {string|null} [o.folder] 複数のファイルをまとめるフォルダの名前(「製本ビューア_コピー」の中に作る)
  * @param {(done:number, total:number) => void} [o.onProgress]
  * @returns {Promise<{mode:"files"|"path"|"saved", via:"helper"|"downloads", paths:string[], ids:number[], text?:string,
- *   reason?:string, error?:string}>}
+ *   reason?:string, error?:string, temp?:boolean}>}
+ *   temp: 補助プログラムが見えない一時フォルダに置いた使い捨てのファイル(フォルダを開くボタンは出さない)
  *   mode: files = ファイルとしてクリップボードに入れた / path = 場所を文字でクリップボードに入れた /
  *         saved = 保存はしたが、クリップボードには入れられなかった(このタブが前面に無かったなど)
  *   via: helper = 補助プログラムが保存した / downloads = Chrome のダウンロードで保存した(ids はダウンロードの ID)

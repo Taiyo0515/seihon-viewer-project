@@ -52,6 +52,7 @@ export class BookbindingDialog {
    * @param {object} o.docSource
    * @param {object} o.toast
    * @param {() => object} o.getSettings
+   * @param {(patch:object) => Promise<object>} [o.saveSettings] 設定の一部を保存する(プレビューを出さない・項目の変更を覚える)
    * @param {() => string} o.getDirection 表示中の綴じ方向
    * @param {() => void} o.onOpenRoles 役割のパネルを開く
    */

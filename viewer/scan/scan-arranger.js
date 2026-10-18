@@ -250,6 +250,7 @@ function rotateAbout(x, y, cx, cy, phiDeg) {
  * 傾きを直すために、ページの中身にかける変換(PDF の cm。元のページのユーザー空間の点 → 直したあとの点)。
  * 調べた画像(幅 W・高さ H 画素。ページ全体を覆う)の中心のまわりに、画像を phi 度回すのと同じ動きになる。
  * @param {number[]} transform 画像の座標へのビューポートの変換(scan.transform)
+ * @param {{angle:number, cx:number, cy:number}|null} [resid] 続けて、分けた1ページの範囲の中心(画像の座標)のまわりに回す角度(0.6.2)
  */
 export function deskewMatrix(transform, W, H, phiDeg, resid = null) {
   const f = (ux, uy) => {
@@ -950,7 +951,9 @@ export class ScanArranger {
 
   /**
    * 整え方から、作るページを決める。
-   * @returns {{pages:Array<{src:number, rect:number[]|null, rotate:number, scan:number, half:string|null}>}|{error:string}}
+   * @returns {{pages:Array<{src:number, scan:number, half:string|null, rect:number[]|null, rectPx:number[]|null, rotate:number,
+   *   masks:number[][], masksPx:number[][], angle:number, matrix:number[]|null, turn?:string|null}>}|{error:string}}
+   *   angle: 直す傾き(度。0 なら直さない)/ matrix: 傾きを直す変換(PDF の cm)/ turn: 横に置いた見開きを回した向き
    */
   plan(options, base = this.base) {
     if (options.mode === "straighten") {
@@ -1031,7 +1034,8 @@ export class ScanArranger {
   /**
    * 整えて表示する。
    * @param {object} options 整え方
-   * @param {{auto?:boolean, remember?:boolean}} [o] auto: 開いたときに自動で / remember: この PDF の整え方として覚える
+   * @param {{auto?:boolean, remember?:boolean, fromStart?:boolean}} [o] auto: 開いたときに自動で / remember: この PDF の整え方として覚える /
+   *   fromStart: いま見ているページではなく、本の最初のページから表示する
    * @returns {Promise<boolean>}
    */
   async arrange(options, { auto = false, remember = !auto, fromStart = false } = {}) {

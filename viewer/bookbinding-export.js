@@ -154,6 +154,7 @@ function setMetadata(pdf, title) {
  * @param {"separate"|"append"|"none"} o.obiOutput 付属の出力
  * @param {{book:string, imposed:string, obi:string}} o.fileNames
  * @param {(message:string) => void} [o.progress]
+ * @param {boolean} [o.includeEdits] 書き込み・フォームの入力を反映する(初期値 true。パスワード付きの PDF では false)
  * @returns {Promise<Array<{kind:string, fileName:string, bytes:Uint8Array, pages:number}>>}
  */
 export async function buildBookbindingFiles(o) {

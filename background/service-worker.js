@@ -890,9 +890,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true;
       }
       return undefined;
-    case "reapply-rules":
-      applyAll("request").then(() => sendResponse({ ok: true }));
-      return true;
     case "get-status":
       Promise.all([
         isFileAccessAllowed(),

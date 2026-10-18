@@ -8,7 +8,8 @@
  *  - findCenterGap: 真ん中の、何も書かれていない縦の帯を探す(ばらした冊子の紙など、ノドの影が無いもの)
  *  - contentBox: ページの中身(文字・図・書き込み)の範囲を探す。スキャンで入ったもの
  *    (ふたの影・本の縁の線・ごみ・綴じ穴の影など)は除く
- *  - classifyDocument / planSpread / planBooklet: 文書全体の判断と、分け方・切り取り方を決める
+ *  - classifyDocument / chooseSplits / cropRects / orderSpread / orderBooklet: 文書全体の判断と、分け方・切り取り方・並べ方を決める
+ *  - findSkew / analyzeFull(0.6): 傾きを調べる / 1枚を、傾き・横に置いた見開きも含めて調べる(Worker から呼ぶ)
  */
 
 /** これより暗い画素を「インク」とみなす(縮めた画像では細い線が薄くなるため、白に近めの値) */
@@ -1058,19 +1059,35 @@ function inkPoints(img, limit = 140000, small = false) {
 }
 
 /**
+ * 傾きを探すときに、角度ごとに使い回すもの(0.6.3)。点ごとの(cx, cy)からのずれを先に求めておき、箱も作り直さない
+ * (計算の中身と順は前と同じなので、結果も同じ)。
+ */
+function sharpnessWork(pts, cx, cy, size) {
+  const { xs, ys, n } = pts;
+  const dxs = new Float64Array(n);
+  const dys = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    dxs[i] = xs[i] - cx;
+    dys[i] = ys[i] - cy;
+  }
+  return { dxs, dys, n, size, bins: new Float32Array(size + 3), nz: new Float32Array(size + 3) };
+}
+
+/**
  * 点を(cx, cy)のまわりに phi 度(画面で時計回りが正)回したときの、行(または列)ごとの点の数の「くっきり度」。
  * 文字の行(縦書きなら列)がそろうほど、行ごとの点の数が大きく上下する。
+ * @param {object} work sharpnessWork() で作ったもの
  */
-function profileSharpness(pts, cx, cy, phiDeg, vertical, size) {
+function profileSharpness(work, phiDeg, vertical) {
   const t = (phiDeg * Math.PI) / 180;
   const cos = Math.cos(t);
   const sin = Math.sin(t);
-  const bins = new Float32Array(size + 3);
+  const { dxs, dys, n, size } = work;
+  const bins = work.bins.fill(0);
   const off = size / 2;
-  const { xs, ys, n } = pts;
   for (let i = 0; i < n; i++) {
-    const dx = xs[i] - cx;
-    const dy = ys[i] - cy;
+    const dx = dxs[i];
+    const dy = dys[i];
     const v = (vertical ? dx * cos - dy * sin : dx * sin + dy * cos) + off;
     const b = Math.floor(v);
     if (b >= 0 && b <= size) {
@@ -1081,17 +1098,19 @@ function profileSharpness(pts, cx, cy, phiDeg, vertical, size) {
     }
   }
   // 太い罫線・濃い網かけの帯(ページの中の1か所だけの大きな塊)が点数を独り占めしないよう、箱ごとの数に上限を設ける
-  const nz = [];
+  const nzAll = work.nz;
+  let len = 0;
   for (let i = 0; i < bins.length; i++) {
     if (bins[i] > 0.5) {
-      nz.push(bins[i]);
+      nzAll[len++] = bins[i];
     }
   }
-  if (nz.length < 8) {
+  if (len < 8) {
     return 0;
   }
-  nz.sort((a, b) => a - b);
-  const cap = nz[Math.floor(nz.length * 0.75)] * 3;
+  // 型付き配列の sort は数の小さい順に並べる(入るのは 0.5 より大きい数だけ)
+  const nz = nzAll.subarray(0, len).sort();
+  const cap = nz[Math.floor(len * 0.75)] * 3;
   let s = 0;
   for (let i = 1; i < bins.length; i++) {
     const d = Math.min(bins[i], cap) - Math.min(bins[i - 1], cap);
@@ -1102,8 +1121,9 @@ function profileSharpness(pts, cx, cy, phiDeg, vertical, size) {
 
 /**
  * スキャンの傾きを調べる。文字の行(縦書きなら列)・罫線がまっすぐ並ぶ角度を探す。
- * @returns {{angle:number, conf:number, vertical:boolean}} angle: まっすぐにするために画像を回す角度(度。画面で時計回りが正)/
- *   conf: 確からしさ(0〜。2以上ならほぼ確か)/ vertical: 縦書き(列でそろえた)か
+ * @returns {{angle:number, conf:number, vertical:boolean, all?:Array<{vertical:boolean, angle:number, conf:number}>}}
+ *   angle: まっすぐにするために画像を回す角度(度。画面で時計回りが正)/ conf: 確からしさ(0〜。3 以上なら直す)/
+ *   vertical: 縦書き(列でそろえた)か / all: 行・列のそれぞれでいちばんそろった角度(確かめる・調整するときの参考。見つかったときだけ)
  */
 export function findSkew(img, { maxDeg = SKEW_MAX_DEG } = {}) {
   const none = { angle: 0, conf: 0, vertical: false };
@@ -1116,6 +1136,7 @@ export function findSkew(img, { maxDeg = SKEW_MAX_DEG } = {}) {
   const cx = W / 2;
   const cy = H / 2;
   const size = Math.ceil(Math.hypot(W, H));
+  const work = sharpnessWork(pts, cx, cy, size);
   let best = null;
   const all = [];
   for (const vertical of [false, true]) {
@@ -1123,7 +1144,7 @@ export function findSkew(img, { maxDeg = SKEW_MAX_DEG } = {}) {
     const scores = [];
     let top = { phi: 0, s: -1 };
     for (let phi = -maxDeg; phi <= maxDeg + 1e-9; phi += 0.25) {
-      const s = profileSharpness(pts, cx, cy, phi, vertical, size);
+      const s = profileSharpness(work, phi, vertical);
       scores.push(s);
       if (s > top.s) {
         top = { phi, s };
@@ -1137,7 +1158,7 @@ export function findSkew(img, { maxDeg = SKEW_MAX_DEG } = {}) {
     ]) {
       const c = top.phi;
       for (let phi = c - span; phi <= c + span + 1e-9; phi += step) {
-        const s = profileSharpness(pts, cx, cy, phi, vertical, size);
+        const s = profileSharpness(work, phi, vertical);
         if (s > top.s) {
           top = { phi, s };
         }
@@ -1193,11 +1214,10 @@ export function rotateGray(gray, W, H, phiDeg) {
 }
 
 /**
- * 1枚のスキャンを調べる。
+ * 1枚のスキャンを調べる(ノド・真ん中の帯・上下の端のノドの影)。
  * @param {object} img {gray, width, height, pxPerMm}
- * @param {{trim?:boolean}} [o]
  * @returns {{width:number, height:number, pxPerMm:number, landscape:boolean, gutter:object|null, gap:object|null,
- *   halves:{L:number[]|null, R:number[]|null}|null}}
+ *   split:null, shadow?:object}} shadow: findEdgeShadow() の結果(横長のときだけ)
  */
 export function analyzeScan(img) {
   const { width: W, height: H } = img;
@@ -1442,7 +1462,6 @@ export function analyzeFull(img, { turn = true } = {}) {
     const d = analyzeScan(straight);
     d.skew = skew;
     d.candidates = candidateHalves(straight, d);
-    d.halfSkew = halfSkews(straight, d);
     scan.deskewed = d;
   }
   return scan;
@@ -1715,7 +1734,7 @@ export function cropRects(scans, splits, halves, { trim, marginMm = DEFAULT_MARG
   }
   if (bookLike) {
     // 0.4.1: 本のときも、紙の上下の端が分かるページがあれば、どのページの紙にも収まる高さまで縮める(中身は切らない)
-    const edges = paperEdgesMm(scans, splits, halves, true);
+    const edges = paperEdgesMm(scans, splits, halves);
     const spans = edges.spans.filter(v => v >= maxHeight + 2);
     if (spans.length) {
       frameHeight = Math.max(maxHeight + 2, Math.min(frameHeight, ...spans));

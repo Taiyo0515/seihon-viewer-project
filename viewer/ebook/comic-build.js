@@ -138,7 +138,7 @@ const MM = 72 / 25.4;
 
 /**
  * 画像を並べた PDF を作る。
- * @param {Array<{name:string, bytes:Uint8Array}>|(() => AsyncIterable)} images 並べる画像(この順にページにする)
+ * @param {Array<{name:string, bytes?:Uint8Array, blank?:boolean}>} images 並べる画像(この順にページにする。blank は白紙のページ)
  * @param {object} o
  * @param {string} o.title 題名
  * @param {"ltr"|"rtl"} o.direction 綴じ方向(右綴じなら見開きの分け方と、ほかのソフト向けの表示方向に使う)

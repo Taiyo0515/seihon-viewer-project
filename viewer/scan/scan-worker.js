@@ -2,7 +2,8 @@
  * スキャンの画像を調べる Worker(0.3)。調べる処理(scan-analysis.js)を画面の処理と別に動かし、
  * 調べている間もスクロールなどが重くならないようにする。
  *
- * 受け取る: {id, gray(ArrayBuffer), width, height, pxPerMm, previewWidth}
+ * 受け取る: {id, gray(ArrayBuffer), width, height, pxPerMm, previewWidth, turn}
+ *   turn(0.6): 縦長のページを、横に置いた見開きとしても調べるか(true / "force" はノドが無くても / false)
  * 返す: {id, scan, preview} / {id, error}
  */
 

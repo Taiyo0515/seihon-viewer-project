@@ -30,7 +30,7 @@ export class EbookUnsupportedError extends Error {
  * ファイルの種類と、表示のしかたを決める。
  * @param {Blob} blob
  * @param {string} name ファイル名
- * @returns {Promise<{format:string|null, route:"pdf"|"comic"|"reader"|null, bytes?:Uint8Array, epubImages?:object}>}
+ * @returns {Promise<{format:string|null, route:"pdf"|"comic"|"reader"|null, bytes?:Uint8Array, listing?:object, epubImages?:object}>}
  */
 export async function inspectEbook(blob, name) {
   const head = await readHead(blob, 256 * 1024);
@@ -398,7 +398,7 @@ function runWorker(message, transfer, onProgress) {
  * @param {"ltr"|"rtl"} o.fallback 本の情報が無いときの向き
  * @param {boolean} o.splitSpreads 見開きの画像を2ページに分ける
  * @param {(text:string) => void} [o.onStatus]
- * @returns {Promise<{bytes:Uint8Array, title:string, direction:"ltr"|"rtl", pages:number, images:number, skipped:string[], split:number}>}
+ * @returns {Promise<{bytes:Uint8Array, title:string, direction:"ltr"|"rtl", pages:number, images:number, skipped:string[], split:number, padded:number}>}
  */
 export async function buildComicPdf(blob, info, { baseName, direction = "auto", fallback = "rtl", splitSpreads = true, onStatus = null }) {
   const status = text => onStatus?.(text);
