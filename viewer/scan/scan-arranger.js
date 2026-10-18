@@ -251,18 +251,40 @@ function rotateAbout(x, y, cx, cy, phiDeg) {
  * 調べた画像(幅 W・高さ H 画素。ページ全体を覆う)の中心のまわりに、画像を phi 度回すのと同じ動きになる。
  * @param {number[]} transform 画像の座標へのビューポートの変換(scan.transform)
  */
-export function deskewMatrix(transform, W, H, phiDeg) {
+export function deskewMatrix(transform, W, H, phiDeg, resid = null) {
   const f = (ux, uy) => {
     const [a, b, c, d, e, g] = transform;
     const px = a * ux + c * uy + e;
     const py = b * ux + d * uy + g;
-    const [qx, qy] = rotateAbout(px, py, W / 2, H / 2, phiDeg);
+    let [qx, qy] = rotateAbout(px, py, W / 2, H / 2, phiDeg);
+    // 続けて、分けた1ページごとの傾き(そのページの範囲の中心のまわり。画像の座標)
+    if (resid) {
+      [qx, qy] = rotateAbout(qx, qy, resid.cx, resid.cy, resid.angle);
+    }
     return toPdfPoint(transform, qx, qy);
   };
   const p0 = f(0, 0);
   const p1 = f(1, 0);
   const p2 = f(0, 1);
   return [p1[0] - p0[0], p1[1] - p0[1], p2[0] - p0[0], p2[1] - p0[1], p0[0], p0[1]];
+}
+
+/**
+ * 見開きを分けた1ページごとの、残りの傾き(0.6.2)。見開き全体では傾いていなくても、左のページだけ傾いていることがある。
+ * 全体を phi0 だけ直したあと、そのページ自身の傾き(半分だけで調べたもの)との差を、そのページの中心のまわりで直す。
+ */
+function pageResidual(raws, o, phi0) {
+  const hs = raws?.halfSkew;
+  const h = hs && o.rect && (o.half === "L" || o.half === "R") ? hs[o.half] : null;
+  if (!h || !isSkewed(h)) {
+    return null;
+  }
+  const angle = Math.round((h.angle - phi0) * 100) / 100;
+  if (Math.abs(angle) < SKEW_MIN_DEG) {
+    return null;
+  }
+  const [x0, y0, x1, y1] = o.rect;
+  return { angle, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2 };
 }
 
 /** 調べた結果から、直す傾き(度)を決める。直さないページは 0 */
@@ -975,14 +997,16 @@ export class ScanArranger {
     return {
       pages: order.map(o => {
         const raws = raw[o.scan];
-        const angle = options.deskew && raws?.deskewed ? raws.skew.angle : 0;
+        const phi0 = options.deskew && raws?.deskewed ? raws.skew.angle : 0;
+        const resid = options.deskew ? pageResidual(raws, o, phi0) : null;
+        const angle = phi0 + (resid ? resid.angle : 0);
         const turned = turnDeg && base.scans[o.scan]?.turned && o.rect ? turnDeg : 0;
         return {
         src: o.scan,
         scan: o.scan,
         half: o.half,
         angle,
-        matrix: angle ? deskewMatrix(raws.transform, raws.width, raws.height, angle) : null,
+        matrix: angle ? deskewMatrix(raws.transform, raws.width, raws.height, phi0, resid) : null,
         rotate: ((o.rotate || 0) + turned) % 360,
         turn: turned ? turn : null,
         rectPx: o.rect,

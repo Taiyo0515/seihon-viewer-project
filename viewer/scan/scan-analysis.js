@@ -989,7 +989,7 @@ export function isSkewed(skew) {
  * 文字・罫線のように、まわりより濃い画素の位置を集める(影・ノド・紙の縁のような広い暗い部分は、まわりと変わらないので入らない)。
  * @returns {{xs:Float32Array, ys:Float32Array, n:number}}
  */
-function inkPoints(img, limit = 140000) {
+function inkPoints(img, limit = 140000, small = false) {
   const { gray, width: W, height: H } = img;
   // まわり(縦横およそ 8mm)の平均を、積分画像で求める
   const r = Math.max(4, Math.round(mmToPx(img, 4)));
@@ -1003,6 +1003,7 @@ function inkPoints(img, limit = 140000) {
     }
   }
   const pts = [];
+  const mask = new Uint8Array(W * H);
   for (let y = 0; y < H; y++) {
     const y0 = Math.max(0, y - r);
     const y1 = Math.min(H, y + r + 1);
@@ -1015,7 +1016,31 @@ function inkPoints(img, limit = 140000) {
       const x1 = Math.min(W, x + r + 1);
       const mean = (sat[y1 * stride + x1] - sat[y0 * stride + x1] - sat[y1 * stride + x0] + sat[y0 * stride + x0]) / ((x1 - x0) * (y1 - y0));
       if (v < mean - 45) {
-        pts.push(x, y);
+        mask[y * W + x] = 1;
+      }
+    }
+  }
+  // 文字のかけらの大きさのまとまりだけを使う(ノド・本の縁の長い影の線、ページの枠・太い罫線、網かけの帯は、
+  // 傾きを調べるときに大きな塊として効いてしまうので除く)
+  if (small) {
+    const { comps, labels } = labelComponents(mask, W, H);
+    const maxSide = img.pxPerMm * 9;
+    const keep = new Uint8Array(comps.length);
+    for (let id = 1; id < comps.length; id++) {
+      const c = comps[id];
+      keep[id] = c.x1 - c.x0 <= maxSide && c.y1 - c.y0 <= maxSide ? 1 : 0;
+    }
+    for (let i = 0; i < mask.length; i++) {
+      if (mask[i] && keep[labels[i]]) {
+        const y = (i / W) | 0;
+        pts.push(i - y * W, y);
+      }
+    }
+  } else {
+    for (let i = 0; i < mask.length; i++) {
+      if (mask[i]) {
+        const y = (i / W) | 0;
+        pts.push(i - y * W, y);
       }
     }
   }
@@ -1040,21 +1065,36 @@ function profileSharpness(pts, cx, cy, phiDeg, vertical, size) {
   const t = (phiDeg * Math.PI) / 180;
   const cos = Math.cos(t);
   const sin = Math.sin(t);
-  const bins = new Int32Array(size + 2);
+  const bins = new Float32Array(size + 3);
   const off = size / 2;
   const { xs, ys, n } = pts;
   for (let i = 0; i < n; i++) {
     const dx = xs[i] - cx;
     const dy = ys[i] - cy;
-    const v = vertical ? dx * cos - dy * sin : dx * sin + dy * cos;
-    const b = Math.round(v + off);
+    const v = (vertical ? dx * cos - dy * sin : dx * sin + dy * cos) + off;
+    const b = Math.floor(v);
     if (b >= 0 && b <= size) {
-      bins[b]++;
+      // 隣り合う2つの箱に振り分ける(画素の並びとぴったり合う角度(0度など)だけが有利にならないように)
+      const f = v - b;
+      bins[b] += 1 - f;
+      bins[b + 1] += f;
     }
   }
+  // 太い罫線・濃い網かけの帯(ページの中の1か所だけの大きな塊)が点数を独り占めしないよう、箱ごとの数に上限を設ける
+  const nz = [];
+  for (let i = 0; i < bins.length; i++) {
+    if (bins[i] > 0.5) {
+      nz.push(bins[i]);
+    }
+  }
+  if (nz.length < 8) {
+    return 0;
+  }
+  nz.sort((a, b) => a - b);
+  const cap = nz[Math.floor(nz.length * 0.75)] * 3;
   let s = 0;
   for (let i = 1; i < bins.length; i++) {
-    const d = bins[i] - bins[i - 1];
+    const d = Math.min(bins[i], cap) - Math.min(bins[i - 1], cap);
     s += d * d;
   }
   return s;
@@ -1068,7 +1108,7 @@ function profileSharpness(pts, cx, cy, phiDeg, vertical, size) {
 export function findSkew(img, { maxDeg = SKEW_MAX_DEG } = {}) {
   const none = { angle: 0, conf: 0, vertical: false };
   const { width: W, height: H } = img;
-  const pts = inkPoints(img);
+  const pts = inkPoints(img, 140000, true);
   // 文字・線がほとんど無いページ(白紙・写真だけ)は調べない
   if (pts.n < Math.max(400, W * H * 0.0015)) {
     return none;
@@ -1077,6 +1117,7 @@ export function findSkew(img, { maxDeg = SKEW_MAX_DEG } = {}) {
   const cy = H / 2;
   const size = Math.ceil(Math.hypot(W, H));
   let best = null;
+  const all = [];
   for (const vertical of [false, true]) {
     // 粗く(0.25度ずつ)→細かく(0.05度ずつ)→さらに細かく(0.01度ずつ)
     const scores = [];
@@ -1103,6 +1144,7 @@ export function findSkew(img, { maxDeg = SKEW_MAX_DEG } = {}) {
       }
     }
     const conf = top.s / med - 1;
+    all.push({ vertical, angle: Math.round(top.phi * 100) / 100, conf: Math.round(conf * 100) / 100 });
     if (!best || conf > best.conf) {
       best = { angle: top.phi, conf, vertical };
     }
@@ -1111,7 +1153,7 @@ export function findSkew(img, { maxDeg = SKEW_MAX_DEG } = {}) {
   if (!best || Math.abs(best.angle) > maxDeg - 0.3) {
     return none;
   }
-  return { angle: Math.round(best.angle * 100) / 100, conf: Math.round(best.conf * 100) / 100, vertical: best.vertical };
+  return { angle: Math.round(best.angle * 100) / 100, conf: Math.round(best.conf * 100) / 100, vertical: best.vertical, all };
 }
 
 /**
@@ -1350,6 +1392,33 @@ function analyzeTurned(img, force = false) {
 }
 
 /**
+ * 見開きの左右のページごとの傾き(0.6.2)。本のページは、左右で傾きが逆だったり、見開き全体の傾きと違ったりする
+ * (全体では 0 度でも、左のページは 0.7° 傾いていることがある)ので、分けるページごとに調べる。
+ * @returns {{x:number, L:{angle:number,conf:number}, R:{angle:number,conf:number}}|null} 見開きでなければ null
+ */
+function halfSkews(img, scan) {
+  if (!scan.landscape) {
+    return null;
+  }
+  const { width: W, height: H, gray } = img;
+  const x = scan.gutter?.ok ? scan.gutter.x : scan.gap ? scan.gap.x : W / 2;
+  const band = scan.gutter?.ok ? scan.gutter.band : 0;
+  const part = (a, b) => {
+    const w = Math.max(0, Math.round(b) - Math.round(a));
+    if (w < 40) {
+      return { angle: 0, conf: 0 };
+    }
+    const out = new Uint8Array(w * H);
+    for (let y = 0; y < H; y++) {
+      out.set(gray.subarray(y * W + Math.round(a), y * W + Math.round(a) + w), y * w);
+    }
+    const r = findSkew({ gray: out, width: w, height: H, pxPerMm: img.pxPerMm });
+    return { angle: r.angle, conf: r.conf };
+  };
+  return { x, L: part(0, x - band), R: part(x + band, W) };
+}
+
+/**
  * 1枚のスキャンを、傾きも含めて調べる(Worker と、Worker が使えないときの画面から呼ぶ)。
  * 傾きがあるページは、まっすぐにした画像でも調べ直して scan.deskewed に入れる
  * (見開きを分ける位置・余白の範囲を、まっすぐにしたあとの座標で決めるため)。
@@ -1359,6 +1428,7 @@ export function analyzeFull(img, { turn = true } = {}) {
   const scan = analyzeScan(img);
   scan.skew = skew;
   scan.candidates = candidateHalves(img, scan);
+  scan.halfSkew = halfSkews(img, scan);
   if (turn && !scan.landscape) {
     // 縦長のページ: 見開きを横に置いてスキャンしたものかも(回してノドが見つかれば、そうだとみなす。
     // turn が "force" のときは、ノドが見つからなくても、横に置いた見開きとして調べる)
@@ -1372,6 +1442,7 @@ export function analyzeFull(img, { turn = true } = {}) {
     const d = analyzeScan(straight);
     d.skew = skew;
     d.candidates = candidateHalves(straight, d);
+    d.halfSkew = halfSkews(straight, d);
     scan.deskewed = d;
   }
   return scan;
