@@ -55814,7 +55814,7 @@ class DataHandler {
         stack.push([-1, nodes]);
       }
     }
-    const buf = [`<xfa:datasets xmlns:xfa="http://www.xfa.org/schema/xfa-data/0.0.4/">`];
+    const buf = [`<xfa:datasets xmlns:xfa="http://www.xfa.org/schema/xfa-data/1.0/">`];
     if (this.dataset) {
       for (const child of this.dataset[$getChildren]()) {
         if (child[$nodeName] !== "data") {
