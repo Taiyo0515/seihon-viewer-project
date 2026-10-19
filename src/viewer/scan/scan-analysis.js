@@ -20,10 +20,14 @@ const FAINT_LEVEL = 190;
 export const DEFAULT_MARGIN_MM = 6;
 
 // ---- 0.6.4: 分けないページ(写真など)の余白 ----
-/** 分けないページで、紙の範囲が分かったときに、紙の周りに残す余白(mm) */
-const SINGLE_PAPER_MARGIN_MM = 2;
+/** 分けないページで、紙の範囲が分かったときに、紙の周りに残す余白(mm)。0 は紙の端ぴったり */
+const SINGLE_PAPER_MARGIN_MM = 0;
 /** 白い(明るい)背景とみなすいちばん暗い明るさ。これより暗い背景(机の上に置いて撮った写真など)では、紙は「背景より明るい」ので探す */
 const SINGLE_BG_LEVEL = 235;
+/** 0.6.4: 紙の端を締めるとき、辺に垂直な1線分の平均明るさが背景よりこれだけ下がった(暗い背景では上がった)位置を紙の端とする */
+const PAPER_EDGE_DROP = 25;
+/** 0.6.4: 紙の端が見つからなかった辺は、大まかな範囲からこれだけ内側に寄せておく(mm) */
+const PAPER_EDGE_FALLBACK_MM = 1.5;
 
 const mmToPx = (img, mm) => mm * img.pxPerMm;
 
@@ -1929,12 +1933,79 @@ function findPaperBox(img) {
       return null;
     }
   }
-  return [pick.x0, pick.y0, pick.x1, pick.y1];
+  const box = [pick.x0, pick.y0, pick.x1, pick.y1];
+  // 0.6.4: 落ち影などの薄い周りも「紙」とつながって拾われる(紙の端の外にハローが残る)。
+  // そのまま切り取ると紙のまわりに影が余白として残るので、紙の端の線まで締める
+  return tightenPaperBox(img, box, bg, bright);
 }
 
 /**
- * 分けないページの切り取る範囲。紙の範囲が分かれば、紙のまわりに小さい余白だけ残して切り取る
- * (背景の余白はいらない)。分からなければ、中身の周りに marginMm の余白を残す。
+ * 大まかに拾った紙の範囲を、紙の端の線まで締める(0.6.4)。
+ * 各辺ごとに、辺に垂直な1線分ずつの平均明るさを外側から調べ、
+ * 背景より PAPER_EDGE_DROP だけ下がった(暗い背景では上がった)最初の位置を紙の端とする。
+ * 紙の端の線(紙の縁の影や印刷の枠)は端にそって続くので平均が大きく下がる一方、
+ * 背景側の薄い影(調子が軽い)は下がらない——端のすきとおった影を避けるための締め方。
+ * 端が見つからなかった辺は PAPER_EDGE_FALLBACK_MM だけ内側に寄せる。
+ * @returns {number[]} [x0, y0, x1, y1]
+ */
+function tightenPaperBox(img, box, bg, bright) {
+  const { gray, width: W, pxPerMm } = img;
+  const [x0, y0, x1, y1] = box;
+  const xSpan = x1 - x0;
+  const ySpan = y1 - y0;
+  if (xSpan < 8 || ySpan < 8) {
+    return box;
+  }
+  // 辺に垂直な線ごとの平均明るさ
+  const cols = new Array(xSpan);
+  for (let x = x0; x < x1; x++) {
+    let sum = 0;
+    for (let y = y0; y < y1; y++) {
+      sum += gray[y * W + x];
+    }
+    cols[x - x0] = sum / ySpan;
+  }
+  const rows = new Array(ySpan);
+  for (let y = y0; y < y1; y++) {
+    const row = y * W;
+    let sum = 0;
+    for (let x = x0; x < x1; x++) {
+      sum += gray[row + x];
+    }
+    rows[y - y0] = sum / xSpan;
+  }
+  // 外から調べて、紙に入った(平均明るさが基準を超えた)何線分めを除くか
+  const lim = bright ? bg - PAPER_EDGE_DROP : bg + PAPER_EDGE_DROP;
+  const drop = (prof, fromEnd) => {
+    for (let i = 0; i < prof.length; i++) {
+      const v = prof[fromEnd ? prof.length - 1 - i : i];
+      if (bright ? v <= lim : v >= lim) {
+        return i;
+      }
+    }
+    return null;
+  };
+  const fallback = Math.max(1, Math.round(PAPER_EDGE_FALLBACK_MM * pxPerMm));
+  const dl = drop(cols, false);
+  const dr = drop(cols, true);
+  const dt = drop(rows, false);
+  const db = drop(rows, true);
+  const out = [
+    x0 + (dl ?? fallback),
+    y0 + (dt ?? fallback),
+    x1 - (dr ?? fallback),
+    y1 - (db ?? fallback),
+  ];
+  // 締めた結果が大まかな範囲よりずっと小さいときは、紙の端でなく中身だけを拾った疑い → 締めない
+  if (out[2] - out[0] < xSpan * 0.6 || out[3] - out[1] < ySpan * 0.6) {
+    return box;
+  }
+  return out;
+}
+
+/**
+ * 分けないページの切り取る範囲。紙の範囲が分ければ、紙の端ぴったりで切り取る
+ * (背景の余白・落ち影はいらない)。分からなければ、中身の周りに marginMm の余白を残す。
  * ページのほとんど全体を切り取るだけになる(=余白がほとんど無い)ときは、切り取らない(null)。
  */
 function singleRect(s, marginMm) {
