@@ -1,0 +1,21 @@
+# 試験の準備(dev/setup.sh)と試験が作るもの
+/dev/pdfs/
+/dev/logs/
+/dev/vendor/libarchivejs/libarchive.wasm
+/dev/opt-0.6.3/sa-base.mjs
+
+# 配布用の zip(python3 dev/make_dist.py で src/ から作る)
+/dist/
+
+# お預かりした大きなファイル・個人のスキャン(引き継ぎの zip には原本が入っている。git には入れない)
+/examples/previous-versions/*.zip
+/examples/scans/
+/examples/scan-images/
+
+# OS・道具が作るもの
+__pycache__/
+*.pyc
+node_modules/
+.DS_Store
+Thumbs.db
+desktop.ini

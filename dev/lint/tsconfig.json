@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "allowJs": true, "checkJs": true, "noEmit": true,
+    "target": "ES2023", "module": "ESNext", "moduleResolution": "bundler",
+    "lib": ["ES2023", "DOM", "DOM.Iterable", "WebWorker.ImportScripts"],
+    "strict": false, "noImplicitAny": false,
+    "noUnusedLocals": true, "noUnusedParameters": false,
+    "allowUnreachableCode": false, "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true, "maxNodeModuleJsDepth": 0, "types": []
+  },
+  "include": ["shim.d.ts",
+    "../../src/background/**/*.js",
+    "../../src/common/**/*.js",
+    "../../src/content/**/*.js",
+    "../../src/offscreen/**/*.js",
+    "../../src/options/**/*.js",
+    "../../src/reader/**/*.js",
+    "../../src/viewer/**/*.js",
+    "../../src/welcome/**/*.js",
+    "../../src/helper/mac/*.js"]
+}

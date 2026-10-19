@@ -1,0 +1,8 @@
+#!/bin/sh
+# 試験用の xclip: 受け取った引数と内容を記録するだけ
+LOG="${SEIHON_FAKE_XCLIP_LOG:-/tmp/fake-xclip.log}"
+{
+  echo "ARGS: $*"
+  cat
+  echo "--END--"
+} >> "$LOG"
