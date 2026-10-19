@@ -18,11 +18,11 @@
 | `tests/regress.mjs` | 0.0.4・0.1 の回帰試験(16 項目) |
 | `tests/phase6.mjs`〜`phase12.mjs` | 0.2〜0.6.1 の試験(33・24・27・8・12・10・8 項目) |
 | `tests/phase13.mjs` | 0.6.3 の試験(段階1 で見つけた不具合の再現と確認。7 項目) |
-| `gen/make_scan_samples.py` | 0.3 のスキャンの見本(`src/tools/test-server/samples/scan-*.pdf`)を作る |
+| `gen/make_scan_samples.py` | 0.3 のスキャンの見本(`src/tools/test-server/samples/` の `scan-spread.pdf`・`scan-booklet.pdf`・`scan-rotated.pdf`)を作る |
 | `gen/make_ebook_samples.py` | 0.4 の電子書籍・コミックの見本(`src/tools/test-server/samples/books/`)を作る |
 | `gen/make_skew_samples.py` | 0.6 の傾き・横置きの見本(`skew-portrait.pdf`・`skew-kokugo.pdf`・`turned-cw.pdf`・`turned-ccw.pdf`)を、お預かりした国語のスキャンから作る |
 | `gen/make_big_cbz.py` | 大きなコミック(`big-200.cbz`。200 ページ・約 48MB)を作る |
-| `fixtures/pdfs/` | 作り直せない小さな見本: `ocr-sample.pdf`(テスト用サーバーの8ページの本を Tesseract で OCR したもの)、`xmp-title.pdf`(XMP にも題名のある PDF) |
+| `fixtures/pdfs/` | 作り直せない小さな見本(作り方の記録が無い): `ocr-sample.pdf`(Tesseract 5.3.4 で作った、OCR の文字つきの3ページの画像の PDF。中身はテスト用サーバーの8ページの本)、`xmp-title.pdf`(文書情報と XMP の両方に題名「古い題名」がある 12ページの PDF) |
 | `fixtures/books/` | MOBI・AZW3・DRM 付き AZW の見本(Python の mobi パッケージ(iscc/mobi)の試験用ファイル `demo.mobi` から作ったもの。中の本は Project Gutenberg の "Children's Literature"(米国でパブリックドメイン)) |
 | `fixtures/dummy-dl-extension/` | 0.4.2 の試験で一緒に読み込むダミーの拡張機能(`downloads.onDeterminingFilename` を使い、Chrome がファイル名を GUID にする状態を作る) |
 | `fakebin/xclip` | 補助プログラム(Linux)の試験で使う偽物の xclip(受け取った内容を記録するだけ) |
@@ -34,7 +34,8 @@
 ## 必要なもの
 
 - Linux(試験は Xvfb の画面 `:99` を使う)
-- Node.js 22、Playwright 1.56 と、その Chromium(`npm install playwright` したもの。または環境変数 `PLAYWRIGHT_MODULE` で `playwright/index.mjs` の場所を指定)
+- Node.js 22、Playwright 1.56 と、その Chromium(`npm install playwright` と `npx playwright install chromium`。
+  別の場所に入っているときは、環境変数 `PLAYWRIGHT_MODULE` で `playwright/index.mjs` の場所を指定)
 - Xvfb、curl、poppler-utils(`pdfinfo`・`pdftotext`・`pdfimages`・`pdftoppm`)、qpdf、ImageMagick(`identify`)
 - Python 3 と Pillow・img2pdf・pikepdf
 - 見本を作り直すとき(`gen/make_scan_samples.py`・`make_ebook_samples.py`)は、Noto CJK のフォント(`/usr/share/fonts/opentype/noto/`)
