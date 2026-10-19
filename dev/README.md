@@ -76,7 +76,7 @@ npx tsc -p dev/lint/tsconfig.json                                       # TypeSc
 比べる前の版は、git の履歴から作ります。
 
 ```sh
-git show a9f6d8a:viewer/scan/scan-analysis.js > dev/opt-0.6.3/sa-base.mjs   # 段階1 の後・段階2 の前の解析の部品
+git show 77a16f0:viewer/scan/scan-analysis.js > dev/opt-0.6.3/sa-base.mjs   # 段階1 の後・段階2 の前の解析の部品
 node dev/opt-0.6.3/cmp.mjs <PGM の画像…>        # findSkew の結果が同じか・時間
 node dev/opt-0.6.3/edge.mjs                     # 境界の入力(白紙・真っ黒・ノイズ・とても小さい など 9 例)で同じか
 node dev/opt-0.6.3/timing2.mjs <PGM の画像…>    # analyzeFull の時間の比較
