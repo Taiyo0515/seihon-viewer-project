@@ -39,12 +39,14 @@ export class ScanChip {
     let title = "";
     switch (a.state) {
       case "suggest":
-        label = a.kind === "sheets" ? "冊子を並べ替える" : a.kind === "skewed" ? "傾きを直す" : "見開きを分ける";
+        label = a.kind === "sheets" ? "冊子を並べ替える" : a.kind === "trim" ? "余白を除く" : a.kind === "skewed" ? "傾きを直す" : "見開きを分ける";
         title =
           a.kind === "turned"
             ? "見開きを横に置いてスキャンしたものです。回して、1ページずつに分けて表示できます"
             : a.kind === "sheets"
             ? "2ページ分が並んだスキャンです。2つに分けて、表紙から順に並べ替えられます"
+            : a.kind === "trim"
+            ? "紙が背景の中に小さく写っています(写真など)。余白を除いて表示できます"
             : a.kind === "skewed"
               ? "傾いたスキャンです。まっすぐにして表示できます(画質は元のままです)"
               : "スキャンした見開きです。1ページずつに分けて、余白を除いて表示できます";
@@ -54,7 +56,7 @@ export class ScanChip {
         title = a.progress || "スキャンを整えています";
         break;
       case "arranged":
-        label = { booklet: "並べ替え表示", straighten: "傾き補正表示" }[a.arranged?.options.mode] || "分割表示";
+        label = { booklet: "並べ替え表示", straighten: "傾き補正表示", trim: "余白を除いた表示" }[a.arranged?.options.mode] || "分割表示";
         title = "スキャンを整えて表示しています(画質は元のまま)。押すと、元に戻す・整え方を変える・保存ができます";
         break;
       default:
@@ -114,8 +116,16 @@ export class ScanChip {
       hint: "ばらした中綴じの冊子を、両面スキャンしたもの",
       onSelect: () => a.arrange(a.defaultOptions("sheets")),
     };
+    const trim = {
+      label: "余白を除いて表示",
+      icon: "scan-split",
+      hint: "写真など、紙の周りに余白(背景)があるもの。紙の外の余白を取り除いて表示します",
+      onSelect: () => a.arrange(a.defaultOptions("trim")),
+    };
     return [
-      ...(a.kind === "skewed"
+      ...(a.kind === "trim"
+        ? [trim]
+        : a.kind === "skewed"
         ? [straighten]
         : a.kind === "turned"
           ? [spread, straighten]
@@ -238,6 +248,8 @@ export class ScanDialog {
     for (const [v, ok] of [
       ["spread", this.landscape || this.canSplit],
       ["booklet", this.landscape],
+      // 0.6.4: 余白を除く(写真など)は、縦長のページでも使える
+      ["trim", true],
     ]) {
       const el = this.dialog.querySelector(`input[name="shScanMode"][value="${v}"]`);
       if (el) {
@@ -414,6 +426,7 @@ export class ScanDialog {
             unsplit: "縦長のページなど、2つに分けられないページがあるため、冊子の順に並べ替えられません。",
             empty: "分けられるページが見つかりませんでした(横長のスキャンではないようです)。",
             noskew: "傾いているページが見つかりませんでした。上の「傾きの角度」を指定すると、全部のページをその角度だけ回せます。",
+            notrim: "余白を除けるページが見つかりませんでした(紙がページいっぱいに写っているものなど)。",
           }[plan.error] || "この方法では整えられません。"
         );
         this.applyButton.disabled = true;

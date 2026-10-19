@@ -940,10 +940,10 @@ const moreMenu = new PopupMenu({
       { separator: true },
       { label: "製本用PDF出力…", icon: "bind-output", disabled: !hasDoc, onSelect: () => bindDialog.open() },
       {
-        label: "スキャンを整える(見開きの分割・冊子の並べ替え)…",
+        label: "スキャンを整える(見開きの分割・余白の除去・冊子の並べ替え)…",
         icon: "scan-split",
         disabled: !hasDoc || !scanArranger.base || scanArranger.state === "busy",
-        hint: "スキャンした見開きを1ページずつに分けたり、ばらした冊子を表紙から順に並べ替えたりします(画質は元のまま)",
+        hint: "スキャンした見開きを1ページずつに分けたり、紙の周りの余白(写真など)を除いたり、ばらした冊子を表紙から順に並べ替えたりします(画質は元のまま)",
         onSelect: () => scanDialog.open(),
       },
       {

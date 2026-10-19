@@ -20,6 +20,7 @@ import {
   chooseSplits,
   classifyDocument,
   cropRects,
+  cropSingles,
   halvesFor,
   isSkewed,
   orderBooklet,
@@ -48,7 +49,7 @@ const PORTRAIT_LIMIT_BYTES = 150 * 1024 * 1024;
 /** 縦長の PDF で、1ページがこれより軽く文字があれば、スキャンではないとみなす */
 const LIGHT_PAGE_BYTES = 100 * 1024;
 
-export const MODE_SUFFIX = Object.freeze({ spread: "_分割", booklet: "_並べ替え", straighten: "_傾き補正" });
+export const MODE_SUFFIX = Object.freeze({ spread: "_分割", booklet: "_並べ替え", straighten: "_傾き補正", trim: "_余白" });
 
 // ---------------------------------------------------------------------------
 // 整え方
@@ -64,13 +65,14 @@ export function normalizeOptions(o) {
   if (!o || typeof o !== "object") {
     return null;
   }
-  const mode = ["spread", "booklet", "straighten", "none"].includes(o.mode) ? o.mode : null;
+  const mode = ["spread", "booklet", "straighten", "none", "trim"].includes(o.mode) ? o.mode : null;
   if (!mode) {
     return null;
   }
   return {
     mode,
-    trim: typeof o.trim === "boolean" ? o.trim : mode === "spread",
+    // "trim"(0.6.4)は、分けないページの余白を除く。常に余白を除く
+    trim: mode === "trim" ? true : typeof o.trim === "boolean" ? o.trim : mode === "spread",
     direction: o.direction === "rtl" ? "rtl" : "ltr",
     sheetOrder: o.sheetOrder === "inner" ? "inner" : "outer",
     firstSide: o.firstSide === "inner" ? "inner" : "outer",
@@ -321,6 +323,7 @@ const PLAN_ERRORS = {
   unsplit: "縦長のページなど、2つに分けられないページがあるため、冊子の順に並べ替えられません。",
   mapping: "冊子の順に並べ替えられませんでした。",
   empty: "分けられるページがありませんでした。",
+  notrim: "余白を除けるページがありませんでした(紙がページいっぱいに写っているものなど)。",
 };
 
 // ---------------------------------------------------------------------------
@@ -658,7 +661,9 @@ export class ScanArranger {
       return;
     }
     if (sum.skewed < Math.ceil(quick.length / 3)) {
-      return; // 傾いていない
+      // 傾いていない: 紙が余白の中に写っている(写真など)なら、余白を除いて表示できると知らせる(0.6.4)
+      await this.suggestTrim(base);
+      return;
     }
     base.kind = "skewed";
     base.skew = sum;
@@ -668,6 +673,47 @@ export class ScanArranger {
         duration: 10000,
         actions: [
           { label: "まっすぐにする", onClick: () => this.arrange(this.defaultOptions("skewed")) },
+          { label: "整え方…", onClick: () => this.openDialog?.() },
+        ],
+      });
+    }
+  }
+
+  /**
+   * 縦長のスキャンで、分けられない・傾いていないとき(写真など): 紙の周りの余白を除けるときは、知らせる(0.6.4)。
+   * 傾きも見つからず、横に置いた見開きでもない縦長のスキャン(はがきを撮った写真など)に使う。
+   */
+  async suggestTrim(base) {
+    const settings = this.getSettings();
+    if (settings.scanArrange === "off" || !settings.scanTrim) {
+      return;
+    }
+    // 大きな PDF は、勝手に整えない(見開きの自動の分割と同じ目安)
+    const info = await base.doc.getDownloadInfo().catch(() => null);
+    if ((info?.length || 0) > AUTO_LIMIT_BYTES || !this.alive(base) || !base.scans) {
+      return;
+    }
+    // 調べたページに、余白を除けるものが無いときは、何もしない(ふつうのスキャン・文書)
+    if (!cropSingles(base.scans).some(Boolean)) {
+      return;
+    }
+    base.kind = "trim";
+    base.checked = true;
+    const choice = base.choice;
+    if (choice && choice.mode !== "none") {
+      await this.arrange(choice, { auto: true });
+      return;
+    }
+    if (!choice && settings.scanArrange === "auto") {
+      await this.arrange(this.defaultOptions(), { auto: true });
+      return;
+    }
+    this.setState("suggest");
+    if (!choice) {
+      this.suggestToast = this.toast.show("紙が背景の中に小さく写っているようです(写真など)。余白を除いて表示できます", {
+        duration: 10000,
+        actions: [
+          { label: "余白を除く", onClick: () => this.arrange(this.defaultOptions()) },
           { label: "整え方…", onClick: () => this.openDialog?.() },
         ],
       });
@@ -704,6 +750,10 @@ export class ScanArranger {
     }
     if (kind === "sheets") {
       return normalizeOptions({ mode: "booklet", trim: false, direction, deskew });
+    }
+    if (kind === "trim") {
+      // 0.6.4: 分けないページの余白を除く(写真など)
+      return normalizeOptions({ mode: "trim", direction, deskew });
     }
     return normalizeOptions({ mode: "spread", trim: settings.scanTrim, direction, reverse: settings.scanFirstPage === "last", deskew });
   }
@@ -982,21 +1032,30 @@ export class ScanArranger {
     // 傾きを直すときは、まっすぐにした画像で調べた結果(分ける位置・余白の範囲)を使う
     const scans = options.deskew ? raw.map(s => (s?.deskewed ? { ...s.deskewed, transform: s.transform, pure: s.pure } : s)) : raw;
     const kind = options.mode === "booklet" ? "sheets" : "spread";
-    const splits = chooseSplits(scans, kind);
-    if (!splits.some(Boolean)) {
-      return { error: "empty" };
-    }
-    const halves = scans.map((s, i) => (splits[i] ? halvesFor(s, splits[i]) : null));
-    const rects = cropRects(scans, splits, halves, { trim: options.trim });
     let order;
-    if (options.mode === "booklet") {
-      const r = orderBooklet(rects, options);
-      if (!r.pages) {
-        return { error: r.error };
+    if (options.mode === "trim") {
+      // 0.6.4: 分けないページ(写真など)の余白を除く。1枚のスキャンが、そのまま1ページになる
+      const rects = cropSingles(scans);
+      if (!rects.some(Boolean)) {
+        return { error: "notrim" };
       }
-      order = r.pages;
+      order = rects.map((r, i) => ({ scan: i, half: null, rect: r, masks: [], rotate: 0 }));
     } else {
-      order = orderSpread(rects, options.direction, options.reverse);
+      const splits = chooseSplits(scans, kind);
+      if (!splits.some(Boolean)) {
+        return { error: "empty" };
+      }
+      const halves = scans.map((s, i) => (splits[i] ? halvesFor(s, splits[i]) : null));
+      const rects = cropRects(scans, splits, halves, { trim: options.trim });
+      if (options.mode === "booklet") {
+        const r = orderBooklet(rects, options);
+        if (!r.pages) {
+          return { error: r.error };
+        }
+        order = r.pages;
+      } else {
+        order = orderSpread(rects, options.direction, options.reverse);
+      }
     }
     return {
       pages: order.map(o => {
@@ -1162,7 +1221,9 @@ export class ScanArranger {
     const what =
       options.mode === "straighten"
         ? `傾きをまっすぐにして表示しています(${skewed}ページ)`
-        : options.turn !== "none" && this.arranged.pages.some(p => p.turn)
+        : options.mode === "trim"
+          ? "余白を除いて表示しています" + (options.deskew && skewed ? "(傾きも直しました)" : "")
+          : options.turn !== "none" && this.arranged.pages.some(p => p.turn)
           ? `横に置いてスキャンした見開きを、回して1ページずつに分けて表示しています${options.trim ? "(余白も除きました)" : ""}${options.deskew && skewed ? "(傾きも直しました)" : ""}`
         : (options.mode === "booklet"
             ? "冊子を、表紙から順に並べ替えて表示しています"
