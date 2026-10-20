@@ -28,6 +28,13 @@ const SINGLE_BG_LEVEL = 235;
 const PAPER_EDGE_DROP = 25;
 /** 0.6.4: 紙の端が見つからなかった辺は、大まかな範囲からこれだけ内側に寄せておく(mm) */
 const PAPER_EDGE_FALLBACK_MM = 1.5;
+/** 0.6.4: 「端にそって続く濃い線」(紙の端の線)とみなす最短の長さ(辺の長さに対する割合)。文字や文章の行は途切れ途切れなので、これだけ続くのは端の線 */
+const PAPER_LINE_RUN = 0.12;
+/** 0.6.4: 紙の端の線まで締めを延ばすときの上限(辺の長さに対する割合) */
+const PAPER_LINE_EXT_MAX = 0.08;
+/** 0.6.4: 端の線の判定に使う濃さ。白い背景では背景よりこれだけ暗い画素の並び、暗い背景ではこれだけ明るい */
+const LINE_DARKER = 15;
+const LINE_BRIGHTER = 40;
 
 const mmToPx = (img, mm) => mm * img.pxPerMm;
 
@@ -1943,8 +1950,9 @@ function findPaperBox(img) {
  * 大まかに拾った紙の範囲を、紙の端の線まで締める(0.6.4)。
  * 各辺ごとに、辺に垂直な1線分ずつの平均明るさを外側から調べ、
  * 背景より PAPER_EDGE_DROP だけ下がった(暗い背景では上がった)最初の位置を紙の端とする。
- * 紙の端の線(紙の縁の影や印刷の枠)は端にそって続くので平均が大きく下がる一方、
- * 背景側の薄い影(調子が軽い)は下がらない——端のすきとおった影を避けるための締め方。
+ * ただし文字・文章の行でも平均明るさは下がる(紙の端に近い位置に印刷があるはがきなど)ので、
+ * 端にそって PAPER_LINE_RUN 以上続く濃い線(紙の端の線)がその外側にあれば、端の線の位置まで締めを延ばす。
+ * 紙の端の線は辺に沿って続くが、文字の行は途切れ途切れなので区別できる。
  * 端が見つからなかった辺は PAPER_EDGE_FALLBACK_MM だけ内側に寄せる。
  * @returns {number[]} [x0, y0, x1, y1]
  */
@@ -1985,17 +1993,69 @@ function tightenPaperBox(img, box, bg, bright) {
     }
     return null;
   };
+  // 端にそって続く濃い線(紙の端の線)の位置。外から見て、初めて線分の中で濃い並びが
+  // 辺の長さの PAPER_LINE_RUN 以上続いた位置
+  const runMinX = Math.round(xSpan * PAPER_LINE_RUN);
+  const runMinY = Math.round(ySpan * PAPER_LINE_RUN);
+  const strong = bright ? v => v <= bg - LINE_DARKER : v => v >= bg + LINE_BRIGHTER;
+  const lineRow = fromEnd => {
+    for (let k = 0; k < ySpan; k++) {
+      const y = fromEnd ? y1 - 1 - k : y0 + k;
+      const row = y * W;
+      let cur = 0;
+      for (let x = x0; x < x1; x++) {
+        if (strong(gray[row + x])) {
+          cur++;
+          if (cur >= runMinX) {
+            return y;
+          }
+        } else {
+          cur = 0;
+        }
+      }
+    }
+    return null;
+  };
+  const lineCol = fromEnd => {
+    for (let k = 0; k < xSpan; k++) {
+      const x = fromEnd ? x1 - 1 - k : x0 + k;
+      let cur = 0;
+      for (let y = y0; y < y1; y++) {
+        if (strong(gray[y * W + x])) {
+          cur++;
+          if (cur >= runMinY) {
+            return x;
+          }
+        } else {
+          cur = 0;
+        }
+      }
+    }
+    return null;
+  };
   const fallback = Math.max(1, Math.round(PAPER_EDGE_FALLBACK_MM * pxPerMm));
   const dl = drop(cols, false);
   const dr = drop(cols, true);
   const dt = drop(rows, false);
   const db = drop(rows, true);
-  const out = [
-    x0 + (dl ?? fallback),
-    y0 + (dt ?? fallback),
-    x1 - (dr ?? fallback),
-    y1 - (db ?? fallback),
-  ];
+  const x0Mean = x0 + (dl ?? fallback);
+  const y0Mean = y0 + (dt ?? fallback);
+  const x1Mean = x1 - (dr ?? fallback);
+  const y1Mean = y1 - (db ?? fallback);
+  // 端の線の位置が、平均明るさでの切り端(文字・文章の行)より外側のときは、
+  // 端の線まで締めを延ばす(広げる)。延ばしすぎの疑い(中身の罫線など)は上限で切る
+  const runMaxX = Math.round(xSpan * PAPER_LINE_EXT_MAX);
+  const runMaxY = Math.round(ySpan * PAPER_LINE_EXT_MAX);
+  const lt = lineRow(false);
+  const lb = lineRow(true);
+  const ll = lineCol(false);
+  const lr = lineCol(true);
+  const extOk = (d, cap) => d > 0 && d <= cap;
+  const y0Out = lt != null && extOk(y0Mean - lt, runMaxY) ? lt : y0Mean;
+  const y1Out = lb != null && extOk(lb + 1 - y1Mean, runMaxY) ? lb + 1 : y1Mean;
+  const x0Out = ll != null && extOk(x0Mean - ll, runMaxX) ? ll : x0Mean;
+  const x1Out = lr != null && extOk(lr + 1 - x1Mean, runMaxX) ? lr + 1 : x1Mean;
+  const out = [x0Out, y0Out, x1Out, y1Out];
   // 締めた結果が大まかな範囲よりずっと小さいときは、紙の端でなく中身だけを拾った疑い → 締めない
   if (out[2] - out[0] < xSpan * 0.6 || out[3] - out[1] < ySpan * 0.6) {
     return box;
