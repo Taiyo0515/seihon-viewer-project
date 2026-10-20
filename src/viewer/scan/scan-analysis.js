@@ -24,10 +24,8 @@ export const DEFAULT_MARGIN_MM = 6;
 const SINGLE_PAPER_MARGIN_MM = 0;
 /** 白い(明るい)背景とみなすいちばん暗い明るさ。これより暗い背景(机の上に置いて撮った写真など)では、紙は「背景より明るい」ので探す */
 const SINGLE_BG_LEVEL = 235;
-/** 0.6.4: 紙の端を締めるとき、辺に垂直な1線分の平均明るさが背景よりこれだけ下がった(暗い背景では上がった)位置を紙の端とする */
-const PAPER_EDGE_DROP = 25;
-/** 0.6.4: 紙の端が見つからなかった辺は、大まかな範囲からこれだけ内側に寄せておく(mm) */
-const PAPER_EDGE_FALLBACK_MM = 1.5;
+/** 0.6.4: 「紙が始まる」とみなす、外側に見た線分の中での紙の色(背景よりわずかに暗い/明るい面の画素)の割合 */
+const PAPER_D_MIN = 0.5;
 /** 0.6.4: 「端にそって続く濃い線」(紙の端の線)とみなす最短の長さ(辺の長さに対する割合)。文字や文章の行は途切れ途切れなので、これだけ続くのは端の線 */
 const PAPER_LINE_RUN = 0.12;
 /** 0.6.4: 紙の端の線まで締めを延ばすときの上限(辺の長さに対する割合) */
@@ -35,6 +33,8 @@ const PAPER_LINE_EXT_MAX = 0.08;
 /** 0.6.4: 端の線の判定に使う濃さ。白い背景では背景よりこれだけ暗い画素の並び、暗い背景ではこれだけ明るい */
 const LINE_DARKER = 15;
 const LINE_BRIGHTER = 40;
+/** 0.6.4: 締めを延ばす区間が紙の白い余白(明るい画素がこの割合以上)を横切るときは延ばさない(中身の罫線を拾うのを防ぐ) */
+const PAPER_LINE_ZONE_MAX = 0.9;
 
 const mmToPx = (img, mm) => mm * img.pxPerMm;
 
@@ -1942,59 +1942,67 @@ function findPaperBox(img) {
   }
   const box = [pick.x0, pick.y0, pick.x1, pick.y1];
   // 0.6.4: 落ち影などの薄い周りも「紙」とつながって拾われる(紙の端の外にハローが残る)。
-  // そのまま切り取ると紙のまわりに影が余白として残るので、紙の端の線まで締める
-  return tightenPaperBox(img, box, bg, bright);
+  // そのまま切り取ると紙のまわりに影が余白として残るので、紙の端まで締める
+  return tightenPaperBox(img, box, bg, bright, ink);
 }
 
 /**
- * 大まかに拾った紙の範囲を、紙の端の線まで締める(0.6.4)。
- * 各辺ごとに、辺に垂直な1線分ずつの平均明るさを外側から調べ、
- * 背景より PAPER_EDGE_DROP だけ下がった(暗い背景では上がった)最初の位置を紙の端とする。
- * ただし文字・文章の行でも平均明るさは下がる(紙の端に近い位置に印刷があるはがきなど)ので、
- * 端にそって PAPER_LINE_RUN 以上続く濃い線(紙の端の線)がその外側にあれば、端の線の位置まで締めを延ばす。
- * 紙の端の線は辺に沿って続くが、文字の行は途切れ途切れなので区別できる。
- * 端が見つからなかった辺は PAPER_EDGE_FALLBACK_MM だけ内側に寄せる。
+ * 大まかに拾った紙の範囲を、紙の端まで締める(0.6.4)。
+ * 各辺ごとに、外側から走査して最初に「紙の色」(紙の面・縁・端の線)が線分の中で
+ * PAPER_D_MIN 以上を占める位置を紙の端とする。はがきの縁の茶色い部分や白い面も
+ * 紙の色として数値に入っているので、紙の中を削らない。
+ * 紙の色が分からない辺は締めない(大まかな範囲のまま)。
+ * 補正: 紙の端に文字・文章がくっついて印字されているはがきなどでは、
+ * 端にそって PAPER_LINE_RUN 以上続く濃い線(紙の端の線)が締めた位置のさらに外側に
+ * あるときは、端の線の位置まで締めを広げる。紙の白い余白(明るい面)を横切るときは
+ * 広げない(中身の罫線を端と取り違えるのを防ぐ)。内側の線(文字・罫線)では広げない。
+ * @param {Uint8Array} ink findPaperBox() で作った紙の色のマスク(1 = 紙の色)
  * @returns {number[]} [x0, y0, x1, y1]
  */
-function tightenPaperBox(img, box, bg, bright) {
-  const { gray, width: W, pxPerMm } = img;
+function tightenPaperBox(img, box, bg, bright, ink) {
+  const { gray, width: W } = img;
   const [x0, y0, x1, y1] = box;
   const xSpan = x1 - x0;
   const ySpan = y1 - y0;
   if (xSpan < 8 || ySpan < 8) {
     return box;
   }
-  // 辺に垂直な線ごとの平均明るさ
-  const cols = new Array(xSpan);
+  // 辺に垂直な線ごとの「紙の色」の割合
+  const colD = new Array(xSpan);
   for (let x = x0; x < x1; x++) {
-    let sum = 0;
+    let n = 0;
     for (let y = y0; y < y1; y++) {
-      sum += gray[y * W + x];
+      n += ink[y * W + x];
     }
-    cols[x - x0] = sum / ySpan;
+    colD[x - x0] = n / ySpan;
   }
-  const rows = new Array(ySpan);
+  const rowD = new Array(ySpan);
   for (let y = y0; y < y1; y++) {
     const row = y * W;
-    let sum = 0;
+    let n = 0;
     for (let x = x0; x < x1; x++) {
-      sum += gray[row + x];
+      n += ink[row + x];
     }
-    rows[y - y0] = sum / xSpan;
+    rowD[y - y0] = n / xSpan;
   }
-  // 外から調べて、紙に入った(平均明るさが基準を超えた)何線分めを除くか
-  const lim = bright ? bg - PAPER_EDGE_DROP : bg + PAPER_EDGE_DROP;
-  const drop = (prof, fromEnd) => {
+  // 外から走査して、紙の色が PAPER_D_MIN 以上になった最初の位置
+  const first = (prof, fromEnd) => {
     for (let i = 0; i < prof.length; i++) {
-      const v = prof[fromEnd ? prof.length - 1 - i : i];
-      if (bright ? v <= lim : v >= lim) {
+      if (prof[fromEnd ? prof.length - 1 - i : i] >= PAPER_D_MIN) {
         return i;
       }
     }
     return null;
   };
-  // 端にそって続く濃い線(紙の端の線)の位置。外から見て、初めて線分の中で濃い並びが
-  // 辺の長さの PAPER_LINE_RUN 以上続いた位置
+  const dl = first(colD, false);
+  const dr = first(colD, true);
+  const dt = first(rowD, false);
+  const db = first(rowD, true);
+  const x0Mean = dl == null ? null : x0 + dl;
+  const x1Mean = dr == null ? null : x1 - dr;
+  const y0Mean = dt == null ? null : y0 + dt;
+  const y1Mean = db == null ? null : y1 - db;
+  // 端にそって続く濃い線(紙の端の線)の位置
   const runMinX = Math.round(xSpan * PAPER_LINE_RUN);
   const runMinY = Math.round(ySpan * PAPER_LINE_RUN);
   const strong = bright ? v => v <= bg - LINE_DARKER : v => v >= bg + LINE_BRIGHTER;
@@ -2033,29 +2041,70 @@ function tightenPaperBox(img, box, bg, bright) {
     }
     return null;
   };
-  const fallback = Math.max(1, Math.round(PAPER_EDGE_FALLBACK_MM * pxPerMm));
-  const dl = drop(cols, false);
-  const dr = drop(cols, true);
-  const dt = drop(rows, false);
-  const db = drop(rows, true);
-  const x0Mean = x0 + (dl ?? fallback);
-  const y0Mean = y0 + (dt ?? fallback);
-  const x1Mean = x1 - (dr ?? fallback);
-  const y1Mean = y1 - (db ?? fallback);
-  // 端の線の位置が、平均明るさでの切り端(文字・文章の行)より外側のときは、
-  // 端の線まで締めを延ばす(広げる)。延ばしすぎの疑い(中身の罫線など)は上限で切る
-  const runMaxX = Math.round(xSpan * PAPER_LINE_EXT_MAX);
-  const runMaxY = Math.round(ySpan * PAPER_LINE_EXT_MAX);
   const lt = lineRow(false);
   const lb = lineRow(true);
   const ll = lineCol(false);
   const lr = lineCol(true);
-  const extOk = (d, cap) => d > 0 && d <= cap;
-  const y0Out = lt != null && extOk(y0Mean - lt, runMaxY) ? lt : y0Mean;
-  const y1Out = lb != null && extOk(lb + 1 - y1Mean, runMaxY) ? lb + 1 : y1Mean;
-  const x0Out = ll != null && extOk(x0Mean - ll, runMaxX) ? ll : x0Mean;
-  const x1Out = lr != null && extOk(lr + 1 - x1Mean, runMaxX) ? lr + 1 : x1Mean;
-  const out = [x0Out, y0Out, x1Out, y1Out];
+  // 濃い線が締めた位置のさらに外側にあるとき(締めた位置が紙の中のとき)は、端の線まで広げる候補
+  const runMaxX = Math.round(xSpan * PAPER_LINE_EXT_MAX);
+  const runMaxY = Math.round(ySpan * PAPER_LINE_EXT_MAX);
+  // 広げる区間が紙の白い余白(背景と同じ明るさの面)を横切るときは、端の線は中身の罫線 → 広げない
+  const brightish = bright ? v => v >= bg - 4 : v => v <= bg + 4;
+  const zoneRatio = (vertical, a, b) => {
+    let n = 0;
+    let all = 0;
+    const lo = Math.min(a, b);
+    const hi = Math.max(a, b);
+    if (vertical) {
+      for (let y = lo; y < hi; y++) {
+        const row = y * W;
+        for (let x = x0; x < x1; x++) {
+          all++;
+          if (brightish(gray[row + x])) {
+            n++;
+          }
+        }
+      }
+    } else {
+      for (let x = lo; x < hi; x++) {
+        for (let y = y0; y < y1; y++) {
+          all++;
+          if (brightish(gray[y * W + x])) {
+            n++;
+          }
+        }
+      }
+    }
+    return all ? n / all : 1;
+  };
+  const grow = (meanCut, candAbs, cap, vertical, candOutward) => {
+    if (meanCut == null) {
+      return null;
+    }
+    if (candAbs == null) {
+      return meanCut;
+    }
+    // candAbs が meanCut より外側のときだけ広げる(top / left は candAbs が小さくなる向き、
+    // bottom / right は大きくなる向き)。内側の候補(中身の罫線など)は無視して紙を削らない
+    const d = candOutward ? candAbs - meanCut : meanCut - candAbs;
+    if (d <= 0 || d > cap) {
+      return meanCut;
+    }
+    if (zoneRatio(vertical, candAbs, meanCut) >= PAPER_LINE_ZONE_MAX) {
+      return meanCut;
+    }
+    return candAbs; // top / left: この位置から(含める)。bottom / right: 呼び出し側で +1 する
+  };
+  const y0Out = grow(y0Mean, lt, runMaxY, true, false) ?? y0;
+  const y1Out = lb == null ? y1Mean : grow(y1Mean, lb + 1, runMaxY, true, true) ?? y1Mean;
+  const x0Out = grow(x0Mean, ll, runMaxX, false, false) ?? x0;
+  const x1Out = lr == null ? x1Mean : grow(x1Mean, lr + 1, runMaxX, false, true) ?? x1Mean;
+  const out = [
+    x0Out == null ? x0 : x0Out,
+    y0Out == null ? y0 : y0Out,
+    x1Out == null ? x1 : x1Out,
+    y1Out == null ? y1 : y1Out,
+  ];
   // 締めた結果が大まかな範囲よりずっと小さいときは、紙の端でなく中身だけを拾った疑い → 締めない
   if (out[2] - out[0] < xSpan * 0.6 || out[3] - out[1] < ySpan * 0.6) {
     return box;
