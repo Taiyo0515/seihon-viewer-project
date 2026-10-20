@@ -35,6 +35,10 @@ const LINE_DARKER = 15;
 const LINE_BRIGHTER = 40;
 /** 0.6.4: 締めを延ばす区間が紙の白い余白(明るい画素がこの割合以上)を横切るときは延ばさない(中身の罫線を拾うのを防ぐ) */
 const PAPER_LINE_ZONE_MAX = 0.9;
+/** 0.6.4: トーン境界ガード: 締めた位置の外の行(列)の平均明るさが背景からこれだけ離れている(紙や縁のトーンの)あいだは、締め位置を外へ戻す */
+const TONE_DEV = 3;
+/** 0.6.4: トーン境界ガードで戻す上限(辺の長さに対する割合) */
+const TONE_CAP_FRACTION = 0.01;
 
 const mmToPx = (img, mm) => mm * img.pxPerMm;
 
@@ -1962,7 +1966,7 @@ function findPaperBox(img) {
  * @returns {number[]} [x0, y0, x1, y1]
  */
 function tightenPaperBox(img, box, bg, bright, ink) {
-  const { gray, width: W } = img;
+  const { gray, width: W, height: H } = img;
   const [x0, y0, x1, y1] = box;
   const xSpan = x1 - x0;
   const ySpan = y1 - y0;
@@ -2101,11 +2105,54 @@ function tightenPaperBox(img, box, bg, bright, ink) {
   const y1Out = lb == null ? y1Mean : grow(y1Mean, lb + 1, runMaxY, true, true) ?? y1Mean;
   const x0Out = grow(x0Mean, ll, runMaxX, false, false) ?? x0;
   const x1Out = lr == null ? x1Mean : grow(x1Mean, lr + 1, runMaxX, false, true) ?? x1Mean;
+  // トーン境界ガード(0.6.4): 紙の外側にさわるなめらかな縁(アンチエイリアスのグロー)を
+  // 1〜2線分削らないように、締めた位置から外側へ、行(列)の平均明るさが背景から
+  // TONE_DEV 以上離れている間だけ締め位置を戻す。内側には動かさない
+  const box0 = [x0Out == null ? x0 : x0Out, y0Out == null ? y0 : y0Out, x1Out == null ? x1 : x1Out, y1Out == null ? y1 : y1Out];
+  const capToneY = Math.max(1, Math.round(ySpan * TONE_CAP_FRACTION));
+  const capToneX = Math.max(1, Math.round(xSpan * TONE_CAP_FRACTION));
+  // 背景側の白が平均を薄めないよう、横(縦)の平均は締めた箱の範囲で取る
+  const meanToneRow = y => {
+    let sum = 0;
+    for (let x = box0[0]; x < box0[2]; x++) {
+      sum += gray[y * W + x];
+    }
+    return sum / (box0[2] - box0[0]);
+  };
+  const meanToneCol = x => {
+    let sum = 0;
+    for (let y = box0[1]; y < box0[3]; y++) {
+      sum += gray[y * W + x];
+    }
+    return sum / (box0[3] - box0[1]);
+  };
+  const offBg = v => (bright ? bg - v : v - bg); // 背景とどれだけ違うか。正 = 紙や縁のトーン
+  const guard = (cut, cap, meanOf, limit, stepOut) => {
+    if (cut == null) {
+      return null;
+    }
+    let pos = cut;
+    for (let i = 0; i < cap; i++) {
+      const next = pos + stepOut;
+      if (next < 0 || next >= limit) {
+        break;
+      }
+      if (offBg(meanOf(next)) < TONE_DEV) {
+        break;
+      }
+      pos = next;
+    }
+    return pos;
+  };
+  const y0G = guard(box0[1], capToneY, meanToneRow, y0, -1); // 外限 = 緩い箱の上
+  const y1G = guard(box0[3] - 1, capToneY, meanToneRow, y1, 1) + 1; // 外限 = 緩い箱の下
+  const x0G = guard(box0[0], capToneX, meanToneCol, x0, -1);
+  const x1G = guard(box0[2] - 1, capToneX, meanToneCol, x1, 1) + 1;
   const out = [
-    x0Out == null ? x0 : x0Out,
-    y0Out == null ? y0 : y0Out,
-    x1Out == null ? x1 : x1Out,
-    y1Out == null ? y1 : y1Out,
+    x0G == null ? x0 : x0G,
+    y0G == null ? y0 : y0G,
+    x1G == null ? x1 : x1G,
+    y1G == null ? y1 : y1G,
   ];
   // 締めた結果が大まかな範囲よりずっと小さいときは、紙の端でなく中身だけを拾った疑い → 締めない
   if (out[2] - out[0] < xSpan * 0.6 || out[3] - out[1] < ySpan * 0.6) {
