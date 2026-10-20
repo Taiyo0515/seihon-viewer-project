@@ -1893,8 +1893,10 @@ function findPaperBox(img) {
     return null; // 背景(ひとつの明るさ)が主でない
   }
   const bright = bg >= SINGLE_BG_LEVEL;
-  // 紙は、白い背景よりわずかに暗い・暗い背景より明るい
-  const level = bright ? bg - 8 : bg + 20;
+  // 紙は、白い背景よりわずかに暗い・暗い背景より明るい。
+  // bg-4 なのは、退色したクリーム色の縁など、背景との差が 8 より小さい紙の縁を
+  // 「紙ではない」と誤判定して、締めが紙の中に入るのを防ぐため(0.6.4)
+  const level = bright ? bg - 4 : bg + 20;
   const ink = new Uint8Array(W * H);
   for (let i = 0; i < ink.length; i++) {
     ink[i] = bright ? (gray[i] < level ? 1 : 0) : (gray[i] > level ? 1 : 0);
