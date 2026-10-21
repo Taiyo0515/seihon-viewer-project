@@ -848,6 +848,8 @@ const PAPER_LEVEL = 235;
  *  - 外側の縁の影の帯: 行ごとに、外側の端から紙(明るい画素の並び)までの幅を見る。帯の内側の端が紙の外側の端。
  *    下(上)の端の近くで帯がはっきり広くなり、そのまま画像の端まで続くところが、紙の下(上)の端。
  *  - 紙の外が灰色に写るとき: 行ごとの明るさ(中央値)が、紙の明るさより暗いまま画像の端まで続くところ。
+ *  - 白い背景の中の紙の縁の細い線(0.6.4): 白いふたの上に白い紙を置いたときは暗い帯が無いので、
+ *    外側から内側へたどり、はじめて見つかる「上下に長く続く細い暗い縦線」を紙の外端とする。
  * 見つからなければ null。中身(box)にかかる位置は使わない。
  * @returns {{top:number|null, bottom:number|null, outer:number|null}} 画像の座標
  */
@@ -960,6 +962,48 @@ export function paperEdges(img, x0, x1, side, box) {
       }
       if (y >= minRun && y <= boxTop) {
         out.top = out.top === null ? y : Math.max(out.top, y);
+      }
+    }
+  }
+
+  // 3. 白い背景の中に浮かぶ紙の縁の細い線(0.6.4)。白いふたの上に白い紙を置いたときは、紙の周りに
+  // 暗い帯が無いので方法1・2で端が分からない。紙の縁は、背景の中に細く続く縦線として写るので、
+  // 外側から内側へたどり、はじめて見つかる「上下に長い細い暗い線」を紙の外端とする。
+  // (中身を拾わないよう、中身の範囲の外だけで探す)
+  if ((side === "L" || side === "R") && out.outer === null) {
+    const yA = Math.round(H * 0.12);
+    const yB = Math.round(H * 0.88);
+    const rows = yB - yA;
+    if (rows >= 20) {
+      const step = side === "R" ? -1 : 1;
+      // 探す範囲: 中身の 1mm 外まで。紙の端が画像の端から遠いときは 35% の幅で打ち切る
+      const limit = side === "R"
+        ? Math.max(box ? box[2] + keep : x1, x1 - Math.round(w * 0.35))
+        : Math.min(box ? box[0] - keep : x1, x0 + Math.round(w * 0.35));
+      const kEnd = side === "R" ? x1 - 1 - limit : limit - x0;
+      // 列ごとの「暗い行」の数(±1px の幅で見る。少し傾いた線も拾えるように)
+      const dark = x => {
+        let n = 0;
+        for (let y = yA; y < yB; y++) {
+          const row = y * W;
+          if (gray[row + x - 1] < PAPER_LEVEL || gray[row + x] < PAPER_LEVEL || gray[row + x + 1] < PAPER_LEVEL) {
+            n++;
+          }
+        }
+        return n;
+      };
+      for (let k = 2; k <= kEnd; k++) {
+        const x = side === "R" ? x1 - 1 - k : x0 + k;
+        if (dark(x) < rows * 0.5) {
+          continue;
+        }
+        // 線の内側(紙の面)も外側(背景)も明るいこと=細い線であることの確認(帯なら方法1の領分)
+        const inner = dark(x + 3 * step) + dark(x + 4 * step) + dark(x + 5 * step);
+        const outerSide = dark(x - 4 * step) + dark(x - 3 * step) + dark(x - 2 * step);
+        if (inner <= rows * 0.6 && outerSide <= rows * 0.6) {
+          out.outer = x;
+          break;
+        }
       }
     }
   }
@@ -1626,6 +1670,8 @@ export function cropRects(scans, splits, halves, { trim, marginMm = DEFAULT_MARG
     return rects;
   }
   const outerList = [];
+  const outerListL = [];
+  const outerListR = [];
   const innerList = [];
   const unions = [];
   scans.forEach((s, i) => {
@@ -1637,10 +1683,12 @@ export function cropRects(scans, splits, halves, { trim, marginMm = DEFAULT_MARG
     }
     if (h.L) {
       outerList.push((sp.x - h.L[0]) / s.pxPerMm);
+      outerListL.push((sp.x - h.L[0]) / s.pxPerMm);
       innerList.push((sp.x - h.L[2]) / s.pxPerMm);
     }
     if (h.R) {
       outerList.push((h.R[2] - sp.x) / s.pxPerMm);
+      outerListR.push((h.R[2] - sp.x) / s.pxPerMm);
       innerList.push((h.R[0] - sp.x) / s.pxPerMm);
     }
     const boxes = [h.L, h.R].filter(Boolean);
@@ -1649,29 +1697,43 @@ export function cropRects(scans, splits, halves, { trim, marginMm = DEFAULT_MARG
   if (!outerList.length) {
     return cropRects(scans, splits, halves, { trim: false });
   }
-  // 単位は mm(ページによって画素の大きさが違っても合うように)
-  let outer = Math.max(...outerList) + marginMm;
-  // 0.4.1: 紙の外側の端が分かるページがあれば、そこより外は切る(紙の外の余白を入れない)。中身には 1mm 以上の余白を残す
-  {
-    const paperOuter = [];
+  // 単位は mm(ページによって画素の大きさが違っても合うように)。0.6.4: 左右のページで別々に決める
+  // (ノドから紙の外端までの距離は、左のページと右のページで違うのがふつう。大きさは左右それぞれでそろえる)
+  const outer = {};
+  for (const side of ["L", "R"]) {
+    const list = side === "L" ? outerListL : outerListR;
+    if (!list.length) {
+      continue;
+    }
+    const contentOuter = Math.max(...list);
+    // その側の、紙の外側の端が分かるページの距離(ノドから)
+    const paper = [];
     scans.forEach((s, i) => {
       const sp = splits[i];
       const h = halves[i];
       if (!s || !sp || !h) {
         return;
       }
-      if (h.L && h.limitsL?.paperOuter != null) {
-        paperOuter.push((sp.x - h.limitsL.paperOuter) / s.pxPerMm);
-      }
-      if (h.R && h.limitsR?.paperOuter != null) {
-        paperOuter.push((h.limitsR.paperOuter - sp.x) / s.pxPerMm);
+      const v = side === "L"
+        ? (h.L && h.limitsL?.paperOuter != null ? (sp.x - h.limitsL.paperOuter) / s.pxPerMm : null)
+        : (h.R && h.limitsR?.paperOuter != null ? (h.limitsR.paperOuter - sp.x) / s.pxPerMm : null);
+      if (v != null) {
+        paper.push(v);
       }
     });
-    const contentOuter = Math.max(...outerList);
-    const usable = paperOuter.filter(v => v >= contentOuter + 1);
+    let base = contentOuter + marginMm;
+    const usable = paper.filter(v => v >= contentOuter + 1);
     if (usable.length) {
-      outer = Math.max(contentOuter + 1, Math.min(outer, ...usable));
+      if (usable.length === list.length) {
+        // 0.6.4: その側の全ページで紙の外端が分かるときは、いちばん外側の端の外で切る
+        // (紙の端より内側に切って紙を削ることはしない。はみ出た分は、紙の外として白く覆う)
+        base = Math.max(...usable);
+      } else {
+        // 一部のページでしか分からないときは、分かる内側の端まで寄せる(0.4.1)
+        base = Math.min(base, ...usable);
+      }
     }
+    outer[side] = Math.max(contentOuter + 1, base);
   }
   const bandMm = Math.max(0, ...splits.filter(Boolean).map((sp, i) => sp.band / (scans.find(Boolean)?.pxPerMm || 1)));
   const inner = Math.max(bandMm, Math.min(...innerList) - marginMm);
@@ -1778,11 +1840,12 @@ export function cropRects(scans, splits, halves, { trim, marginMm = DEFAULT_MARG
     }
     // ノドからの距離で、左右の範囲を決める(スキャンの外にはみ出す分は白い余白になる)
     const h = halves[i] || {};
-    const width = px(outer - inner);
+    const widthL = px(outer.L - inner);
+    const widthR = px(outer.R - inner);
     const innerL = Math.max(sp.band, px(innerSide.L));
     const innerR = Math.max(sp.band, px(innerSide.R));
-    const frameL = [sp.x - innerL - width, y0, sp.x - innerL, y1];
-    const frameR = [sp.x + innerR, y0, sp.x + innerR + width, y1];
+    const frameL = [sp.x - innerL - widthL, y0, sp.x - innerL, y1];
+    const frameR = [sp.x + innerR, y0, sp.x + innerR + widthR, y1];
     // 大きさはそろえたまま、縁に入ったもの(本の縁の線・影)にかかる部分は白く覆う
     rects[i] = {
       L: frameL,
