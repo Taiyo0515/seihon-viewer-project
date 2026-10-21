@@ -1383,6 +1383,8 @@
               <legend>整え方</legend>
               <label class="sh-scan-mode"><input type="radio" name="shScanMode" value="spread" />
                 <span><b>見開きを1ページずつに分ける</b><span class="sh-scan-note">本・ノートを開いてスキャンしたもの。ノド(綴じ目)の位置で分けます</span></span></label>
+              <label class="sh-scan-mode"><input type="radio" name="shScanMode" value="trim" />
+                <span><b>余白を除く</b><span class="sh-scan-note">写真など、紙の周りに余白(背景)が写っているもの。紙の外の余白を切り取ります(1枚のページが1ページになります)</span></span></label>
               <label class="sh-scan-mode"><input type="radio" name="shScanMode" value="booklet" />
                 <span><b>冊子の順に並べ替える</b><span class="sh-scan-note">中綴じの冊子をばらして、両面スキャンしたもの。真ん中で分けて、表紙から裏表紙の順に並べます</span></span></label>
               <label class="sh-scan-mode"><input type="radio" name="shScanMode" value="straighten" />
@@ -1390,7 +1392,7 @@
               <label class="sh-scan-mode"><input type="radio" name="shScanMode" value="none" />
                 <span><b>元のまま</b><span class="sh-scan-note">スキャンしたページをそのまま表示します</span></span></label>
             </fieldset>
-            <p id="shScanPortraitNote" class="sh-bind-help" hidden>この PDF は縦長のページなので、見開きの分割・冊子の並べ替えは選べません(スキャンした見開きは横長のページになります。見開きを横に置いてスキャンしたものは、ノドが見つかれば分けられます)。</p>
+            <p id="shScanPortraitNote" class="sh-bind-help" hidden>この PDF は縦長のページなので、見開きの分割・冊子の並べ替えは選べません(スキャンした見開きは横長のページになります。見開きを横に置いてスキャンしたものは、ノドが見つかれば分けられます)。「余白を除く」は使えます。</p>
             <div id="shScanTurnRow" class="sh-bind-field" hidden>
               <div class="sh-bind-field-label">ページの向き</div>
               <div class="sh-bind-field-control">

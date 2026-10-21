@@ -8,7 +8,7 @@
  *  - findCenterGap: 真ん中の、何も書かれていない縦の帯を探す(ばらした冊子の紙など、ノドの影が無いもの)
  *  - contentBox: ページの中身(文字・図・書き込み)の範囲を探す。スキャンで入ったもの
  *    (ふたの影・本の縁の線・ごみ・綴じ穴の影など)は除く
- *  - classifyDocument / chooseSplits / cropRects / orderSpread / orderBooklet: 文書全体の判断と、分け方・切り取り方・並べ方を決める
+ *  - classifyDocument / chooseSplits / cropRects / cropSingles / orderSpread / orderBooklet: 文書全体の判断と、分け方・切り取り方・並べ方を決める
  *  - findSkew / analyzeFull(0.6): 傾きを調べる / 1枚を、傾き・横に置いた見開きも含めて調べる(Worker から呼ぶ)
  */
 
@@ -18,6 +18,33 @@ export const INK_LEVEL = 215;
 const FAINT_LEVEL = 190;
 /** 切り取ったページの中身の周りに残す余白(mm) */
 export const DEFAULT_MARGIN_MM = 6;
+
+// ---- 0.6.5: 分けないページ(写真など)の余白 ----
+/** 分けないページで、紙の範囲が分かったときに、紙の周りに残す余白(mm)。0 は紙の端ぴったり */
+const SINGLE_PAPER_MARGIN_MM = 0;
+/** 白い(明るい)背景とみなすいちばん暗い明るさ。これより暗い背景(机の上に置いて撮った写真など)では、紙は「背景より明るい」ので探す */
+const SINGLE_BG_LEVEL = 235;
+/** 0.6.5: 「紙が始まる」とみなす、外側に見た線分の中での紙の色(背景よりわずかに暗い/明るい面の画素)の割合 */
+const PAPER_D_MIN = 0.5;
+/** 0.6.5: 「端にそって続く濃い線」(紙の端の線)とみなす最短の長さ(辺の長さに対する割合)。文字や文章の行は途切れ途切れなので、これだけ続くのは端の線 */
+const PAPER_LINE_RUN = 0.12;
+/** 0.6.5: 紙の端の線まで締めを延ばすときの上限(辺の長さに対する割合) */
+const PAPER_LINE_EXT_MAX = 0.08;
+/** 0.6.5: 端の線の判定に使う濃さ。白い背景では背景よりこれだけ暗い画素の並び、暗い背景ではこれだけ明るい */
+const LINE_DARKER = 15;
+const LINE_BRIGHTER = 40;
+/** 0.6.5: 締めを延ばす区間が紙の白い余白(明るい画素がこの割合以上)を横切るときは延ばさない(中身の罫線を拾うのを防ぐ) */
+const PAPER_LINE_ZONE_MAX = 0.9;
+/** 0.6.5: トーン境界ガード: 締めた位置の外の行(列)の平均明るさが背景からこれだけ以上離れていて、
+ * それ以下でもない(PAPER_TONE_DEV_MAX まで)あいだは、締め位置を外へ戻す。
+ * 上限があるのは、外に黒い帯(のどの影・机)があるときに、帯を「紙のなめらかな縁」と
+ * 誤って伝って締め位置を帯の外まで戻すのを防ぐため */
+const TONE_DEV = 3;
+const PAPER_TONE_DEV_MAX = 12;
+/** 0.6.5: トーン境界ガードで戻す上限(辺の長さに対する割合) */
+const TONE_CAP_FRACTION = 0.01;
+/** 0.6.5: 白い紙がフレームいっぱいの写真で「紙の面」とみなす明るさの幅。bg からこれ以上暗くないものを紙の面とする(縁の暗い帯・のどの影は入らない) */
+const PAPER_NEAR_BG = 25;
 
 const mmToPx = (img, mm) => mm * img.pxPerMm;
 
@@ -1493,6 +1520,8 @@ export function analyzeFull(img, { turn = true } = {}) {
   scan.skew = skew;
   scan.candidates = candidateHalves(img, scan);
   scan.halfSkew = halfSkews(img, scan);
+  // 0.6.5: 分けないページの余白の範囲(写真など。整えるときに使う)
+  scan.single = analyzeSingle(img);
   if (turn && !scan.landscape) {
     // 縦長のページ: 見開きを横に置いてスキャンしたものかも(回してノドが見つかれば、そうだとみなす。
     // turn が "force" のときは、ノドが見つからなくても、横に置いた見開きとして調べる)
@@ -1506,6 +1535,8 @@ export function analyzeFull(img, { turn = true } = {}) {
     const d = analyzeScan(straight);
     d.skew = skew;
     d.candidates = candidateHalves(straight, d);
+    // 0.6.5: 分けないページの余白の範囲も、まっすぐにした画像で調べなおす
+    d.single = analyzeSingle(straight);
     scan.deskewed = d;
   }
   return scan;
@@ -1654,7 +1685,9 @@ export function halvesFor(scan, split) {
  * @param {Array<{x:number,band:number}|null>} splits chooseSplits() の結果
  * @param {Array<{L:number[]|null,R:number[]|null}|null>} halves analyzeHalves() の結果
  * @param {{trim:boolean, marginMm?:number}} o
- * @returns {Array<{L:number[], R:number[]}|null>} 画像の座標の [x0, y0, x1, y1]。分けないページは null
+ * @returns {Array<{L:number[], R:number[]}|null>} 画像の座標の [x0, y0, x1, y1]。分けないページは null。
+ *   ただし trim のとき、分けないページ(0.6.5: 写真など)は、余白だけを除いた 1ページとして
+ *   {L:切り取る範囲, R:null, single:true, masks:[]} を返す
  */
 export function cropRects(scans, splits, halves, { trim, marginMm = DEFAULT_MARGIN_MM }) {
   const rects = scans.map(() => null);
@@ -1805,6 +1838,13 @@ export function cropRects(scans, splits, halves, { trim, marginMm = DEFAULT_MARG
   scans.forEach((s, i) => {
     const sp = splits[i];
     if (!s || !sp) {
+      // 0.6.5: 分けないページ(写真など)が混ざっているときは、そのページも余白を除く
+      if (s && trim) {
+        const rect = singleRect(s, marginMm);
+        if (rect) {
+          rects[i] = { L: rect, R: null, single: true, masks: [], masksL: [], masksR: [] };
+        }
+      }
       return;
     }
     const px = v => v * s.pxPerMm;
@@ -1863,6 +1903,389 @@ export function cropRects(scans, splits, halves, { trim, marginMm = DEFAULT_MARG
     };
   });
   return rects;
+}
+
+// ---------------------------------------------------------------------------
+// 分けないページの切り取り方(0.6.5)
+// ---------------------------------------------------------------------------
+
+/**
+ * 分けないページ(写真・1枚の紙など)の切り取る範囲を決める。1枚のスキャンが、そのまま1ページになる。
+ * 紙(はがき・カードなど)が背景の中に小さく写っている範囲が分かるときだけ、紙のまわりの余白(背景)を切り取る。
+ * 紙の範囲が分からないとき(スキャンした文書のページなど)は切り取らない(null)。
+ * @param {Array<object>} scans analyzeScan() の結果(analyzeFull() が scan.single に調べた結果を入れておく)
+ * @param {{marginMm?:number}} o
+ * @returns {Array<number[]|null>} 画像の座標の [x0, y0, x1, y1]。切り取るべき余白が無いページは null
+ */
+export function cropSingles(scans, { marginMm = DEFAULT_MARGIN_MM } = {}) {
+  return scans.map(s => (s ? singleRect(s, marginMm) : null));
+}
+
+/**
+ * 分けない1枚のページの、紙の範囲を調べる(0.6.5)。analyzeFull() から呼ぶ
+ * (調べたときに画像があるうちに調べておく。整えるときに画像はもう手元に無い)。
+ * @param {object} img {gray, width, height, pxPerMm}
+ * @returns {{paper:number[]|null}} 画像の座標の [x0, y0, x1, y1]。紙の範囲(背景と区別がつくとき)。null はあり得る
+ */
+function analyzeSingle(img) {
+  return {
+    paper: findPaperBox(img),
+  };
+}
+
+/**
+ * 白っぽい背景の上に写った紙(はがき・カードなど)の範囲を探す(0.6.5)。
+ * 背景の明るさ(いちばん多い明るさ)から、
+ *  - 背景が白いときは、背景よりわずかに暗い所(紙の面・端の縁・落ち影)をつなげた、いちばん大きいまとまり
+ *  - 背景が暗いとき(机の上に置いて撮った写真など)は、背景より明るい所を、いちばん大きいまとまり
+ * を紙とみなす。紙がページいっぱいに写っているとき(スキャナーのふたや背景と、紙の区別がつかない)は
+ * null(余白を切り取れない)。スキャンした文書のページ(白い紙に印刷したもの)では、いちばん大きい
+ * まとまりは本文の一部になるが、その箱の外にもまだ本文が残るので、「背景の中に写った紙」とは
+ * みなさず null(余白を切り取らない)。
+ */
+function findPaperBox(img) {
+  const { gray, width: W, height: H } = img;
+  if (W <= 4 || H <= 4) {
+    return null;
+  }
+  const px = mm => Math.max(1, Math.round(mm * img.pxPerMm));
+  // 背景の明るさ(いちばん多い明るさ)と、その割合
+  const hist = new Int32Array(256);
+  for (let i = 0; i < gray.length; i++) {
+    hist[gray[i]]++;
+  }
+  let bg = 0;
+  let best = 0;
+  for (let v = 0; v < 256; v++) {
+    if (hist[v] > best) {
+      best = hist[v];
+      bg = v;
+    }
+  }
+  if (best < gray.length * 0.25) {
+    return null; // 背景(ひとつの明るさ)が主でない
+  }
+  const bright = bg >= SINGLE_BG_LEVEL;
+  // 紙は、白い背景よりわずかに暗い・暗い背景より明るい。
+  // bg-4 なのは、退色したクリーム色の縁など、背景との差が 8 より小さい紙の縁を
+  // 「紙ではない」と誤判定して、締めが紙の中に入るのを防ぐため(0.6.5)
+  const level = bright ? bg - 4 : bg + 20;
+  const ink = new Uint8Array(W * H);
+  for (let i = 0; i < ink.length; i++) {
+    ink[i] = bright ? (gray[i] < level ? 1 : 0) : (gray[i] > level ? 1 : 0);
+  }
+  // 太らせて、紙の端の線と面をひとつにつなげる
+  const { labels, comps } = labelComponents(dilate(ink, W, H, px(1)), W, H);
+  if (comps.length <= 1) {
+    return null;
+  }
+  // ごみ(小さなまとまり)を除いて、いちばん大きいまとまりを紙とみなす
+  const minArea = px(3) * px(3);
+  let pick = null;
+  for (let c = 1; c < comps.length; c++) {
+    const comp = comps[c];
+    if (comp.n >= minArea && (!pick || comp.n > pick.n)) {
+      pick = comp;
+    }
+  }
+  if (!pick) {
+    return null;
+  }
+  const w = pick.x1 - pick.x0;
+  const h = pick.y1 - pick.y0;
+  if (w < W * 0.15 || h < H * 0.1) {
+    return null; // 小さすぎる(ごみの集まり)
+  }
+  if (w >= W * 0.98 && h >= H * 0.98) {
+    if (!bright) {
+      return null; // ページいっぱい(紙と背景の区別がつかない)
+    }
+    // 白い紙がフレームいっぱいに写っていて、縁に暗い帯(机・のどの影)がある写真。
+    // 暗いものを紙とみなすマスクでは帯も紙につながって区別がつかないので、
+    // 「紙の面の明るさ」(bg に近い明るさ)を紙とみなすマスクに作り直して締める。
+    // 帯やのどの影はこのマスクに入らないので、紙の端まで切り取れる(0.6.5)
+    const nearBg = new Uint8Array(W * H);
+    const low = bg - PAPER_NEAR_BG;
+    for (let i = 0; i < nearBg.length; i++) {
+      nearBg[i] = gray[i] >= low ? 1 : 0;
+    }
+    // 帯のなめらかなはみ出し(グロー)まで落とすため、締めのしきい値は通常より固める
+    return tightenPaperBox(img, [pick.x0, pick.y0, pick.x1, pick.y1], bg, bright, nearBg, { grow: false, dMin: 0.9 });
+  }
+  if (!bright) {
+    // 暗い背景のときは、拾ったものが紙か確かめる(紙の面は、背景よりちゃんと明るい)
+    const vals = [];
+    for (let y = pick.y0; y < pick.y1; y++) {
+      const row = y * W;
+      for (let x = pick.x0; x < pick.x1; x++) {
+        if (labels[row + x] === pick.id) {
+          vals.push(gray[row + x]);
+        }
+      }
+    }
+    vals.sort((a, b) => a - b);
+    if ((vals[vals.length >> 1] || 0) < bg + 25) {
+      return null;
+    }
+  }
+  const box = [pick.x0, pick.y0, pick.x1, pick.y1];
+  // 0.6.5: 拾った箱の外にも濃い画素がたくさんあるとき(文書のスキャンで、本文の一部・表の帯を拾ったときなど)は、
+  // 「背景の中に写った紙」ではない(ほんとうは紙の外は背景だけのはず。スキャンした文書のページでは、
+  //  紙=ページじたいなので、紙のほかの部分は全て背景のはず)。そのようなときは紙の範囲としない
+  {
+    const pad = 2;
+    let outside = 0;
+    for (let y = 0; y < H; y++) {
+      const row = y * W;
+      for (let x = 0; x < W; x++) {
+        if (ink[row + x] && (x < box[0] - pad || x > box[2] + pad || y < box[1] - pad || y > box[3] + pad)) {
+          outside++;
+        }
+      }
+    }
+    if (outside > W * H * 0.01) {
+      return null; // 紙の外に中身が残っている(背景の中に写った紙ではない)
+    }
+  }
+  // 0.6.5: 落ち影などの薄い周りも「紙」とつながって拾われる(紙の端の外にハローが残る)。
+  // そのまま切り取ると紙のまわりに影が余白として残るので、紙の端まで締める
+  return tightenPaperBox(img, box, bg, bright, ink);
+}
+
+/**
+ * 大まかに拾った紙の範囲を、紙の端まで締める(0.6.5)。
+ * 各辺ごとに、外側から走査して最初に「紙の色」(紙の面・縁・端の線)が線分の中で
+ * PAPER_D_MIN 以上を占める位置を紙の端とする。はがきの縁の茶色い部分や白い面も
+ * 紙の色として数値に入っているので、紙の中を削らない。
+ * 紙の色が分からない辺は締めない(大まかな範囲のまま)。
+ * 補正: 紙の端に文字・文章がくっついて印字されているはがきなどでは、
+ * 端にそって PAPER_LINE_RUN 以上続く濃い線(紙の端の線)が締めた位置のさらに外側に
+ * あるときは、端の線の位置まで締めを広げる。紙の白い余白(明るい面)を横切るときは
+ * 広げない(中身の罫線を端と取り違えるのを防ぐ)。内側の線(文字・罫線)では広げない。
+ * @param {Uint8Array} ink findPaperBox() で作った紙の色のマスク(1 = 紙の色)
+ * @returns {number[]} [x0, y0, x1, y1]
+ */
+function tightenPaperBox(img, box, bg, bright, ink, { grow: useGrow = true, dMin = PAPER_D_MIN } = {}) {
+  const { gray, width: W, height: H } = img;
+  const [x0, y0, x1, y1] = box;
+  const xSpan = x1 - x0;
+  const ySpan = y1 - y0;
+  if (xSpan < 8 || ySpan < 8) {
+    return box;
+  }
+  // 辺に垂直な線ごとの「紙の色」の割合
+  const colD = new Array(xSpan);
+  for (let x = x0; x < x1; x++) {
+    let n = 0;
+    for (let y = y0; y < y1; y++) {
+      n += ink[y * W + x];
+    }
+    colD[x - x0] = n / ySpan;
+  }
+  const rowD = new Array(ySpan);
+  for (let y = y0; y < y1; y++) {
+    const row = y * W;
+    let n = 0;
+    for (let x = x0; x < x1; x++) {
+      n += ink[row + x];
+    }
+    rowD[y - y0] = n / xSpan;
+  }
+  // 外から走査して、紙の色が PAPER_D_MIN 以上になった最初の位置
+  const first = (prof, fromEnd) => {
+    for (let i = 0; i < prof.length; i++) {
+      if (prof[fromEnd ? prof.length - 1 - i : i] >= dMin) {
+        return i;
+      }
+    }
+    return null;
+  };
+  const dl = first(colD, false);
+  const dr = first(colD, true);
+  const dt = first(rowD, false);
+  const db = first(rowD, true);
+  const x0Mean = dl == null ? null : x0 + dl;
+  const x1Mean = dr == null ? null : x1 - dr;
+  const y0Mean = dt == null ? null : y0 + dt;
+  const y1Mean = db == null ? null : y1 - db;
+  // 端にそって続く濃い線(紙の端の線)の位置
+  const runMinX = Math.round(xSpan * PAPER_LINE_RUN);
+  const runMinY = Math.round(ySpan * PAPER_LINE_RUN);
+  const strong = bright ? v => v <= bg - LINE_DARKER : v => v >= bg + LINE_BRIGHTER;
+  const lineRow = fromEnd => {
+    for (let k = 0; k < ySpan; k++) {
+      const y = fromEnd ? y1 - 1 - k : y0 + k;
+      const row = y * W;
+      let cur = 0;
+      for (let x = x0; x < x1; x++) {
+        if (strong(gray[row + x])) {
+          cur++;
+          if (cur >= runMinX) {
+            return y;
+          }
+        } else {
+          cur = 0;
+        }
+      }
+    }
+    return null;
+  };
+  const lineCol = fromEnd => {
+    for (let k = 0; k < xSpan; k++) {
+      const x = fromEnd ? x1 - 1 - k : x0 + k;
+      let cur = 0;
+      for (let y = y0; y < y1; y++) {
+        if (strong(gray[y * W + x])) {
+          cur++;
+          if (cur >= runMinY) {
+            return x;
+          }
+        } else {
+          cur = 0;
+        }
+      }
+    }
+    return null;
+  };
+  const lt = lineRow(false);
+  const lb = lineRow(true);
+  const ll = lineCol(false);
+  const lr = lineCol(true);
+  // 濃い線が締めた位置のさらに外側にあるとき(締めた位置が紙の中のとき)は、端の線まで広げる候補
+  const runMaxX = Math.round(xSpan * PAPER_LINE_EXT_MAX);
+  const runMaxY = Math.round(ySpan * PAPER_LINE_EXT_MAX);
+  // 広げる区間が紙の白い余白(背景と同じ明るさの面)を横切るときは、端の線は中身の罫線 → 広げない
+  const brightish = bright ? v => v >= bg - 4 : v => v <= bg + 4;
+  const zoneRatio = (vertical, a, b) => {
+    let n = 0;
+    let all = 0;
+    const lo = Math.min(a, b);
+    const hi = Math.max(a, b);
+    if (vertical) {
+      for (let y = lo; y < hi; y++) {
+        const row = y * W;
+        for (let x = x0; x < x1; x++) {
+          all++;
+          if (brightish(gray[row + x])) {
+            n++;
+          }
+        }
+      }
+    } else {
+      for (let x = lo; x < hi; x++) {
+        for (let y = y0; y < y1; y++) {
+          all++;
+          if (brightish(gray[y * W + x])) {
+            n++;
+          }
+        }
+      }
+    }
+    return all ? n / all : 1;
+  };
+  const grow = (meanCut, candAbs, cap, vertical, candOutward) => {
+    if (meanCut == null) {
+      return null;
+    }
+    if (candAbs == null) {
+      return meanCut;
+    }
+    // candAbs が meanCut より外側のときだけ広げる(top / left は candAbs が小さくなる向き、
+    // bottom / right は大きくなる向き)。内側の候補(中身の罫線など)は無視して紙を削らない
+    const d = candOutward ? candAbs - meanCut : meanCut - candAbs;
+    if (d <= 0 || d > cap) {
+      return meanCut;
+    }
+    if (zoneRatio(vertical, candAbs, meanCut) >= PAPER_LINE_ZONE_MAX) {
+      return meanCut;
+    }
+    return candAbs; // top / left: この位置から(含める)。bottom / right: 呼び出し側で +1 する
+  };
+  // 端の線まで延ばす補正。黒い帯を削る締め(紙いっぱいの近Bg締め)では、
+  // 帯そのものが「端に沿った濃い線」になってしまうので使わない
+  const y0Out = useGrow ? grow(y0Mean, lt, runMaxY, true, false) ?? y0 : y0Mean ?? y0;
+  const y1Out = lb == null ? y1Mean : (useGrow ? grow(y1Mean, lb + 1, runMaxY, true, true) ?? y1Mean : y1Mean) ?? y1;
+  const x0Out = useGrow ? grow(x0Mean, ll, runMaxX, false, false) ?? x0 : x0Mean ?? x0;
+  const x1Out = lr == null ? x1Mean : (useGrow ? grow(x1Mean, lr + 1, runMaxX, false, true) ?? x1Mean : x1Mean) ?? x1;
+  // トーン境界ガード(0.6.5): 紙の外側にさわるなめらかな縁(アンチエイリアスのグロー)を
+  // 1〜2線分削らないように、締めた位置から外側へ、行(列)の平均明るさが背景から
+  // TONE_DEV 以上離れている間だけ締め位置を戻す。内側には動かさない
+  const box0 = [x0Out == null ? x0 : x0Out, y0Out == null ? y0 : y0Out, x1Out == null ? x1 : x1Out, y1Out == null ? y1 : y1Out];
+  const capToneY = Math.max(1, Math.round(ySpan * TONE_CAP_FRACTION));
+  const capToneX = Math.max(1, Math.round(xSpan * TONE_CAP_FRACTION));
+  // 背景側の白が平均を薄めないよう、横(縦)の平均は締めた箱の範囲で取る
+  const meanToneRow = y => {
+    let sum = 0;
+    for (let x = box0[0]; x < box0[2]; x++) {
+      sum += gray[y * W + x];
+    }
+    return sum / (box0[2] - box0[0]);
+  };
+  const meanToneCol = x => {
+    let sum = 0;
+    for (let y = box0[1]; y < box0[3]; y++) {
+      sum += gray[y * W + x];
+    }
+    return sum / (box0[3] - box0[1]);
+  };
+  const offBg = v => (bright ? bg - v : v - bg); // 背景とどれだけ違うか。正 = 紙や縁のトーン
+  const guard = (cut, cap, meanOf, limit, stepOut) => {
+    if (cut == null) {
+      return null;
+    }
+    let pos = cut;
+    for (let i = 0; i < cap; i++) {
+      const next = pos + stepOut;
+      if (next < 0 || next >= limit) {
+        break;
+      }
+      if (offBg(meanOf(next)) < TONE_DEV || offBg(meanOf(next)) > PAPER_TONE_DEV_MAX) {
+        break;
+      }
+      pos = next;
+    }
+    return pos;
+  };
+  const y0G = guard(box0[1], capToneY, meanToneRow, y0, -1); // 外限 = 緩い箱の上
+  const y1G = guard(box0[3] - 1, capToneY, meanToneRow, y1, 1) + 1; // 外限 = 緩い箱の下
+  const x0G = guard(box0[0], capToneX, meanToneCol, x0, -1);
+  const x1G = guard(box0[2] - 1, capToneX, meanToneCol, x1, 1) + 1;
+  const out = [
+    x0G == null ? x0 : x0G,
+    y0G == null ? y0 : y0G,
+    x1G == null ? x1 : x1G,
+    y1G == null ? y1 : y1G,
+  ];
+  // 締めた結果が大まかな範囲よりずっと小さいときは、紙の端でなく中身だけを拾った疑い → 締めない
+  if (out[2] - out[0] < xSpan * 0.6 || out[3] - out[1] < ySpan * 0.6) {
+    return box;
+  }
+  return out;
+}
+
+/**
+ * 分けないページの切り取る範囲。背景の中に写った紙の範囲が分かるときだけ、紙の端ぴったりで切り取る
+ * (背景の余白・落ち影はいらない)。紙が分からないとき(スキャンした文書のページなど)は切り取らない
+ * (文書のページは紙がページいっぱいなので、紙の箱の外に本文が残り、「写った紙」とはみなさない)。
+ */
+function singleRect(s, marginMm) {
+  const single = s.single || {};
+  if (!single.paper) {
+    return null;
+  }
+  const m = SINGLE_PAPER_MARGIN_MM * s.pxPerMm;
+  const x0 = Math.max(0, Math.round(single.paper[0] - m));
+  const y0 = Math.max(0, Math.round(single.paper[1] - m));
+  const x1 = Math.min(s.width, Math.round(single.paper[2] + m));
+  const y1 = Math.min(s.height, Math.round(single.paper[3] + m));
+  if (x1 - x0 < 4 || y1 - y0 < 4) {
+    return null;
+  }
+  // 紙がページいっぱいに写っているときは、切り取るものが無いので切り取らない
+  if (x0 <= 0 && y0 <= 0 && x1 >= s.width && y1 >= s.height) {
+    return null;
+  }
+  return [x0, y0, x1, y1];
 }
 
 /**
@@ -2019,6 +2442,11 @@ export function orderSpread(rects, direction = "ltr", reverse = false) {
     order.reverse();
   }
   order.forEach(([r, i]) => {
+    if (r?.single) {
+      // 0.6.5: 分けないページ(余白だけを除いた1ページ)
+      out.push({ scan: i, half: null, rect: r.L, masks: r.masks || [], rotate: 0 });
+      return;
+    }
     if (!r) {
       out.push({ scan: i, half: null, rect: null, masks: [], rotate: 0 });
       return;
