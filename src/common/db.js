@@ -17,7 +17,7 @@ const CHANNEL_NAME = "seihon-data";
 
 let dbPromise = null;
 
-const STORES = ["pdfs", "collection", "roles"];
+const STORES = ["pdfs", "collection", "roles", "scanPlans", "scanCache"];
 
 function createStores(db) {
   if (!db.objectStoreNames.contains("pdfs")) {
@@ -29,6 +29,12 @@ function createStores(db) {
   }
   if (!db.objectStoreNames.contains("roles")) {
     db.createObjectStore("roles", { keyPath: "pdfKey" });
+  }
+  if (!db.objectStoreNames.contains("scanPlans")) {
+    db.createObjectStore("scanPlans", { keyPath: "key" });
+  }
+  if (!db.objectStoreNames.contains("scanCache")) {
+    db.createObjectStore("scanCache", { keyPath: "key" });
   }
 }
 
@@ -220,6 +226,93 @@ export async function removeUnusedPdfs() {
         pdfs.delete(key);
       }
     }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// スキャンの整えの保存(0.6.7)。
+// 保存しておくのは「変更の内容」(計画: どのページのどこをどう切り並べるか)と、
+// 次回をそ速く開くための出来上がりの PDF。鍵は元の PDF の内容の指紋+整え方。
+// 収集の保存領域(pdfs)とは別の表にして、収集の容量の計算に影響しないようにする
+// ---------------------------------------------------------------------------
+
+const MAX_SCAN_PLANS = 60;
+const MAX_SCAN_CACHE_BYTES = 1.2e9;
+
+/** 保存しておいた整えの計画。無ければ null */
+export async function getScanPlan(key) {
+  const rec = await withStores(["scanPlans"], "readonly", s => promisify(s.get(key)));
+  return rec && Array.isArray(rec.pages) ? rec : null;
+}
+
+/** 整えの計画を保存する(古いものから消す) */
+export async function putScanPlan(key, pages, pageCount) {
+  await withStores(["scanPlans"], "readwrite", async s => {
+    s.put({ key, pages, pageCount, t: Date.now() });
+    const recs = await promisify(s.getAll());
+    if (recs.length > MAX_SCAN_PLANS) {
+      recs.sort((a, b) => (a.t || 0) - (b.t || 0));
+      for (const r of recs.slice(0, recs.length - MAX_SCAN_PLANS)) {
+        s.delete(r.key);
+      }
+    }
+  });
+}
+
+export async function deleteScanPlan(key) {
+  await withStores(["scanPlans"], "readwrite", s => {
+    s.delete(key);
+  });
+}
+
+/** 保存しておいた整えた PDF。無ければ null */
+export async function getScanCache(key) {
+  const rec = await withStores(["scanCache"], "readonly", s => promisify(s.get(key)));
+  if (!rec?.data) {
+    return null;
+  }
+  return new Uint8Array(await rec.data.arrayBuffer());
+}
+
+/**
+ * 整えた PDF を保存する。同じ元の PDF の別の整え方のものは消し、
+ * 合計の大きさも上限(MAX_SCAN_CACHE_BYTES)に収める
+ */
+export async function putScanCache(key, bytes, baseKey) {
+  await withStores(["scanCache"], "readwrite", async s => {
+    s.put({
+      key,
+      baseKey: baseKey || "",
+      size: bytes.length,
+      t: Date.now(),
+      data: new Blob([bytes], { type: "application/pdf" }),
+    });
+    // 同じ元の PDF(別の整え方)は使わなくなったので消す
+    const recs = (await promisify(s.getAll())).filter(r => r.key !== key);
+    for (const r of recs) {
+      if (r.baseKey === baseKey) {
+        s.delete(r.key);
+      }
+    }
+    // それでも大きすぎるときは、ほかの PDF の古いものから消す
+    let rest = (await promisify(s.getAll())).filter(r => r.key !== key);
+    let total = rest.reduce((sum, r) => sum + (r.size || 0), 0);
+    if (total > MAX_SCAN_CACHE_BYTES) {
+      rest.sort((a, b) => (a.t || 0) - (b.t || 0));
+      for (const r of rest) {
+        if (total <= MAX_SCAN_CACHE_BYTES) {
+          break;
+        }
+        s.delete(r.key);
+        total -= r.size || 0;
+      }
+    }
+  });
+}
+
+export async function deleteScanCache(key) {
+  await withStores(["scanCache"], "readwrite", s => {
+    s.delete(key);
   });
 }
 

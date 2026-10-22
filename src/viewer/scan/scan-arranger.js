@@ -11,6 +11,7 @@
  */
 
 import { saveBlobAs, sanitizeFileName } from "../../common/files.js";
+import { deleteScanCache, deleteScanPlan, getScanCache, getScanPlan, putScanCache, putScanPlan } from "../../common/db.js";
 import { decryptedCopy } from "../doc-source.js";
 import { loadPdfFromBytes } from "../page-export.js";
 import { isRearranged, sourceIndex } from "../page-map.js";
@@ -34,6 +35,8 @@ import { ScanSource, arrangedId, buildArrangedPdf } from "./scan-pages.js";
 /** PDF ごとに選んだ整え方(chrome.storage.local) */
 const CHOICES_KEY = "scanChoices";
 const MAX_CHOICES = 300;
+/** 保存しておく整えの計画・PDF の版(0.6.7)。スキャンの判定や作り方を変えたら、この数を上げて古い保存を捨てさせる */
+const SCAN_CACHE_SCHEMA = 7;
 /** 角度を指定できる範囲(度) */
 const SKEW_LIMIT = 8;
 /** 調べるときの画像の長辺(画素) */
@@ -100,6 +103,45 @@ function signature(o) {
     ...(o.deskew ? ["skew", o.angle ?? "auto"] : []),
     ...(o.turn !== "none" ? ["turn", o.turn] : []),
   ].join("|");
+}
+
+/**
+ * 保存しておいた計画(0.6.7)の中身を確かめる。ページ数が合わない・中身が壊れているときは null
+ * @param {Array<{src:number, ...}>} [pages]
+ * @returns {Array|null}
+ */
+function validCachedPages(pages, pageCount) {
+  if (!Array.isArray(pages) || !pages.length || !Number.isInteger(pageCount) || pageCount < 1) {
+    return null;
+  }
+  const rectOk = r =>
+    r === null || (Array.isArray(r) && r.length === 4 && r.every(n => typeof n === "number" && Number.isFinite(n)));
+  for (const p of pages) {
+    if (!Number.isInteger(p?.src) || p.src < 0 || p.src >= pageCount) {
+      return null;
+    }
+    if (!rectOk(p.rect) || !rectOk(p.rectPx)) {
+      return null;
+    }
+    if (!Array.isArray(p.masks) || !Array.isArray(p.masksPx)) {
+      return null;
+    }
+    if (!(p.masks.length === p.masksPx.length) || !p.masks.every(rectOk)) {
+      return null;
+    }
+    if (p.matrix != null && !(Array.isArray(p.matrix) && p.matrix.length === 6 && p.matrix.every(n => typeof n === "number" && Number.isFinite(n)))) {
+      return null;
+    }
+    if (typeof p.rotate !== "number" || !Number.isFinite(p.rotate) || p.rotate % 90 !== 0 || p.rotate < 0 || p.rotate > 270) {
+      return null;
+    }
+  }
+  return pages;
+}
+
+/** 保存しておく計画の鍵(0.6.7) */
+function scanPlanKey(baseKey, sig) {
+  return `${SCAN_CACHE_SCHEMA}|${baseKey}|${sig}`;
 }
 
 async function loadChoices() {
@@ -1124,6 +1166,11 @@ export class ScanArranger {
     this.busyToast?.();
     this.busyToast = auto ? this.toast.show("スキャンを整えています…", { duration: 0 }) : null;
     try {
+      // 0.6.7: 保存しておいた整えの結果(計画と出来上がりの PDF)で済むときは、もう調べ直さない
+      const fromCache = await this.cachedArrange(options, base, { auto, remember, fromStart });
+      if (fromCache !== null) {
+        return fromCache;
+      }
       if (!base.analyzed) {
         const ok = await this.analyzeAll(base, (done, total) => {
           const text = `スキャンを調べています(${done}/${total})…`;
@@ -1144,7 +1191,7 @@ export class ScanArranger {
       this.setState("busy", "PDF を作っています…");
       this.busyToast?.update?.("PDF を作っています…");
       const sig = signature(options);
-      const id = await arrangedId(`${base.key}|${sig}|${plan.pages.length}`);
+      const id = await arrangedId(`${base.key}|${SCAN_CACHE_SCHEMA}|${sig}|${plan.pages.length}`);
       // 調べるのに読み込んだ pdf-lib の文書があれば、作るのに使う(読み直さずに済む。作ると中身が変わるので、使うのは1回だけ)
       const pdf = base.source?.pdf || null;
       base.source = null;
@@ -1152,51 +1199,7 @@ export class ScanArranger {
       if (!this.alive(base)) {
         return false;
       }
-      const fileName = `${sanitizeFileName(base.baseName)}${MODE_SUFFIX[options.mode]}.pdf`;
-      // いま見ているページに当たるページから表示する
-      const viewing = !fromStart && (this.isArranged || this.app.pdfDocument === base.doc) ? this.currentSourcePage() : -1;
-      const target = Math.max(1, plan.pages.findIndex(p => p.src === viewing) + 1);
-      this.arranged = { options, pages: plan.pages, fileName, key: `${base.key}#scan:${sig}`, doc: null, auto, size: bytes.length };
-      // 1ページ目でも指定する(PDF.js が前回見ていた位置に戻さないように。0.4.1)
-      this.app.initialBookmark = `page=${target}`;
-      // 0.5: 読む向きに合わせて、ビューアの綴じ方向を変える(右から左に読むなら右綴じ。設定は変えない)
-      if (this.book && options.mode !== "straighten" && this.book.direction !== options.direction) {
-        this.directionOverridden = true;
-        this.directionChanging = true;
-        try {
-          this.book.setDirection(options.direction);
-        } finally {
-          this.directionChanging = false;
-        }
-      }
-      // 見開きを分けたとき: 1ページ目が見開きの片側なら、元のスキャンと同じ組み合わせ(1-2、3-4…)で並ぶ「見開き」で表示する
-      // (製本表示では1ページ目が表紙として単独になり、組み合わせが1つずれるため)。冊子は製本表示のまま
-      if (this.book) {
-        if (options.mode === "spread" && plan.pages[0]?.half) {
-          if (this.book.mode === "book") {
-            this.modeBefore ??= "book";
-            this.book.mode = "spread";
-          }
-        } else {
-          this.restoreViewMode();
-        }
-      }
-      const opened = await this.openDocument({
-        data: bytes,
-        filename: fileName,
-        seihon: { current: base.current, arranged: { baseId: base.id, fileName, mode: options.mode }, key: this.arranged.key },
-      });
-      if (!opened) {
-        // 開けなかった(エラーの表示は main.js が出す)
-        this.arranged = null;
-        this.setState("none");
-        return false;
-      }
-      if (remember) {
-        base.choice = options;
-        await storeChoice(base.key, options);
-      }
-      return true;
+      return await this.presentArranged(base, options, plan.pages, bytes, { auto, remember, fromStart });
     } catch (e) {
       console.error("[製本ビューア] スキャンを整えられませんでした", e);
       this.toast.show(`スキャンを整えられませんでした(${e?.message || e})`, { kind: "error", duration: 9000 });
@@ -1208,6 +1211,125 @@ export class ScanArranger {
       this.busyToast?.();
       this.busyToast = null;
     }
+  }
+
+  /**
+   * 保存しておいた整えの結果で開く(0.6.7)。
+   * 使えたら true / 使えなかった(保存が無い・中身が合わない)ときは null(いつもの道で調べ直す)
+   * @returns {Promise<boolean|null>}
+   */
+  async cachedArrange(options, base, { auto = false, remember = false, fromStart = false } = {}) {
+    try {
+      base.key ||= await this.docSource.key(base.doc);
+      if (!base.key) {
+        return null;
+      }
+      const sig = signature(options);
+      const rec = await getScanPlan(scanPlanKey(base.key, sig));
+      const pages = validCachedPages(rec?.pages, base.pageCount);
+      if (!rec || !pages) {
+        if (rec) {
+          // 中身が変わっていた(スキャンの判定の版が新しくなった・計画が壊れている)ので捨てる
+          await deleteScanPlan(scanPlanKey(base.key, sig));
+        }
+        return null;
+      }
+      // 出来上がりの PDF も保存しておいてあるときだけ、組み直しも飛ばせる
+      const id = await arrangedId(`${base.key}|${SCAN_CACHE_SCHEMA}|${sig}|${pages.length}`);
+      const bytes = await getScanCache(id);
+      if (!bytes) {
+        return null;
+      }
+      if (!this.alive(base)) {
+        return null;
+      }
+      // 組み直しに使う pdf-lib の文書はもう要らない(開いた文書の記憶(元に戻す)には使わない)
+      base.source = null;
+      const text = "保存しておいた整えを開いています…";
+      this.setState("busy", text);
+      this.busyToast?.update?.(text);
+      let opened = false;
+      try {
+        opened = await this.presentArranged(base, options, pages, bytes, { auto, remember, fromStart, fromCache: true });
+      } catch {
+        opened = false;
+      }
+      if (opened) {
+        return true;
+      }
+      // できた PDF が壊れていたりすると起こる。保存しておいたものを捨てて、いつもの道で作り直す
+      await deleteScanPlan(scanPlanKey(base.key, sig));
+      await deleteScanCache(id);
+      return null;
+    } catch (e) {
+      console.warn("[製本ビューア] 保存しておいた整えが使えないため、調べ直します", e);
+      return null;
+    }
+  }
+
+  /**
+   * 整えた文書の表示への切り替えと、結果の保存(0.6.7)。
+   * arrange() の後半。保存しておいてある計画で開くとき(cachedArrange())にも使う
+   * @param {Array<{src:number, rect:number[]|null, rotate:number, ...}>} pages 作るページ(順に)
+   * @param {Uint8Array} bytes できた PDF
+   * @returns {Promise<boolean>} 開けたら true。開けなければ false
+   */
+  async presentArranged(base, options, pages, bytes, { auto = false, remember = false, fromStart = false, fromCache = false } = {}) {
+    const sig = signature(options);
+    const fileName = `${sanitizeFileName(base.baseName)}${MODE_SUFFIX[options.mode]}.pdf`;
+    // いま見ているページに当たるページから表示する
+    const viewing = !fromStart && (this.isArranged || this.app.pdfDocument === base.doc) ? this.currentSourcePage() : -1;
+    const target = Math.max(1, pages.findIndex(p => p.src === viewing) + 1);
+    this.arranged = { options, pages, fileName, key: `${base.key}#scan:${sig}`, doc: null, auto, size: bytes.length };
+    // 1ページ目でも指定する(PDF.js が前回見ていた位置に戻さないように。0.4.1)
+    this.app.initialBookmark = `page=${target}`;
+    // 0.5: 読む向きに合わせて、ビューアの綴じ方向を変える(右から左に読むなら右綴じ。設定は変えない)
+    if (this.book && options.mode !== "straighten" && this.book.direction !== options.direction) {
+      this.directionOverridden = true;
+      this.directionChanging = true;
+      try {
+        this.book.setDirection(options.direction);
+      } finally {
+        this.directionChanging = false;
+      }
+    }
+    // 見開きを分けたとき: 1ページ目が見開きの片側なら、元のスキャンと同じ組み合わせ(1-2、3-4…)で並ぶ「見開き」で表示する
+    // (製本表示では1ページ目が表紙として単独になり、組み合わせが1つずれるため)。冊子は製本表示のまま
+    if (this.book) {
+      if (options.mode === "spread" && pages[0]?.half) {
+        if (this.book.mode === "book") {
+          this.modeBefore ??= "book";
+          this.book.mode = "spread";
+        }
+      } else {
+        this.restoreViewMode();
+      }
+    }
+    const opened = await this.openDocument({
+      data: bytes,
+      filename: fileName,
+      seihon: { current: base.current, arranged: { baseId: base.id, fileName, mode: options.mode }, key: this.arranged.key },
+    });
+    if (!opened) {
+      // 開けなかった(エラーの表示は main.js が出す)
+      this.arranged = null;
+      this.setState("none");
+      return false;
+    }
+    // 0.6.7: 保存しておく(次に開くときは、調べ直さない・作り直さない)
+    try {
+      await putScanPlan(scanPlanKey(base.key, sig), pages, base.pageCount);
+      if (!fromCache) {
+        await putScanCache(await arrangedId(`${base.key}|${SCAN_CACHE_SCHEMA}|${sig}|${pages.length}`), bytes, base.key);
+      }
+    } catch (e) {
+      console.warn("[製本ビューア] 整えた結果を保存しておけませんでした", e);
+    }
+    if (remember) {
+      base.choice = options;
+      await storeChoice(base.key, options);
+    }
+    return true;
   }
 
   afterArrangedLoaded(doc) {
