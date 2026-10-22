@@ -275,13 +275,185 @@ function sanitizeViewHistory() {
 // ---------------------------------------------------------------------------
 {
   const originalOpen = app.open.bind(app);
+  // ---- 読み込み中の状況表示(0.6.6: 出所・進捗・速度) ----------------
+  // file:// は Chrome が総サイズを教えないので、こちらで先に読んで PDF.js に渡す。
+  // インターネットの文書は PDF.js の進捗(%)を借りて見せる。
+  let netAllowed = false;
+  let netToken = 0;
+  let localBlobUrl = null;
+  const shLoadRoot = document.getElementById("shLoadStatus");
+  const shLoadBar = shLoadRoot?.querySelector("#shLoadBar");
+  const shLoadFill = shLoadBar?.firstElementChild;
+  const shLoadText = shLoadRoot?.querySelector("#shLoadText");
+  let shLoadToken = 0;
+  let shLoadXhr = null;
+  /** この時間より長くかかりそうな読みだけ、状況を見せる(すぐ終わる読みで何度も出てうるさくしないため)(0.6.6) */
+  const SH_LOAD_REVEAL_MS = 900;
+  let shLoadRevealed = false;
+  let shLoadShowTimer = null;
+  const shFmtMB = bytes => `${(bytes / 1048576).toFixed(1)}MB`;
+
+  function shLoadBegin(kind) {
+    if (!shLoadRoot) {
+      return 0;
+    }
+    const token = ++shLoadToken;
+    shLoadXhr?.abort?.();
+    shLoadXhr = null;
+    shLoadRevealed = false;
+    clearTimeout(shLoadShowTimer);
+    shLoadRoot.hidden = true;
+    shLoadRoot.classList.remove("sh-nobar");
+    shLoadBar?.classList.remove("sh-indeterminate", "sh-stall");
+    if (shLoadFill) {
+      shLoadFill.style.width = "0";
+    }
+    // しばらくかかるようなら、ここで初めて出す
+    shLoadShowTimer = setTimeout(() => {
+      if (token !== shLoadToken) {
+        return;
+      }
+      shLoadRevealed = true;
+      shLoadRoot.hidden = false;
+      if (shLoadText) {
+        shLoadText.textContent = kind === "net" ? "インターネットから取得中…" : "ローカルのファイルを取り込み中…";
+      }
+    }, SH_LOAD_REVEAL_MS);
+    return token;
+  }
+
+  function shLoadUpdate(token, { percent = null, indeterminate = false, stall = false, text = null }) {
+    if (!shLoadRoot || token !== shLoadToken || !shLoadRevealed) {
+      return;
+    }
+    const hasPercent = percent !== null && !indeterminate;
+    shLoadRoot.classList.toggle("sh-nobar", hasPercent);
+    shLoadBar?.classList.toggle("sh-indeterminate", indeterminate);
+    shLoadBar?.classList.toggle("sh-stall", stall);
+    if (shLoadFill && hasPercent) {
+      shLoadFill.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+    }
+    if (text !== null && shLoadText) {
+      shLoadText.textContent = text;
+    }
+  }
+
+  function shLoadEnd() {
+    shLoadToken++;
+    shLoadRevealed = false;
+    clearTimeout(shLoadShowTimer);
+    if (shLoadRoot) {
+      shLoadRoot.hidden = true;
+      shLoadRoot.classList.remove("sh-nobar");
+      shLoadBar?.classList.remove("sh-indeterminate", "sh-stall");
+    }
+  }
+
+  /**
+   * file:// をこちらで読む(0.6.6)。CSV のプレースホルダのように取り込みが遅い箱でも、
+   * 読めたバイト数と速度を出し続ける。読めたら配列バッファで返す
+   */
+  function shReadFileUrl(url, token) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("GET", url);
+      xhr.responseType = "arraybuffer";
+      shLoadXhr = xhr;
+      const started = performance.now();
+      let paintedAt = 0;
+      let stallShown = false;
+      let lastLoaded = 0;
+      let lastProgressAt = started;
+      const paint = () => {
+        if (token !== shLoadToken) {
+          return;
+        }
+        const now = performance.now();
+        const seconds = (now - started) / 1000;
+        const speed =
+          seconds > 0.5 && lastLoaded > 524288 ? ` ≈${(lastLoaded / seconds / 1048576).toFixed(1)}MB/s` : "";
+        const stall = now - lastProgressAt > 2500;
+        let text = `ローカルのファイルを取り込み中 ${shFmtMB(lastLoaded)}${speed}`;
+        if (stall) {
+          text += " (取り込み待ち…)";
+        }
+        if (stall !== stallShown || now - paintedAt > 180) {
+          stallShown = stall;
+          paintedAt = now;
+          shLoadUpdate(token, { indeterminate: true, stall, text });
+        }
+      };
+      paint();
+      const timer = setInterval(() => {
+        if (token !== shLoadToken) {
+          clearInterval(timer);
+          return;
+        }
+        paint();
+      }, 300);
+      xhr.onprogress = evt => {
+        lastLoaded = evt.loaded || 0;
+        lastProgressAt = performance.now();
+      };
+      const finish = () => {
+        clearInterval(timer);
+        if (shLoadXhr === xhr) {
+          shLoadXhr = null;
+        }
+      };
+      xhr.onload = () => {
+        finish();
+        if (token !== shLoadToken) {
+          reject(new Error("読み込んでいる間に別の文書が開かれました"));
+          return;
+        }
+        resolve(xhr.response);
+      };
+      xhr.onerror = () => {
+        finish();
+        reject(new Error("読み込めませんでした"));
+      };
+      xhr.onabort = () => {
+        finish();
+        reject(new Error("読み込みを中止しました"));
+      };
+      xhr.send();
+    });
+  }
+
+  // PDF.js が出す進捗(総サイズが分かる文書)を借りて、インターネットの文書の % を見せる
+  if (typeof app.progress === "function") {
+    const originalProgress = app.progress.bind(app);
+    app.progress = percent => {
+      originalProgress(percent);
+      if (netAllowed && shLoadRoot) {
+        if (!netToken) {
+          netToken = shLoadBegin("net");
+        }
+        if (Number.isFinite(percent)) {
+          shLoadUpdate(netToken, { percent, text: `インターネットから取得中 ${Math.round(percent)}%` });
+        } else {
+          shLoadUpdate(netToken, { indeterminate: true, text: "インターネットから取得中…" });
+        }
+      }
+    };
+  }
+  // 開き終わったら状況表示は消す(「完了」は出さない)
+  app.eventBus.on("documentloaded", () => {
+    netAllowed = false;
+    netToken = 0;
+    shLoadEnd();
+  });
+
   app.open = async args => {
     // 製本ビューアが自分で開く文書(0.3: 整えたスキャンの PDF・元のスキャンに戻すとき)。出どころは元の文書のものを引き継ぐ
     const special = args?.seihon || null;
     if (special) {
       delete args.seihon;
     }
-    // 編集して保存していない PDF を閉じる前に確かめる(自分で開くときは、呼ぶ側で確かめている)
+    netAllowed = false;
+    netToken = 0;
+    localBlobUrl = null;    // 編集して保存していない PDF を閉じる前に確かめる(自分で開くときは、呼ぶ側で確かめている)
     if (app.pdfDocument && !special && !(await pageEditor.guard("別の PDF を開く"))) {
       return false;
     }
@@ -291,6 +463,37 @@ function sanitizeViewHistory() {
       const handled = await ebookRouter.intercept(args);
       if (handled !== null) {
         return handled;
+      }
+      const openUrl = typeof args?.url === "string" ? args.url : "";
+      if (openUrl.startsWith("file:")) {
+        // 0.6.6: file:// は Chrome が総サイズを教えないので、いったんこちらで読んで進捗(MB・速度)を
+        // 見せてから、blob に替えて PDF.js に渡す(ファイルの読みは1回)
+        const token = shLoadBegin("local");
+        let proceed = true;
+        try {
+          const bytes = await shReadFileUrl(openUrl, token);
+          const blob = new Blob([bytes], { type: "application/pdf" });
+          localBlobUrl = URL.createObjectURL(blob);
+          let path = openUrl.startsWith("file:///") ? openUrl.slice("file:///".length) : openUrl;
+          try {
+            path = decodeURIComponent(path.split(/[?#]/, 1)[0]);
+          } catch {}
+          args = { ...args, url: localBlobUrl, originalUrl: encodeURIComponent(path), __seihonLocal: openUrl };
+        } catch {
+          if (token !== shLoadToken) {
+            // 読み込んでいる間に別の文書が開かれた。この読みは捨てる
+            proceed = false;
+          }
+          // それ以外の失敗(アクセス許可が無い等)は、替えずにこれまでどおり PDF.js に開かせる
+        } finally {
+          shLoadEnd();
+        }
+        if (!proceed) {
+          return false;
+        }
+      } else if (/^https?:/i.test(openUrl)) {
+        netAllowed = true;
+        netToken = 0;
       }
     }
     // いまの文書は閉じるので、編集の状態(「保存」ボタンなど)も消す
@@ -312,6 +515,18 @@ function sanitizeViewHistory() {
       if (special.arranged) {
         current.arranged = special.arranged;
       }
+    } else if (args.__seihonLocal) {
+      // 0.6.6: こちらで先に読んだローカルの PDF。出どころは file:// のままにして、
+      // これまでどおりの表示・メニュー(Chrome標準で開く、file:// のリンクをコピー など)にする
+      const localUrl = String(args.__seihonLocal);
+      let localName = "";
+      try {
+        localName = decodeURIComponent(args.originalUrl || "");
+      } catch {
+        localName = String(args.originalUrl || "");
+      }
+      delete args.__seihonLocal;
+      current = { kind: "url", url: localUrl, name: localName };
     } else if (args.url && String(args.url).startsWith("blob:")) {
       let name = args.originalUrl || "";
       try {
@@ -329,8 +544,21 @@ function sanitizeViewHistory() {
     book.applyInitialOptions(book.mode || settings.initialView, book.direction);
     try {
       await originalOpen(args);
+      if (localBlobUrl) {
+        // こちらで読んだローカルの PDF の仮の URL は、PDF.js に渡ったらもう要らない
+        const oldBlobUrl = localBlobUrl;
+        localBlobUrl = null;
+        setTimeout(() => URL.revokeObjectURL(oldBlobUrl), 600);
+      }
       return true;
     } catch (reason) {
+      shLoadEnd();
+      netAllowed = false;
+      if (localBlobUrl) {
+        const oldBlobUrl = localBlobUrl;
+        localBlobUrl = null;
+        setTimeout(() => URL.revokeObjectURL(oldBlobUrl), 600);
+      }
       // 0.4: PDF ではなかったとき、中身が電子書籍・コミックならそちらで開く(拡張子の無いダウンロードの URL など)
       if (!special && reason?.name === "InvalidPDFException" && typeof args.url === "string") {
         const handled = await ebookRouter.retryAsEbook(args.url, args.originalUrl).catch(() => null);

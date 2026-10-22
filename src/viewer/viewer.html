@@ -104,6 +104,12 @@
         </div>
       </header>
 
+      <!-- 0.6.6 読み込み中の状況(出所・進捗・速度)。長くかかる読みだけ出す -->
+      <div id="shLoadStatus" aria-live="off" hidden>
+        <div id="shLoadText"></div>
+        <div id="shLoadBar"><div class="sh-load-fill"></div></div>
+      </div>
+
       <!-- ===== サイドバー(サムネイル・しおり) ===== -->
       <aside id="shSidebar" aria-label="サイドバー">
         <nav id="shSidebarTabs" role="tablist" aria-label="サイドバーの表示内容">
