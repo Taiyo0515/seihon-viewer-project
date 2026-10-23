@@ -330,8 +330,13 @@ function sanitizeViewHistory() {
     shLoadRoot.classList.toggle("sh-nobar", hasPercent);
     shLoadBar?.classList.toggle("sh-indeterminate", indeterminate);
     shLoadBar?.classList.toggle("sh-stall", stall);
-    if (shLoadFill && hasPercent) {
-      shLoadFill.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+    if (shLoadFill) {
+      if (hasPercent) {
+        shLoadFill.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+      } else if (indeterminate) {
+        // 流れる帯の幅はスタイルシートの側で決める。インラインの幅が残っていると 0 幅のまま動かない(0.6.8 で修正)
+        shLoadFill.style.width = "";
+      }
     }
     if (text !== null && shLoadText) {
       shLoadText.textContent = text;
