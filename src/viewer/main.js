@@ -940,7 +940,7 @@ window.addEventListener(
 document.getElementById("shPrint").addEventListener("click", () => app.triggerPrinting());
 
 /**
- * 印刷(印刷ボタン・Ctrl+P)。画質が「最高画質」(初期値)なら、元の PDF のまま Chrome の印刷機能で印刷する
+ * 印刷(印刷ボタン・Ctrl+P)。画質が「元の PDF で印刷」(初期値。0.7.0 までの名前は「最高画質」)なら、元の PDF のまま Chrome の印刷機能で印刷する
  * (画像は元の解像度、文字・OCR の文字も残る。print-native.js)。それ以外は PDF.js の印刷(ページを画像にして印刷)。
  * ブラウザのメニューから印刷したときは、PDF.js の印刷になる(高画質)。
  */
@@ -962,8 +962,8 @@ document.getElementById("shPrint").addEventListener("click", () => app.triggerPr
     preparing = true;
     printOriginal()
       .catch(e => {
-        console.warn("[製本ビューア] 最高画質で印刷できなかったため、ページを画像にして印刷します", e);
-        toast.show(`最高画質で印刷できなかったため、ページを画像にして印刷します(${e.message || e})`, { duration: 6000 });
+        console.warn("[製本ビューア] 元の PDF のままで印刷できなかったため、ページを画像にして印刷します", e);
+        toast.show(`元の PDF のままで印刷できなかったため、ページを画像にして印刷します(${e.message || e})`, { duration: 6000 });
         updatePrintResolution();
         pdfjsPrint();
       })
@@ -971,7 +971,7 @@ document.getElementById("shPrint").addEventListener("click", () => app.triggerPr
         preparing = false;
       });
   };
-  // Ctrl+P(boot.js が PDF.js より先に受け取る): 最高画質なら、ここで印刷する
+  // Ctrl+P(boot.js が PDF.js より先に受け取る): 元の PDF で印刷 なら、ここで印刷する
   boot.printHandler = () => {
     if (!app.pdfDocument || settings.printQuality !== "max" || !canPrintWithChrome()) {
       return false; // PDF.js の印刷(ページを画像にして印刷)
@@ -1023,8 +1023,8 @@ app.eventBus.on("documentinit", () => removePrintFrame());
 
 /**
  * ページを画像にして印刷するときの解像度。PDF.js は印刷を始めるときにこの値を読む
- * (最高画質以外の印刷ボタン・Ctrl+P と、ブラウザのメニューからの印刷)。
- * 最高画質の設定でブラウザのメニューから印刷したときは、高画質(300dpi)にする。
+ * (元の PDF で印刷 以外の印刷ボタン・Ctrl+P と、ブラウザのメニューからの印刷)。
+ * 元の PDF で印刷 の設定でブラウザのメニューから印刷したときは、高画質(300dpi)にする。
  */
 function updatePrintResolution() {
   const count = viewPageCount(app.pdfDocument);

@@ -1,28 +1,32 @@
 /**
- * ページを画像にする(コピー・画像の保存・画像の ZIP・収集の「画像としてコピー」で使う)。
+ * ページを画像にする(コピー・画像の保存・画像の ZIP・収集の「画像としてコピー」・変換で使う共通の入口)。
  *
- * 画質(設定 imageQuality):
- *  - "max" 最高画質(初期値): 元の画質のまま。
+ * 画質(設定 imageQuality= dpi を基本にした選び方):
+ *  - "original" 元データ優先(初期値): 元の画質のまま。
  *      ・スキャンしたページ(画像だけのページ)は、元の画像の解像度で描く(拡大も縮小もしない)。
  *      ・文字・図(ベクター)のあるページは 600dpi で描く(画像を含むときは、画像の解像度と高い方)。
  *        OCR の文字(見えない文字)は、見える文字としては数えない。
  *      ・ファイルに保存するときは、ページが1枚の JPEG 画像だけでできていれば(スキャンした PDF の多く)、
  *        元の JPEG をそのまま取り出す(作り直さないので、画質も大きさも元とまったく同じ)。
- *  - "high" 高画質: 長辺 2400 ピクセル / "standard" 標準: 長辺 1600 ピクセル
- *  - "custom" 指定する: 詳細設定の pngMode(長辺 / 倍率)
+ *  - "high" 高画質: 300dpi / "standard" 標準: 150dpi(ページの大きさからピクセル数が決まる。A4 で 2480×3508 / 1240×1754)
+ *  - "custom" 指定する: 詳細設定の imageDpi(100〜1200dpi)
  *
- * 描いた画像は劣化しない PNG にする。メモリ不足で失敗しないよう、1枚の画素数には上限がある(64M 画素)。
+ * 描いた画像は基本、劣化しない PNG にする(指定があれば JPEG に減らす)。
+ * メモリ不足で失敗しないよう、1枚の画素数には上限がある(64M 画素)。
+ * PDF のコピー・保存は、この画質とは別に、いつも元の PDF の文字・図・画像のまま(page-copy.js)。
  */
 
 import { blankPdfBytes } from "./page-export.js";
 
-const PDF_POINTS_TO_CSS = 96 / 72;
-/** 文字・図を描く解像度(最高画質) */
+/** 文字・図を描く解像度(元データ優先) */
 export const VECTOR_DPI = 600;
+/** プリセットの画質の dpi(高画質・標準) */
+export const QUALITY_DPI = Object.freeze({ high: 300, standard: 150 });
 /** 1枚の画像の最大画素数(これを超える指定は自動で縮める) */
 export const MAX_PIXELS = 64 * 1024 * 1024;
 export const MAX_SIDE = 16000;
-const PRESET_LONG_SIDE = Object.freeze({ high: 2400, standard: 1600 });
+/** dpi を指定したときでも、スキャンのページを元の解像度で描くときの上限(変換まわりの決まり。600dpi より粗いものに引き伸ばさない) */
+const SCAN_DPI_MAX = 600;
 /** 画像の大きさの判断で無視する小さな画像(ページの面積に対する割合) */
 const SMALL_IMAGE_AREA = 0.02;
 
@@ -199,26 +203,41 @@ export function clampScale(base, scale) {
   return scale * Math.min(1, areaLimit, sideLimit);
 }
 
+/** dpi の値を正しい範囲(100〜1200)に収める(不正な値は高画質の値にする) */
+function clampDpi(dpi) {
+  return Number.isFinite(dpi) ? Math.min(1200, Math.max(100, dpi)) : QUALITY_DPI.high;
+}
+
+/** 画像にするときに使う dpi を設定から取る(プリセットが選ばれているときはその値) */
+export function effectiveImageDpi(settings) {
+  const quality = settings?.imageQuality || "custom";
+  if (quality === "high") {
+    return QUALITY_DPI.high;
+  }
+  if (quality === "standard") {
+    return QUALITY_DPI.standard;
+  }
+  return clampDpi(settings?.imageDpi);
+}
+
 /**
  * 画質の設定から、描く倍率(倍率 1 = 72dpi)を決める。
  * @param {{width:number,height:number}} base 倍率 1 のときの大きさ
  * @param {object} settings
- * @param {object|null} analysis analyzePage() の結果(最高画質のときに使う)
+ * @param {object|null} analysis analyzePage() の結果(元データ優先のときに使う)
  * @param {number} [shrink] 失敗時の縮小率
  */
 export function renderScaleFor(base, settings, analysis, shrink = 1) {
   const quality = settings.imageQuality || "custom";
   let scale;
-  if (quality === "max") {
+  if (quality === "original") {
     const img = analysis?.imageScale || 0;
     scale = img > 0 && !analysis.hasVisibleVector && !analysis.hasAnnotations ? img : Math.max(img, VECTOR_DPI / 72);
-  } else if (PRESET_LONG_SIDE[quality]) {
-    scale = PRESET_LONG_SIDE[quality] / Math.max(base.width, base.height);
-  } else if (settings.pngMode === "scale") {
-    // 倍率 1 = ビューアの 100% 表示(96dpi)と同じ大きさ
-    scale = settings.pngScale * PDF_POINTS_TO_CSS;
+  } else if (settings.scanOriginal && analysis?.imageScale > 0 && !analysis.hasVisibleVector && !analysis.hasAnnotations) {
+    // dpi の指定でも、スキャンのページは元の画像の解像度で描く(600dpi より粗いものに引き伸ばさず、細かいものは 600dpi に収める)
+    scale = Math.min(analysis.imageScale, SCAN_DPI_MAX / 72);
   } else {
-    scale = settings.pngLongSide / Math.max(base.width, base.height);
+    scale = effectiveImageDpi(settings) / 72;
   }
   return clampScale(base, scale * shrink);
 }
@@ -242,7 +261,7 @@ export async function renderPagePng(pdfDoc, pageNumber, { settings, rotation = 0
   const page = await pdfDoc.getPage(pageNumber);
   const totalRotation = (((page.rotate + rotation) % 360) + 360) % 360;
   const base = page.getViewport({ scale: 1, rotation: totalRotation });
-  if (!analysis && settings.imageQuality === "max") {
+  if (!analysis && settings.imageQuality === "original") {
     analysis = await analyzePage(page);
   }
   const scale = renderScaleFor(base, settings, analysis, shrink);
@@ -277,7 +296,7 @@ export async function renderPagePng(pdfDoc, pageNumber, { settings, rotation = 0
 }
 
 // ---------------------------------------------------------------------------
-// 元の JPEG をそのまま取り出す(最高画質でファイルに保存するとき)
+// 元の JPEG をそのまま取り出す(元データ優先・keepOriginal が指定されているとき)
 // ---------------------------------------------------------------------------
 
 let pdfLibPromise = null;
@@ -429,12 +448,24 @@ export async function extractOriginalJpeg(doc, pageNumber, sourcePageIndex, { ro
 }
 
 /**
- * ページを画像ファイルにする(最高画質で取り出せるときは元の JPEG、それ以外は PNG)。
+ * ページを画像ファイルにする(共通の入口: 画像の保存・ZIP・変換で使う)。
+ * 元データ優先(または keepOriginal の指定)で元の JPEG を取り出せるときは .jpg、
+ * それ以外は描き直して format の形式にする(PNG が基本。JPEG は小さくしたいとき)。
+ * @param {PDFDocumentProxy} doc ビューアで開いている文書(または保存済みのデータから開いた文書)
+ * @param {number} pageNumber 表示上のページ番号(1始まり)
+ * @param {number} sourcePageIndex そのページの元の PDF でのページ番号(0始まり。抜き出しに使う)
+ * @param {object} o
+ * @param {object} o.settings
+ * @param {number} [o.rotation] 表示上の回転
+ * @param {number} [o.shrink] 縮小率(失敗したときの再挑戦用)
+ * @param {boolean} [o.allowOriginal] 元の JPEG の取り出しを許す(既定 true)
+ * @param {boolean} [o.keepOriginal] スキャンのページの元の画像をそのまま使う(変換などの、設定と別の指定。既定 false)
+ * @param {"png"|"jpeg"} [o.format] 描き直すときの形式(既定は PNG。jpeg の品質は 0.92)
  * @returns {Promise<{blob:Blob, width:number, height:number, ext:"png"|"jpg", original:boolean}>}
  */
-export async function pageImageFile(doc, pageNumber, sourcePageIndex, { settings, rotation = 0, shrink = 1, allowOriginal = true }) {
+export async function pageImageFile(doc, pageNumber, sourcePageIndex, { settings, rotation = 0, shrink = 1, allowOriginal = true, keepOriginal = false, format = "png" } = {}) {
   let analysis = null;
-  if (settings.imageQuality === "max") {
+  if (settings.imageQuality === "original" || keepOriginal || settings.scanOriginal) {
     const page = await doc.getPage(pageNumber);
     analysis = await analyzePage(page);
     if (allowOriginal && shrink === 1 && analysis.coverImage) {
@@ -445,19 +476,31 @@ export async function pageImageFile(doc, pageNumber, sourcePageIndex, { settings
     }
   }
   const png = await renderPagePng(doc, pageNumber, { settings, rotation, shrink, analysis });
-  return { blob: png.blob, width: png.width, height: png.height, ext: "png", original: false };
+  if (format !== "jpeg") {
+    return { blob: png.blob, width: png.width, height: png.height, ext: "png", original: false };
+  }
+  // JPEG にする(描いた絵は PNG で劣化していない。JPEG はファイルを小さくしたいときの形式)
+  const bitmap = await createImageBitmap(png.blob);
+  try {
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+    canvas.getContext("2d").drawImage(bitmap, 0, 0);
+    const blob = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.92 });
+    return { blob, width: png.width, height: png.height, ext: "jpg", original: false };
+  } finally {
+    bitmap.close();
+  }
 }
 
 /** 画質の説明(通知に出す) */
 export function qualityLabel(settings) {
   switch (settings.imageQuality) {
-    case "max":
-      return "最高画質";
+    case "original":
+      return "元データ優先";
     case "high":
-      return "高画質";
+      return `高画質(${QUALITY_DPI.high}dpi)`;
     case "standard":
-      return "標準";
+      return `標準(${QUALITY_DPI.standard}dpi)`;
     default:
-      return "指定の画質";
+      return `${effectiveImageDpi(settings)}dpi`;
   }
 }

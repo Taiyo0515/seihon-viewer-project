@@ -35,7 +35,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   theme: "system",
   /**
    * 印刷の画質:
-   * "max" 最高画質(元の PDF のまま Chrome の印刷機能で印刷する。画像は元の解像度、文字・OCR の文字も残る)/
+   * "max" 元の PDF で印刷(昔の名前は「最高画質」。元の PDF のまま Chrome の印刷機能で印刷する。画像は元の解像度、文字・OCR の文字も残る)/
    * "auto" 50ページまでは高画質、それより多いときは標準 / "standard" 150dpi / "high" 300dpi
    * (max 以外は、ビューアがページを画像にして印刷する)
    */
@@ -61,16 +61,16 @@ export const DEFAULT_SETTINGS = Object.freeze({
   /** 「画像としてコピー」で複数ページのとき: "files" 1ページ1枚の画像ファイル / "zip" ZIP にまとめる */
   copyImagesAs: "files",
   /**
-   * 画像(コピー・画像の保存・ZIP)の画質:
-   * "max" 最高画質(元の画質。スキャンしたページは元の画像の解像度、文字・図のページは 600dpi)/
-   * "high" 高画質(長辺 2400 ピクセル)/ "standard" 標準(長辺 1600 ピクセル)/ "custom" 指定する(下の pngMode など)
+   * 画像にする画質(コピー・画像の保存・ZIP・変換で共通。image-export.js):
+   * "original" 元データ優先(スキャンしたページは元の画像の解像度、文字・図のページは 600dpi)/
+   * "high" 高画質 300dpi / "standard" 標準 150dpi / "custom" imageDpi の dpi で描く
    */
-  imageQuality: "max",
-  /** 「指定する」のときの大きさの指定方法: "longside" 長辺ピクセル / "scale" 倍率 */
+  imageQuality: "original",
+  /** 「指定する」のときに描く dpi(100〜1200。A4 で 300dpi = 2480×3508 ピクセル) */
+  imageDpi: 300,
+  /** 廃止(0.7.0 で dpi に統一。0.6.8 に戻したときのために値だけ残す) */
   pngMode: "longside",
-  /** 長辺ピクセル(文字が潰れない高め。A4 で約 205dpi、A5・B5 で約 240〜290dpi) */
   pngLongSide: 2400,
-  /** 倍率(1 = ビューアの100%表示と同じ大きさ = 96dpi。3 なら 288dpi) */
   pngScale: 3,
   /** コピーのショートカット(ビューア内) */
   aiCopyShortcut: "Ctrl+Shift+C",
@@ -177,10 +177,11 @@ export const SETTING_LABELS = Object.freeze({
   aiCopySingle: "コピー(1ページ)",
   aiCopyMulti: "コピー(複数ページ)",
   copyImagesAs: "画像としてコピー(複数ページ)",
-  imageQuality: "コピー・画像の画質",
-  pngMode: "画像の大きさの指定方法",
-  pngLongSide: "画像の長辺",
-  pngScale: "画像の倍率",
+  imageQuality: "画像にする画質",
+  imageDpi: "指定するdpi",
+  pngMode: "画像の大きさの指定方法(廃止: 0.7.0 から dpi)",
+  pngLongSide: "画像の長辺(廃止: 0.7.0 から dpi)",
+  pngScale: "画像の倍率(廃止: 0.7.0 から dpi)",
   aiCopyShortcut: "コピーのショートカット",
   collectClearAfterExport: "書き出し後の収集",
   collectLimitMB: "収集の保存上限",
@@ -222,8 +223,7 @@ const ENUMS = {
   aiCopySingle: ["clipboard-png", "file-pdf", "file-png"],
   aiCopyMulti: ["pdf-copy", "image-copy", "pdf", "zip"],
   copyImagesAs: ["files", "zip"],
-  imageQuality: ["max", "high", "standard", "custom"],
-  pngMode: ["longside", "scale"],
+  imageQuality: ["original", "high", "standard", "custom"],
   bindBlankPosition: ["beforeBack", "afterCover", "custom"],
   bindPaper: ["auto", "A3", "A4", "A5", "B4", "B5", "Letter", "Tabloid", "double"],
   bindDuplex: ["short", "long"],
@@ -244,6 +244,7 @@ const ENUMS = {
 
 /** 数値設定の範囲(範囲外は初期値に戻す) */
 const NUMBER_RANGES = {
+  imageDpi: [100, 1200],
   pngLongSide: [800, 12000],
   pngScale: [1, 8],
   collectLimitMB: [50, 20000],
@@ -343,18 +344,36 @@ export function normalizeSettings(stored) {
  * @returns {object|null} 書き換えた設定(変えるものが無ければ null)
  */
 export function migrateSettings(stored, previousVersion) {
-  if (!stored || typeof stored !== "object" || !previousVersion || compareVersions(previousVersion, "0.2.0") >= 0) {
+  if (!stored || typeof stored !== "object" || !previousVersion || compareVersions(previousVersion, "0.7.0") >= 0) {
     return null;
   }
   const next = { ...stored };
   let changed = false;
-  // 0.2: 印刷とコピーの初期値を「最高画質」「クリップボードへ」に、付属の出力ファイル名を「_付属」に
-  const defaultsBefore12 = { printQuality: "auto", aiCopyMulti: "pdf", bindObiSuffix: "_帯" };
-  for (const [key, oldDefault] of Object.entries(defaultsBefore12)) {
-    if (next[key] === oldDefault) {
-      next[key] = DEFAULT_SETTINGS[key];
-      changed = true;
+  if (compareVersions(previousVersion, "0.2.0") < 0) {
+    // 0.2: 印刷とコピーの初期値を「最高画質」「クリップボードへ」に、付属の出力ファイル名を「_付属」に
+    const defaultsBefore12 = { printQuality: "auto", aiCopyMulti: "pdf", bindObiSuffix: "_帯" };
+    for (const [key, oldDefault] of Object.entries(defaultsBefore12)) {
+      if (next[key] === oldDefault) {
+        next[key] = DEFAULT_SETTINGS[key];
+        changed = true;
+      }
     }
+  }
+  // 0.7.0: 画像にする画質を「dpi」を基本とした選び方に(元データ優先/300dpi/150dpi/指定するdpi)。
+  // 旧の選び方を、dpi に換算して引き継ぐ(倍率1 = 96dpi。長辺px は A4 の長辺 297mm = 11.69in で換算する)
+  if (next.imageQuality === "max") {
+    next.imageQuality = "original";
+    changed = true;
+  }
+  if (typeof next.imageDpi !== "number") {
+    let dpi = 300;
+    if (next.pngMode === "scale" && typeof next.pngScale === "number") {
+      dpi = Math.round(next.pngScale * 96);
+    } else if (next.pngMode === "longside" && typeof next.pngLongSide === "number" && next.pngLongSide > 0) {
+      dpi = Math.round(next.pngLongSide / 11.69 / 10) * 10;
+    }
+    next.imageDpi = Math.min(1200, Math.max(100, dpi));
+    changed = true;
   }
   return changed ? normalizeSettings(next) : null;
 }

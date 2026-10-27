@@ -7,15 +7,15 @@
  *   text   … テキスト(.txt。PDF の文字を取り出す。スキャンの PDF は OCR の文字があるときだけ)
  *
  * 画像の作り方
- *   - スキャンのページ(1枚の JPEG だけのページ)は、元の JPEG をそのまま取り出す(画質は元のまま)
- *   - それ以外のページは、指定の解像度で描く(PNG は劣化なし、JPEG は小さい)
+ *   - スキャンのページ(1枚の JPEG だけのページ)は、元の解像度・元の JPEG そのままで(keepOriginal)。それ以外は指定の dpi で描く
+ *     (共通の画像化の入口 image-export.js。PNG は劣化なし、JPEG は小さい)
  *
  * MOBI・AZW3・KFX には変換できない(Amazon の形式の書き出しは、公開されている部品が無いため)。
  * Kindle で読むときは EPUB を「Send to Kindle」で送ると Kindle の形式に変換される(固定レイアウトは対象外のことがある)。
  */
 
 import { createZip } from "../../common/files.js";
-import { analyzePage, extractOriginalJpeg, renderPagePng } from "../image-export.js";
+import { pageImageFile } from "../image-export.js";
 import { sourceIndex, viewPageCount } from "../page-map.js";
 
 export const CONVERT_FORMATS = Object.freeze({
@@ -33,39 +33,17 @@ const xmlEscape = s =>
 const MIME = { jpg: "image/jpeg", png: "image/png" };
 
 /**
- * 1ページを画像にする。
+ * 1ページを画像にする(共通の入口 image-export.js へ。スキャンのページは元の解像度で、それ以外は指定の dpi で描く)。
  * @returns {Promise<{blob:Blob, width:number, height:number, ext:"jpg"|"png", original:boolean}>}
  */
 async function pageImage(doc, pageNumber, { dpi, imageType, keepOriginal, rotation }) {
-  const page = await doc.getPage(pageNumber);
-  const analysis = await analyzePage(page);
-  if (keepOriginal && analysis.coverImage) {
-    const jpeg = await extractOriginalJpeg(doc, pageNumber, sourceIndex(doc, pageNumber), { rotation, analysis });
-    if (jpeg) {
-      return { blob: new Blob([jpeg.bytes], { type: "image/jpeg" }), width: jpeg.width, height: jpeg.height, ext: "jpg", original: true };
-    }
-  }
-  // 描く(スキャンのページは画像の解像度、それ以外は指定の解像度)
-  const scanScale = analysis.imageScale > 0 && !analysis.hasVisibleVector ? analysis.imageScale : 0;
-  const settings = {
-    imageQuality: "custom",
-    pngMode: "scale",
-    // 倍率 1 = 96dpi(renderScaleFor の決まり)
-    pngScale: (scanScale ? Math.min(scanScale * 72, 600) : dpi) / 96,
-  };
-  const png = await renderPagePng(doc, pageNumber, { settings, rotation, analysis });
-  if (imageType !== "jpeg") {
-    return { blob: png.blob, width: png.width, height: png.height, ext: "png", original: false };
-  }
-  const bitmap = await createImageBitmap(png.blob);
-  try {
-    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
-    canvas.getContext("2d").drawImage(bitmap, 0, 0);
-    const blob = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.92 });
-    return { blob, width: png.width, height: png.height, ext: "jpg", original: false };
-  } finally {
-    bitmap.close();
-  }
+  return pageImageFile(doc, pageNumber, sourceIndex(doc, pageNumber), {
+    // 変換は、詳細設定の画質とは別に、この画面で選んだ dpi・形式・元画像の使い方で描く
+    settings: { imageQuality: "custom", imageDpi: dpi, scanOriginal: true },
+    rotation,
+    keepOriginal: !!keepOriginal,
+    format: imageType === "jpeg" ? "jpeg" : "png",
+  });
 }
 
 /** PDF のしおり(目次)を、表示上のページ番号の木にする */

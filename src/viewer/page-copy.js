@@ -6,7 +6,7 @@
  * - コピー(複数ページ・既定): 1つの PDF にして「PDF としてコピー」(ファイルとしてクリップボードへ)。
  * - PDF としてコピー / 画像としてコピー: ファイルを保存し、クリップボードに入れる(file-clipboard.js)。
  * - 保存: PDF(元の文字・図・画像のまま。OCR の文字も残る)/ 画像 / 画像の ZIP。
- * - 画像の画質は設定 imageQuality(既定は最高画質 = 元の画質。image-export.js)。
+ * - 画像の画質は設定 imageQuality(既定は元データ優先 = 元の画質。image-export.js)。
  */
 
 import { createZip, sanitizeFileName, saveFile, timestampForFileName } from "../common/files.js";
@@ -165,7 +165,7 @@ export class PageCopy {
   // ファイル保存
   // -------------------------------------------------------------------------
 
-  /** 1ページを画像ファイルとして保存する(最高画質で元の JPEG を取り出せるときは .jpg、それ以外は .png) */
+  /** 1ページを画像ファイルとして保存する(元データ優先で元の JPEG を取り出せるときは .jpg、それ以外は .png) */
   savePageImage(pageNumber) {
     return this.exclusive(async () => {
       const busy = this.toast.show(`${pageNumber}ページ目を画像にしています…`, { duration: 0 });

@@ -38,7 +38,6 @@ const RADIO_SETTINGS = [
   "aiCopyMulti",
   "copyImagesAs",
   "imageQuality",
-  "pngMode",
   "bindBlankPosition",
   "bindDuplex",
   "bindSizeRef",
@@ -60,7 +59,7 @@ const SELECT_SETTINGS = [
   "bindUseBookmark",
 ];
 const TEXT_SETTINGS = ["bindNameSuffix", "bindObiSuffix"];
-const NUMBER_SETTINGS = { pngLongSide: [800, 12000], pngScale: [1, 8], collectLimitMB: [50, 20000] };
+const NUMBER_SETTINGS = { imageDpi: [100, 1200], collectLimitMB: [50, 20000] };
 
 const $ = id => document.getElementById(id);
 let toastTimer = 0;
@@ -121,7 +120,12 @@ function render(settings) {
     }
   }
   $("guardExcludeSites").disabled = !settings.guardEnabled;
-  // 画像の大きさの指定は「指定する」のときだけ
+  // 「指定する」dpi の目安(A4 の長辺 297mm = 11.69in)
+  const dpiEcho = $("imageDpiEcho");
+  if (dpiEcho) {
+    dpiEcho.textContent = String(Math.round(((Number(settings.imageDpi) || 300) * 11.69) / 10) * 10);
+  }
+  // dpi の指定は「指定する」のときだけ
   const custom = settings.imageQuality === "custom";
   $("imageCustomOptions").classList.toggle("disabled", !custom);
   for (const input of $("imageCustomOptions").querySelectorAll("input")) {
