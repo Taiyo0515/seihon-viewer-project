@@ -1069,11 +1069,16 @@ export class ScanArranger {
     if (base.analysisDoc) {
       return base.analysisDoc;
     }
-    if (!isRearranged(base.doc)) {
+    // 0.9.3: 元のスキャンが「いま表示中」のときだけ、その文書をそのまま使う。
+    // 部分表示に切り替えたあとは、元の文書は手放して(ビューアが破棄して)しまうため、
+    // 死んだ文書を返すと getPage で落ちて、裏の解析がそこで止まっていた
+    if (this.app.pdfDocument === base.doc && !isRearranged(base.doc)) {
       return base.doc;
     }
     if (!base.analysisDocJob) {
-      base.analysisDocJob = loadPdfFromBytes(base.plain || (await base.doc.getData()))
+      // 元のデータは、整えの確認のときに取得済み(base.bytes・base.plain)なので、ふつうは読み直さない
+      const data = base.plain || base.bytes || (await base.doc.getData());
+      base.analysisDocJob = loadPdfFromBytes(data)
         .then(doc => (base.analysisDoc = doc))
         .finally(() => {
           base.analysisDocJob = null;
@@ -1714,6 +1719,8 @@ export class ScanArranger {
         await this.presentArranged(base, options, plan.pages, bytes, { auto: true, remember, fromStart, partial: false });
       } catch (e) {
         console.warn("[製本ビューア] 残りのページを調べて組み直すところでエラー", e);
+        // 0.9.3: 表示側の記録にも残す(部分表示のまま使えるが、補正が止まったことが分かるように)
+        this.debugNote(`残りのページを調べるところで失敗しました(${e?.message || e})。部分表示のまま使えます`);
       } finally {
         if (base.finishJob === job) {
           base.finishJob = null;
