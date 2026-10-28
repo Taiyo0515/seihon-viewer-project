@@ -560,6 +560,9 @@ export class ScanArranger {
     this.suggestToast = null;
     this.setState("none");
     if (!doc || cur.converted) {
+      if (doc && cur.converted) {
+        this.debugNote("コミックなどから作った PDF のため、開いたときには調べません");
+      }
       return; // 0.4: コミックなどから作った PDF は調べない(見開きの画像はすでに分けてある)
     }
     const base = {
@@ -582,7 +585,10 @@ export class ScanArranger {
     };
     this.base = base;
     this.debugNote(`PDF を開きました(${base.pageCount}ページ)。スキャンかどうかを調べます`);
-    this.detect(base).catch(e => console.warn("[製本ビューア] スキャンかどうかを調べられませんでした", e));
+    this.detect(base).catch(e => {
+      console.warn("[製本ビューア] スキャンかどうかを調べられませんでした", e);
+      this.debugNote(`調べる途中で失敗しました(${e?.message || e})`);
+    });
   }
 
   /** 横長のページが多いか(ページの大きさだけ見る。速い) */
@@ -627,6 +633,7 @@ export class ScanArranger {
     }
     const settings = this.getSettings();
     if (settings.scanArrange === "off" && settings.scanDeskew === "off") {
+      this.debugNote("スキャンの整えの設定が「何もしない」のため、開いたときには調べません");
       return;
     }
     const landscape = await this.isLandscape(base);
@@ -643,6 +650,7 @@ export class ScanArranger {
     }
     const info = await base.doc.getDownloadInfo().catch(() => null);
     if ((info?.length || 0) > AUTO_LIMIT_BYTES) {
+      this.debugNote(`PDF が ${Math.round(AUTO_LIMIT_BYTES / 1024 / 1024)}MB を超えているため、開いたときには調べません(⋮ メニューからは整えられます)`);
       return;
     }
     base.key = await this.ensureKey(base);
@@ -659,15 +667,18 @@ export class ScanArranger {
     }
     if (!choiceActive) {
       if (!(await this.prepareSource(base))) {
+        this.debugNote("調べる用の PDF の読み込みができなかったため、調べません");
         return;
       }
       // 調べる最初のページは、いま見ているページのまわりと中ほどの数ページ(0.8.2)
       const quick = this.samplePages(base);
       const pure = quick.filter(i => base.source.inspect(i).pureImage);
       if (pure.length < Math.ceil(quick.length * 0.6)) {
+        this.debugNote(`スキャンとみなせるページが少ないため(画像だけのページ ${pure.length}/${quick.length} ページ)、開いたときには調べません(⋮ メニューからは整えられます)`);
         return; // スキャンではない(文字・図の PDF)
       }
       for (const i of quick) {
+        this.debugNote(`ページ ${i + 1} を調べます(判定サンプル)`);
         await this.analyzePage(base, i);
         if (!this.alive(base)) {
           return;
@@ -677,6 +688,7 @@ export class ScanArranger {
       base.checked = true;
       this.debugNote(`判定サンプル(${quick.length}ページ)で種類を判定しました: ${base.kind || "スキャンではない"}`);
       if (!base.kind) {
+        this.debugNote("見開き・冊子のどちらの形でもないため、開いたときには整えません");
         return;
       }
     }
@@ -710,10 +722,12 @@ export class ScanArranger {
   async detectPortrait(base) {
     const settings = this.getSettings();
     if (settings.scanDeskew === "off") {
+      this.debugNote("傾きの設定が「既定では入れない」のため、開いたときには調べません(⋮ メニューからは整えられます)");
       return;
     }
     const info = await base.doc.getDownloadInfo().catch(() => null);
     if ((info?.length || 0) > PORTRAIT_LIMIT_BYTES) {
+      this.debugNote(`PDF が ${Math.round(PORTRAIT_LIMIT_BYTES / 1024 / 1024)}MB を超えているため、傾きを調べません(⋮ メニューからは整えられます)`);
       return;
     }
     // 文字(テキスト)のあるページで、1ページが軽い(文字の PDF)ものは、スキャンではない。
@@ -727,6 +741,7 @@ export class ScanArranger {
           return;
         }
         if (text?.items?.some(t => t.str?.trim())) {
+          this.debugNote("文字の多い文書の PDF のため、開いたときには調べません(⋮ メニューからは整えられます)");
           return;
         }
       }
@@ -746,15 +761,18 @@ export class ScanArranger {
       return;
     }
     if (!(await this.prepareSource(base))) {
+      this.debugNote("調べる用の PDF の読み込みができなかったため、調べません");
       return;
     }
     // 調べる最初のページは、いま見ているページのまわりと中ほどの数ページ(0.8.1)
     const quick = this.samplePages(base);
     const pure = quick.filter(i => base.source.inspect(i).pureImage);
     if (pure.length < Math.ceil(quick.length * 0.6)) {
+      this.debugNote(`スキャンとみなせるページが少ないため(画像だけのページ ${pure.length}/${quick.length} ページ)、開いたときには調べません(⋮ メニューからは整えられます)`);
       return; // スキャンではない(図・写真の PDF)
     }
     for (const i of quick) {
+      this.debugNote(`ページ ${i + 1} を調べます(判定サンプル)`);
       await this.analyzePage(base, i);
       if (!this.alive(base)) {
         return;
