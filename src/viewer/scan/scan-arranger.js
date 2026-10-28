@@ -728,8 +728,8 @@ export class ScanArranger {
     if (!(await this.prepareSource(base))) {
       return;
     }
-    // 調べる最初のページは、いま見ているページのまわり(0.8)
-    const quick = this.analysisOrder(base).slice(0, Math.min(base.pageCount, QUICK_PAGES + 2));
+    // 調べる最初のページは、いま見ているページのまわりと中ほどの数ページ(0.8.1)
+    const quick = this.samplePages(base);
     const pure = quick.filter(i => base.source.inspect(i).pureImage);
     if (pure.length < Math.ceil(quick.length * 0.6)) {
       return; // スキャンではない(図・写真の PDF)
@@ -785,6 +785,11 @@ export class ScanArranger {
     }
     base.kind = "skewed";
     base.skew = sum;
+    // 0.8.1: 設定「スキャンした見開き」が「自動」のときは、開いたときにまっすぐにして表示する(案内は出さない)
+    if (!choice && settings.scanArrange === "auto") {
+      await this.arrange(this.defaultOptions("skewed"), { auto: true });
+      return;
+    }
     this.setState("suggest");
     if (!choice) {
       this.suggestToast = this.toast.show(`傾いたスキャンのようです(約 ${Math.abs(sum.median)}° ${sum.median > 0 ? "反時計回り" : "時計回り"}に傾いています)。まっすぐにして表示できます`, {
@@ -927,6 +932,19 @@ export class ScanArranger {
       }
     }
     return order;
+  }
+
+  /** 自動適用の判断に使うページ: いまのページのまわりと、中ほどの2ページ(約40%・約70%の位置。重複は除く)(0.8.1) */
+  samplePages(base = this.base) {
+    const n = Math.max(0, base?.pageCount || 0);
+    const list = [...this.analysisOrder(base).slice(0, Math.min(n, QUICK_PAGES + 2))];
+    for (const part of [0.4, 0.7]) {
+      const i = n > 0 ? Math.min(n - 1, Math.floor(n * part)) : -1;
+      if (i >= 0 && !list.includes(i)) {
+        list.push(i);
+      }
+    }
+    return list;
   }
 
   /** pdf-lib で元の PDF を読み込む(暗号化されていれば、パスワード無しの写しを作って読む)。同じ読み込みを2度始めない(0.8) */
