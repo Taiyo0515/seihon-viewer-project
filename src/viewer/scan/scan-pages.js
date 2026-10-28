@@ -383,6 +383,11 @@ export async function buildArrangedPdf(bytes, pages, { id, onProgress = null, pd
   const newRefs = [];
   for (let k = 0; k < pages.length; k++) {
     const out = pages[k];
+    // 0.9.3: 計画の項に「元のページが分からないもの」が混ざったときは、はっきり教える。
+    // 以前は undefined の src を読んで TypeError になり、部分表示が黙って失敗していた
+    if (!out || !Number.isInteger(out.src) || out.src < 0 || out.src >= srcPages.length) {
+      throw new Error(`整えの計画に、元のページが分からない項があります(${k + 1}/${pages.length}番目)`);
+    }
     const leaf = srcPages[out.src].node;
     // 0.9.3: まだ調べていないページ(pending・元のまま入れる)は、大きさと回転だけを軽く調べる。
     // inspect() はページの中身の命令を全部解釈するため、大きいスキャン(数百ページ)では数分かかっていた

@@ -578,8 +578,11 @@ export class ScanArranger {
       source: null,
       kind: null,
       choice: null,
-      scans: [],
-      previews: [],
+      // 0.9.3: 隙間(ホール)の無い配列にしておく。調べたページだけ scans[i] = ... で入れると、
+      // 調べた順(いまのページのまわりから)のせいで隙間だらけの配列になり、plan() の map() が
+      // 隙間を飛ばして undefined の項を残す → PDF を作るときに落ちて、部分表示が固まっていた
+      scans: new Array(doc.numPages).fill(undefined),
+      previews: new Array(doc.numPages).fill(undefined),
       analyzed: false,
       checked: false,
     };
@@ -1291,7 +1294,9 @@ export class ScanArranger {
    *   matrix: 傾きを直す変換(PDF の cm)/ turn: 横に置いた見開きを回した向き
    */
   plan(options, base = this.base, { partial = false } = {}) {
-    const complete = base.scans.length >= base.pageCount && base.scans.every(Boolean);
+    // 0.9.3: 全部調べたかは「数」で決める。every(Boolean) は隙間(ホール)を飛ばして判定するため、
+    // 隙間のある配列では残りがあるのに「全部調べた」と誤判じすることがあった
+    const complete = base.scans.filter(Boolean).length >= Math.max(1, base.pageCount);
     // 構成「元のまま」で、補正も無い: 元のスキャンをそのまま並べる(プレビュー用。表示への切り替えは restore() で行う)
     if (options.mode === "none" && !options.deskew && !options.trim) {
       const pages = base.scans.map((s, i) => ({
@@ -1531,11 +1536,15 @@ export class ScanArranger {
         ) {
           // 近いページで整えた表示に切り替えて(保存はしない)、残りは表示しながら調べる
           const ok = await this.presentPartial(base, options, plan.pages, { fromStart });
-          if (!ok) {
+          if (ok) {
+            await this.finishPartial(options, base, { fromStart, remember });
+            return true;
+          }
+          // 0.9.3: 部分表示が作れなかったときも、このまま固めない(以前は state が「作っています…」のまま
+          // 残って、固まって見えた)。いつもの道(全部を調べてから整える)へそのまま進む
+          if (!this.alive(base)) {
             return false;
           }
-          await this.finishPartial(options, base, { fromStart, remember });
-          return true;
         }
         // 部分の計画が作れないときは、いつもの道(全部調べてから整える)へ進む
       }
@@ -1620,6 +1629,8 @@ export class ScanArranger {
       return opened;
     } catch (e) {
       console.warn("[製本ビューア] まわりのページだけでは整えられなかったため、全部を調べてから整えます", e);
+      // 0.9.3: 表示側の記録(スキャンの処理の表示)にも残す。F12 を開かなくても分かるように
+      this.debugNote(`部分表示の PDF が作れませんでした(${e?.message || e})。全部を調べてから整えます`);
       return false;
     }
   }
