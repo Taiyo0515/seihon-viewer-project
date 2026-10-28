@@ -523,6 +523,18 @@ body.sh-no-document #viewsManagerToggleButton {
   visibility: hidden;
 }
 
+/* 0.9.3: 詳細設定の分類3のスイッチがオフのとき(ボタンを出さない)。
+   .sh-icon-btn が display を指定しているので、hidden 属性を CSS でも効かせる */
+#shPrint[hidden],
+#shBindOutput[hidden],
+#shRolesOutput[hidden] {
+  display: none !important;
+}
+/* 役割一覧の下の欄は「製本用PDF出力…」のボタンだけなので、ボタンが無いときは欄ごと隠す */
+#shRolesPanel .sh-collect-foot:has(#shRolesOutput[hidden]) {
+  display: none;
+}
+
 /* 読み込みの進み具合(ツールバー下端の細い線) */
 #loadingBar {
   --progressBar-color: var(--sh-accent);

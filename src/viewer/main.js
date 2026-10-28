@@ -199,6 +199,17 @@ bindDialog = new BookbindingDialog({
   onOpenRoles: () => rolesPanel.open(),
 });
 document.getElementById("shBindOutput").addEventListener("click", () => bindDialog.open());
+// ---------------------------------------------------------------------------
+// 普段の画面のボタンの出し分け(0.9.3: 詳細設定の分類3「印刷・製本出力」のカードのスイッチ)。
+// オフのときは「印刷」「製本用PDF出力」のボタンを隠す(印刷は Ctrl+P・⋮ の「Chrome標準ビューアで開いて印刷」で使える)
+// ---------------------------------------------------------------------------
+function applyFeatureButtons() {
+  const show = !!settings.printBindVisible;
+  document.getElementById("shPrint").hidden = !show;
+  document.getElementById("shBindOutput").hidden = !show;
+  document.getElementById("shRolesOutput")?.toggleAttribute("hidden", !show);
+}
+applyFeatureButtons();
 let contextMenu = null;
 const thumbSelection = new ThumbSelection(app, {
   onCopy: pages => pageCopy.copyPages(pages),
@@ -1174,7 +1185,9 @@ const moreMenu = new PopupMenu({
       { label: "表示中のページを収集に追加", icon: "collect", disabled: !hasDoc, onSelect: () => collection.addCurrentPages([app.page]) },
       { label: `ページ収集を表示(${collection.count}ページ)`, icon: "collect", onSelect: () => collectPanel.open() },
       { separator: true },
-      { label: "製本用PDF出力…", icon: "bind-output", disabled: !hasDoc, onSelect: () => bindDialog.open() },
+      ...(settings.printBindVisible
+        ? [{ label: "製本用PDF出力…", icon: "bind-output", disabled: !hasDoc, onSelect: () => bindDialog.open() }]
+        : []),
       {
         label: "スキャンを整える(見開きの分割・余白の除去・冊子の並べ替え)…",
         icon: "scan-split",
@@ -1387,6 +1400,10 @@ onSettingsChanged(next => {
   }
   if (next.printQuality !== prev.printQuality) {
     updatePrintResolution();
+  }
+  // 0.9.3: 普段の画面の「印刷」「製本用PDF出力」のボタンの出し分け
+  if (next.printBindVisible !== prev.printBindVisible) {
+    applyFeatureButtons();
   }
 });
 

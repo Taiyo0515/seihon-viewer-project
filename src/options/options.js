@@ -83,6 +83,8 @@ function render(settings) {
   for (const id of CHECK_SETTINGS) {
     $(id).checked = !!settings[id];
   }
+  // 0.9.3: 分類3のカードのスイッチ
+  $("printBindVisibleSwitch").setAttribute("aria-checked", settings.printBindVisible ? "true" : "false");
   for (const id of Object.keys(NUMBER_SETTINGS)) {
     if (document.activeElement !== $(id)) {
       $(id).value = String(settings[id]);
@@ -157,6 +159,16 @@ function bind() {
   for (const id of CHECK_SETTINGS) {
     $(id).addEventListener("change", () => save({ [id]: $(id).checked }));
   }
+  // 0.9.3: 分類3のカードのスイッチ(「印刷」「製本用PDF出力」のボタンを出すか)。
+  // カード自体がリンク(a)なので、スイッチの押した時の動きはここで止める(分類を開かない)
+  const printSwitch = $("printBindVisibleSwitch");
+  printSwitch.addEventListener("click", e => {
+    e.preventDefault();
+    e.stopPropagation();
+    const on = printSwitch.getAttribute("aria-checked") !== "true";
+    printSwitch.setAttribute("aria-checked", on ? "true" : "false");
+    save({ printBindVisible: on });
+  });
   for (const [id, [min, max]] of Object.entries(NUMBER_SETTINGS)) {
     $(id).addEventListener("change", async () => {
       const value = Number($(id).value);

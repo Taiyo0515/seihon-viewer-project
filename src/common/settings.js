@@ -168,6 +168,14 @@ export const DEFAULT_SETTINGS = Object.freeze({
   // ---- 速度 ----
   /** 速度ログ(画面右下の計測表示とログの保存) */
   perfLog: false,
+
+  // ---- 普段の画面のボタン(0.9.3) ----
+  /**
+   * 普段の画面に「印刷」「製本用PDF出力」のボタンを出す(詳細設定の分類3のカードのスイッチ)。
+   * オフのときはボタンが隠れる(印刷そのものは Ctrl+P・⋮ メニューの「Chrome標準ビューアで開いて印刷」で使える)。
+   * 0.9.3 で「初期値オフ」にした(使わない人のツールバーを減らす)。
+   */
+  printBindVisible: false,
 });
 
 /**
@@ -228,6 +236,7 @@ export const SETTING_LABELS = Object.freeze({
   comicSplitSpreads: "コミックの見開きの画像を分ける",
   openLocalEbooks: "パソコン内の電子書籍・コミックを開く",
   perfLog: "速度ログ",
+  printBindVisible: "普段の画面の「印刷」「製本用PDF出力」のボタン",
 });
 
 const ENUMS = {
