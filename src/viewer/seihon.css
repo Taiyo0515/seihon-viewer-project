@@ -2671,6 +2671,18 @@ body.sh-has-error #viewerContainer {
   color: var(--sh-panel-fg2);
 }
 
+/* 0.8: まだ調べていないページのプレビュー(元のまま入ることを示す。後で調べた結果で組み直す) */
+.sh-scan-thumb.sh-scan-pending canvas,
+.sh-scan-thumb.sh-scan-pending .sh-scan-pending-box {
+  background: var(--sh-panel-bg2, #f0f0f0);
+  box-shadow: 0 0 0 1px rgba(128, 128, 128, 0.4);
+  border-radius: 2px;
+  opacity: 0.55;
+}
+.sh-scan-thumb.sh-scan-pending figcaption {
+  font-style: italic;
+}
+
 /* 0.5: 回転の向きと角度を選ぶ吹き出し(回転ボタンの右クリック) */
 .sh-rotate-popover {
   width: 280px;

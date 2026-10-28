@@ -245,10 +245,10 @@ export async function getScanPlan(key) {
   return rec && Array.isArray(rec.pages) ? rec : null;
 }
 
-/** 整えの計画を保存する(古いものから消す) */
-export async function putScanPlan(key, pages, pageCount) {
+/** 整えの計画を保存する(古いものから消す)。complete: 全部のページがそろった計画か(部分の計画は保存しないが、保険として区別する。0.8) */
+export async function putScanPlan(key, pages, pageCount, complete = true) {
   await withStores(["scanPlans"], "readwrite", async s => {
-    s.put({ key, pages, pageCount, t: Date.now() });
+    s.put({ key, pages, pageCount, complete: complete !== false, t: Date.now() });
     const recs = await promisify(s.getAll());
     if (recs.length > MAX_SCAN_PLANS) {
       recs.sort((a, b) => (a.t || 0) - (b.t || 0));

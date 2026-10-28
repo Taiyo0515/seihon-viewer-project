@@ -91,14 +91,14 @@ export class DocSource {
     return `${this.baseName()}.pdf`;
   }
 
-  /** 開いている文書の指紋(同じ文書なら2回目からはすぐ返る) */
-  key(doc = this.app.pdfDocument) {
+  /** 開いている文書の指紋(同じ文書なら2回目からはすぐ返る)。bytes: まだ取得していない元のデータ(これがあれば、もう1度取得しない。0.8) */
+  key(doc = this.app.pdfDocument, bytes = null) {
     if (!doc) {
       return Promise.resolve(null);
     }
     let promise = this.keys.get(doc);
     if (!promise) {
-      promise = doc.getData().then(bytes => computePdfKey(bytes));
+      promise = (bytes ? Promise.resolve(bytes) : doc.getData()).then(data => computePdfKey(data));
       this.keys.set(doc, promise);
       promise.catch(() => this.keys.delete(doc));
     }

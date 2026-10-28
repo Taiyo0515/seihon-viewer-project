@@ -183,7 +183,7 @@
 
         <section class="card" aria-labelledby="sec-scan">
           <h3 id="sec-scan">スキャンの整え</h3>
-          <p class="help">見開きの分割、余白の除去、読む向き・1ページ目、PDF ごとの設定。</p>
+          <p class="help">見開きの分割、余白の除去、読む向き・1ページ目、PDF ごとの設定。調べる時間を減らすため、開いたときはまずいま見ているページのまわりを調べてすぐ表示を始め、残りのページは表示しながら順に調べます。</p>
           <div class="row">
             <div class="label">スキャンした見開き</div>
             <div class="control radios">
@@ -194,13 +194,14 @@
                 本・ノートを開いてプリンター(コピー機)でスキャンした PDF を開くと、ノド(綴じ目)の位置で1ページずつに分けて表示します。
                 ばらした中綴じの冊子を両面スキャンした PDF は、ツールバーの「冊子を並べ替える」で、表紙から裏表紙の順に並べ替えられます。
                 画像は作り直さないので、画質は元のままです。元の PDF のファイルは変えません。
+                「スキャンを整える」の画面は「ページの構成」(分ける・並べ替える・行わない)と「補正」(余白・傾き)と「条件」(読む向きなど)に分かれています。
               </p>
             </div>
           </div>
           <div class="row">
             <div class="label">余白</div>
             <div class="control">
-              <label class="check"><input type="checkbox" id="scanTrim" /> 見開きを分けるとき、スキャンで入った余分なふち(余白・影・本の縁・ごみ)を除いて、ページの大きさをそろえる。写真など分けないページの余白を除くときも使う<span class="default-mark">初期値</span></label>
+              <label class="check"><input type="checkbox" id="scanTrim" /> 見開きを分けるとき、スキャンで入った余分なふち(余白・影・本の縁・ごみ)を除いて、ページの大きさをそろえる。「補正」の「余白を除く」のチェックの初期値です<span class="default-mark">初期値</span></label>
             </div>
           </div>
           <div class="row">
@@ -222,8 +223,8 @@
           <div class="row">
             <div class="label">傾き</div>
             <div class="control radios">
-              <label><input type="radio" name="scanDeskew" value="auto" /> 傾きを見つけたら、まっすぐにする<span class="default-mark">初期値</span></label>
-              <label><input type="radio" name="scanDeskew" value="off" /> 自動では直さない(「スキャンを整える」の画面からは直せます)</label>
+              <label><input type="radio" name="scanDeskew" value="auto" /> 「補正」の「傾きをまっすぐにする」のチェックを、既定で入れておく<span class="default-mark">初期値</span></label>
+              <label><input type="radio" name="scanDeskew" value="off" /> 既定では入れない(傾きの自動検出・ツールバーの知らせもしない。「スキャンを整える」の画面からは、いつも使えます)</label>
               <p class="help">
                 見開きを分けるときや冊子を並べ替えるときに、ページごとの傾き(約 0.2° 以上)も直します。
                 縦長のスキャン(1ページずつのスキャン)が傾いていれば、ツールバーの「傾きを直す」のボタンで知らせます(文字のある PDF は調べません)。

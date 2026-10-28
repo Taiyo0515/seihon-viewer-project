@@ -1386,64 +1386,66 @@
         <div class="sh-bind-main">
           <div class="sh-bind-scroll">
             <fieldset class="sh-scan-modes">
-              <legend>整え方</legend>
+              <legend>ページの構成</legend>
               <label class="sh-scan-mode"><input type="radio" name="shScanMode" value="spread" />
-                <span><b>見開きを1ページずつに分ける</b><span class="sh-scan-note">本・ノートを開いてスキャンしたもの。ノド(綴じ目)の位置で分けます</span></span></label>
-              <label class="sh-scan-mode"><input type="radio" name="shScanMode" value="trim" />
-                <span><b>余白を除く</b><span class="sh-scan-note">写真など、紙の周りに余白(背景)が写っているもの。紙の外の余白を切り取ります(1枚のページが1ページになります)</span></span></label>
+                <span><b>見開きを1ページずつに分割する</b><span class="sh-scan-note">本・ノートを開いてスキャンしたもの。ノド(綴じ目)の位置で分けます</span></span></label>
               <label class="sh-scan-mode"><input type="radio" name="shScanMode" value="booklet" />
-                <span><b>冊子の順に並べ替える</b><span class="sh-scan-note">中綴じの冊子をばらして、両面スキャンしたもの。真ん中で分けて、表紙から裏表紙の順に並べます</span></span></label>
-              <label class="sh-scan-mode"><input type="radio" name="shScanMode" value="straighten" />
-                <span><b>傾きだけをまっすぐにする</b><span class="sh-scan-note">分けたり並べ替えたりせず、ページごとに、文字の行がまっすぐになるよう回します</span></span></label>
+                <span><b>冊子のページを読む順に並べ替える</b><span class="sh-scan-note">中綴じの冊子をばらして、両面スキャンしたもの。真ん中で分けて、表紙から裏表紙の順に並べます</span></span></label>
               <label class="sh-scan-mode"><input type="radio" name="shScanMode" value="none" />
-                <span><b>元のまま</b><span class="sh-scan-note">スキャンしたページをそのまま表示します</span></span></label>
+                <span><b>ページの分割・並べ替えを行わない</b><span class="sh-scan-note">スキャンしたページをそのままの並びで表示します。下の「補正」と組み合わせると、傾きだけ直す・余白だけ除くこともできます</span></span></label>
             </fieldset>
-            <p id="shScanPortraitNote" class="sh-bind-help" hidden>この PDF は縦長のページなので、見開きの分割・冊子の並べ替えは選べません(スキャンした見開きは横長のページになります。見開きを横に置いてスキャンしたものは、ノドが見つかれば分けられます)。「余白を除く」は使えます。</p>
-            <div id="shScanTurnRow" class="sh-bind-field" hidden>
-              <div class="sh-bind-field-label">ページの向き</div>
-              <div class="sh-bind-field-control">
-                <label><input type="radio" name="shScanTurn" value="auto" /> 自動(文字の向きから決める)</label>
-                <label><input type="radio" name="shScanTurn" value="cw" /> 時計回りに回す(文字の上が、左を向いているとき)</label>
-                <label><input type="radio" name="shScanTurn" value="ccw" /> 反時計回りに回す(文字の上が、右を向いているとき)</label>
-                <p class="sh-bind-help">見開きを横に置いてスキャンした(縦長のページに、見開きが横向きに写っている)ときの、回す向きです。回したあとで1ページずつに分けます。プレビューが上下逆さまなら、もう一方を選んでください。</p>
+            <p id="shScanPortraitNote" class="sh-bind-help" hidden>この PDF は縦長のページなので、見開きの分割・冊子の並べ替えは選べません(スキャンした見開きは横長のページになります。見開きを横に置いてスキャンしたものは、ノドが見つかれば分けられます)。下の「補正」は使えます。</p>
+            <fieldset class="sh-scan-modes">
+              <legend>補正</legend>
+              <label class="sh-bind-check" id="shScanTrimRow"><input type="checkbox" id="shScanTrim" /> 余白を除く(スキャンで入った余分なふち・影・本の縁やごみを切り取り、全部のページを同じ大きさにそろえる)</label>
+              <label class="sh-bind-check" id="shScanDeskewRow"><input type="checkbox" id="shScanDeskew" /> 傾きをまっすぐにする(ページごとに、文字の行・罫線がまっすぐになるよう回す)</label>
+              <div id="shScanStraightenOptions" class="sh-bind-field" hidden>
+                <label class="sh-bind-field-label" for="shScanAngle">傾きの角度</label>
+                <div class="sh-bind-field-control">
+                  <input type="number" id="shScanAngle" class="sh-bind-input sh-short" min="-8" max="8" step="0.1" placeholder="自動" aria-label="傾きを直す角度(度)" /> 度
+                  <p class="sh-bind-help">空欄なら、ページごとに検出した傾きを直します。指定すると、全部のページをその角度だけ回します(プラスが時計回り。プレビューで確かめてください)。「ページの分割・並べ替えを行わない」で傾きをまっすぐにするときに使えます。</p>
+                </div>
               </div>
-            </div>
-            <label class="sh-bind-check" id="shScanTrimRow"><input type="checkbox" id="shScanTrim" /> 余白を除く(スキャンで入った余分なふち・影・本の縁やごみを切り取り、全部のページを同じ大きさにそろえる)</label>
-            <label class="sh-bind-check" id="shScanDeskewRow"><input type="checkbox" id="shScanDeskew" /> 傾きをまっすぐにする(ページごとに、文字の行・罫線がまっすぐになるよう回す)</label>
-            <div id="shScanStraightenOptions" class="sh-bind-field" hidden>
-              <label class="sh-bind-field-label" for="shScanAngle">傾きの角度</label>
-              <div class="sh-bind-field-control">
-                <input type="number" id="shScanAngle" class="sh-bind-input sh-short" min="-8" max="8" step="0.1" placeholder="自動" aria-label="傾きを直す角度(度)" /> 度
-                <p class="sh-bind-help">空欄なら、ページごとに検出した傾きを直します。指定すると、全部のページをその角度だけ回します(プラスが時計回り。プレビューで確かめてください)。</p>
-              </div>
-            </div>
+            </fieldset>
             <p id="shScanSkewInfo" class="sh-bind-help" hidden></p>
-            <div class="sh-bind-field" id="shScanDirectionRow">
-              <div class="sh-bind-field-label">本を読む向き</div>
-              <div class="sh-bind-field-control">
-                <label><input type="radio" name="shScanDirection" value="rtl" /> 右から左に読む(縦書きの本・漫画。見開きの右のページが先)</label>
-                <label><input type="radio" name="shScanDirection" value="ltr" /> 左から右に読む(横書きの本。見開きの左のページが先)</label>
-                <p class="sh-bind-help">選んだ向きで、見開きのどちらのページを先にするかと、ビューアでの見開きの並び(右綴じ・左綴じ)を決めます。</p>
+            <fieldset class="sh-scan-modes">
+              <legend>条件</legend>
+              <div id="shScanTurnRow" class="sh-bind-field" hidden>
+                <div class="sh-bind-field-label">ページの向き</div>
+                <div class="sh-bind-field-control">
+                  <label><input type="radio" name="shScanTurn" value="auto" /> 自動(文字の向きから決める)</label>
+                  <label><input type="radio" name="shScanTurn" value="cw" /> 時計回りに回す(文字の上が、左を向いているとき)</label>
+                  <label><input type="radio" name="shScanTurn" value="ccw" /> 反時計回りに回す(文字の上が、右を向いているとき)</label>
+                  <p class="sh-bind-help">見開きを横に置いてスキャンした(縦長のページに、見開きが横向きに写っている)ときの、回す向きです。回したあとで1ページずつに分けます。プレビューが上下逆さまなら、もう一方を選んでください。</p>
+                </div>
               </div>
-            </div>
-            <div id="shScanSpreadOptions" class="sh-bind-field">
-              <div class="sh-bind-field-label">PDF の1ページ目</div>
-              <div class="sh-bind-field-control">
-                <label><input type="radio" name="shScanFirstPage" value="first" /> 本の最初のほうの見開き(最初の見開きから順にスキャンした)</label>
-                <label><input type="radio" name="shScanFirstPage" value="last" /> 本の最後のほうの見開き(最後の見開きから順にスキャンした)</label>
-                <p class="sh-bind-help">1ページ目が最後のほうの見開きなら、見開きの順を逆にして、本の最初のページから表示します(見開きの中の順は、上の「本を読む向き」のまま)。右から左に読む本を、横書きの本と同じ向きにめくってスキャンすると、最後の見開きが先になります。</p>
+              <div class="sh-bind-field" id="shScanDirectionRow">
+                <div class="sh-bind-field-label">本を読む向き</div>
+                <div class="sh-bind-field-control">
+                  <label><input type="radio" name="shScanDirection" value="rtl" /> 右から左に読む(縦書きの本・漫画。見開きの右のページが先)</label>
+                  <label><input type="radio" name="shScanDirection" value="ltr" /> 左から右に読む(横書きの本。見開きの左のページが先)</label>
+                  <p class="sh-bind-help">選んだ向きで、見開きのどちらのページを先にするかと、ビューアでの見開きの並び(右綴じ・左綴じ)を決めます。</p>
+                </div>
               </div>
-            </div>
-            <div id="shScanBookletOptions" class="sh-bind-field" hidden>
-              <div class="sh-bind-field-label">スキャンした順</div>
-              <div class="sh-bind-field-control">
-                <label><input type="radio" name="shScanSheetOrder" value="outer" /> 外側の紙(表紙が載った紙)から</label>
-                <label><input type="radio" name="shScanSheetOrder" value="inner" /> 内側の紙(真ん中の紙)から</label>
-                <label><input type="checkbox" id="shScanFirstInner" /> 1枚ごとに、内側の面(表紙の無い側)を先にスキャンした</label>
-                <label><input type="checkbox" id="shScanFlipBacks" /> 後からスキャンした面が上下逆さまになっている</label>
-                <p class="sh-bind-help">プレビューで、1ページ目が表紙になっているか確かめてください。並びがおかしいときは、上の「綴じ方向」とここを変えてみてください。</p>
+              <div id="shScanSpreadOptions" class="sh-bind-field">
+                <div class="sh-bind-field-label">PDF の1ページ目</div>
+                <div class="sh-bind-field-control">
+                  <label><input type="radio" name="shScanFirstPage" value="first" /> 本の最初のほうの見開き(最初の見開きから順にスキャンした)</label>
+                  <label><input type="radio" name="shScanFirstPage" value="last" /> 本の最後のほうの見開き(最後の見開きから順にスキャンした)</label>
+                  <p class="sh-bind-help">1ページ目が最後のほうの見開きなら、見開きの順を逆にして、本の最初のページから表示します(見開きの中の順は、上の「本を読む向き」のまま)。右から左に読む本を、横書きの本と同じ向きにめくってスキャンすると、最後の見開きが先になります。</p>
+                </div>
               </div>
-            </div>
+              <div id="shScanBookletOptions" class="sh-bind-field" hidden>
+                <div class="sh-bind-field-label">スキャンした順</div>
+                <div class="sh-bind-field-control">
+                  <label><input type="radio" name="shScanSheetOrder" value="outer" /> 外側の紙(表紙が載った紙)から</label>
+                  <label><input type="radio" name="shScanSheetOrder" value="inner" /> 内側の紙(真ん中の紙)から</label>
+                  <label><input type="checkbox" id="shScanFirstInner" /> 1枚ごとに、内側の面(表紙の無い側)を先にスキャンした</label>
+                  <label><input type="checkbox" id="shScanFlipBacks" /> 後からスキャンした面が上下逆さまになっている</label>
+                  <p class="sh-bind-help">プレビューで、1ページ目が表紙になっているか確かめてください。並びがおかしいときは、上の「本を読む向き」とここを変えてみてください。</p>
+                </div>
+              </div>
+            </fieldset>
             <p id="shScanSummary" class="sh-bind-summary"></p>
             <p id="shScanMessage" class="sh-bind-warn" role="status" hidden></p>
             <h3>プレビュー(読む順)</h3>
