@@ -202,6 +202,43 @@ export class PageRoles {
     return this.serial(() => this.readStored());
   }
 
+  /**
+   * 0.9.2: 削除した項目(ROLE_LABEL に無い役割)をページから外し、保存し直す。
+   * 項目を削除したとき、その項目を付けていたページを役割の無いページ(本文)に戻す。
+   */
+  pruneUnknownRoles() {
+    return this.serial(async () => {
+      const removed = [];
+      for (const [index, role] of [...this.map.entries()]) {
+        if (!ROLE_LABEL[role]) {
+          this.map.delete(index);
+          removed.push(index);
+        }
+      }
+      if (!removed.length) {
+        return;
+      }
+      this.emit();
+      if (!this.key) {
+        return;
+      }
+      try {
+        if (this.map.size) {
+          await putRoles({
+            pdfKey: this.key,
+            name: this.docSource.displayName(),
+            pages: this.app.pdfDocument?.numPages || 0,
+            roles: Object.fromEntries([...this.map.entries()].map(([i, r]) => [String(i), r])),
+          });
+        } else {
+          await deleteRoles(this.key);
+        }
+      } catch (e) {
+        this.toast.show(`ページ役割を保存できませんでした: ${e.message || e}`, { kind: "error" });
+      }
+    });
+  }
+
   async readStored() {
     const key = this.key;
     const rec = key ? await getRoles(key) : null;

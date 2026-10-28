@@ -235,6 +235,19 @@ export function imposition(N, direction = "ltr") {
   return sheets;
 }
 
+/**
+ * 0.9.2: 用紙1枚の表・裏に置くページの並び(出力とプレビューで共通に使う)。
+ * 長辺とじで印刷すると裏面が上下逆さまになるため、裏面は左右を入れ替えて180度回して作る。
+ * @param {{front:[number,number], back:[number,number]}} sheet imposition() の1枚
+ * @param {"short"|"long"} [duplex] 両面の綴じ方向
+ * @returns {{front:[number,number], back:[number,number], backRotate:number}}
+ */
+export function sheetSides(sheet, duplex = "short") {
+  return duplex === "long"
+    ? { front: sheet.front, back: [sheet.back[1], sheet.back[0]], backRotate: 180 }
+    : { front: sheet.front, back: sheet.back, backRotate: 0 };
+}
+
 /** ページの大きさ(回転を反映した見た目の大きさ) */
 export function displaySize(width, height, rotate = 0) {
   return ((rotate % 180) + 180) % 180 === 90 ? { width: height, height: width } : { width, height };
@@ -328,22 +341,28 @@ export function sizeLabelMm({ width, height }) {
 
 /**
  * 「5, 12」「5の後ろに2枚 → 5, 5」のような白紙の位置の指定を読み取る(1始まりのページ番号の配列)。
+ * 区切りは「、」「,」「;」「/」のどれでもよい(0.9.2)。
+ * @returns {{after:number[], error:string|null, truncated:boolean}} truncated: 1つの指定が3枚を超えていたら true
  */
 export function parseBlankPositions(text) {
-  const s = String(text || "").normalize("NFKC").replace(/[、,;]/g, " ").trim();
+  const s = String(text || "").normalize("NFKC").replace(/[、,;\/]/g, " ").trim();
   if (!s) {
-    return { after: [], error: null };
+    return { after: [], error: null, truncated: false };
   }
   const after = [];
+  let truncated = false;
   for (const token of s.split(/\s+/)) {
     const m = token.match(/^(\d+)(?:[x×*](\d+))?$/i);
     if (!m) {
-      return { after: [], error: `「${token}」を読み取れません(例: 5, 12 / 5x2 は5ページ目の後ろに2枚)` };
+      return { after: [], error: `「${token}」を読み取れません(例: 5, 12 / 5x2 は5ページ目の後ろに2枚)`, truncated: false };
     }
     const count = m[2] ? Number(m[2]) : 1;
+    if (count > 3) {
+      truncated = true;
+    }
     for (let k = 0; k < Math.min(count, 3); k++) {
       after.push(Number(m[1]));
     }
   }
-  return { after, error: null };
+  return { after, error: null, truncated };
 }

@@ -1374,6 +1374,8 @@ onSettingsChanged(next => {
   }
   if (JSON.stringify(next.bindRoleItems) !== JSON.stringify(prev.bindRoleItems)) {
     applyRoleItems(next.bindRoleItems);
+    // 0.9.2: 削除した項目を付けていたページを、役割の無いページ(本文)に戻す
+    pageRoles.pruneUnknownRoles().catch(e => console.warn("[製本ビューア] 削除した項目のページ役割を片付けられませんでした", e));
     pageRoles.emit();
     bindDialog.onRoleItemsChanged();
   }

@@ -1527,6 +1527,7 @@
                     <option value="normal">通常(文字・ベクターを残す)</option>
                     <option value="print">印刷互換性重視(面を画像にする)</option>
                   </select>
+                  <p class="sh-bind-help" id="shBindQualityHelp">「印刷互換性重視」は、面付けした1面(印刷用紙まるごと)を画像にするため、面付けするときだけ選べます。</p>
                   <div id="shBindDpiRow" hidden class="sh-bind-dpi">
                     <label for="shBindDpi">dpi:</label>
                     <select id="shBindDpi" class="sh-select sh-select-small" aria-label="画像の細かさ(dpi)">
@@ -1576,10 +1577,10 @@
                 <div class="sh-bind-field-label">大きさの基準</div>
                 <div class="sh-bind-field-control">
                   <label><input type="radio" name="shBindSizeRef" value="mode" /> 最も多い大きさ</label>
-                  <label><input type="radio" name="shBindSizeRef" value="first" /> 最初のページ</label>
+                  <label><input type="radio" name="shBindSizeRef" value="first" /> 本の最初のページ(カバーの表紙)</label>
                   <label><input type="radio" name="shBindSizeRef" value="page" /> ページ指定:
                     <select id="shBindSizeRefPage" class="sh-select sh-select-small" aria-label="大きさの基準にするページ"></select></label>
-                  <p class="sh-bind-help" id="shBindSizeRefHelp">ページの大きさがそろっていないとき、どのページの大きさに合わせて用紙を選び、ほかのページを拡大縮小するかを決めます。</p>
+                  <p class="sh-bind-help" id="shBindSizeRefHelp">ページの大きさがそろっていないとき、どのページの大きさに合わせて用紙を選び、ほかのページを拡大縮小するかを決めます。大きさの基準は、本に使うページ(付属・出力しないページを除く)で数えます。</p>
                 </div>
               </div>
               <div class="sh-bind-field" id="shBindObiRow">

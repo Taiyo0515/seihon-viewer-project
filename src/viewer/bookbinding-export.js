@@ -5,10 +5,12 @@
  * - 白紙の挿入と面付けは pdf-lib で行う。面付けでは元のページをそのまま「部品」として用紙に配置するので、
  *   再ラスタライズ(画像化)はしない。
  * - 面付けすると、ページの注釈(書き込み・フォームの入力内容など)は、印刷される見た目をページに描き込んでから配置する。
+ * - 0.9 の「印刷互換性重視」を選んだときだけ、でき上がった面(印刷用紙まるごと)を rasterizePdf() で
+ *   任意に画像化する(通常の出力では画像化しない)。
  */
 
 import { blankPdfBytes, editedDocumentBytes, loadPdfFromBytes } from "./page-export.js";
-import { imposition } from "./bookbinding.js";
+import { imposition, sheetSides } from "./bookbinding.js";
 
 let libPromise = null;
 function pdfLib() {
@@ -293,19 +295,15 @@ export async function buildBookbindingFiles(o) {
       sheet.drawPage(emb, { x, y, xScale: s, yScale: s, rotate: degrees(r) });
     };
     const sheets = imposition(plan.N, direction);
-    for (const { front, back } of sheets) {
+    for (const sheet of sheets) {
+      const sides = sheetSides(sheet, duplex);
       const f = main.addPage([W, H]);
-      draw(f, front[0], 0, 0);
-      draw(f, front[1], 1, 0);
+      draw(f, sides.front[0], 0, 0);
+      draw(f, sides.front[1], 1, 0);
       const b = main.addPage([W, H]);
-      if (duplex === "long") {
-        // 長辺とじで印刷すると裏面が上下逆さまになるため、裏面を180度回して作る
-        draw(b, back[1], 0, 180);
-        draw(b, back[0], 1, 180);
-      } else {
-        draw(b, back[0], 0, 0);
-        draw(b, back[1], 1, 0);
-      }
+      // 長辺とじでは、裏面を左右入れ替えて180度回して作る(プレビューと同じ並び)
+      draw(b, sides.back[0], 0, sides.backRotate);
+      draw(b, sides.back[1], 1, sides.backRotate);
     }
     // 印刷の設定の目安(対応している印刷画面では、この設定が初期値になる)
     const prefs = main.catalog.getOrCreateViewerPreferences();
