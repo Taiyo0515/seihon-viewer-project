@@ -701,6 +701,8 @@ export class ScanArranger {
       return;
     }
     this.setState("suggest");
+    // 0.9.1: 待っている間、解析は止まっていることを記録する
+    this.debugNote(`整え方を待っています。残りのページ(約 ${base.pageCount - base.scans.filter(Boolean).length}ページ)は、整え方を選ぶまで調べません`);
     if (!choice) {
       const message =
         base.kind === "spread"
@@ -788,6 +790,7 @@ export class ScanArranger {
     if (settings.scanArrange !== "off" && turned >= Math.ceil(quick.length * 0.5)) {
       base.kind = "turned";
       base.turnable = true;
+      this.debugNote("横に置いてスキャンした見開きと判定しました");
       await this.forceTurned(base);
       if (!this.alive(base)) {
         return;
@@ -801,6 +804,8 @@ export class ScanArranger {
         return;
       }
       this.setState("suggest");
+      // 0.9.1: 待っている間、解析は止まっていることを記録する(デバッグ表示で様子を分かるように)
+      this.debugNote(`整え方を待っています。残りのページ(約 ${base.pageCount - base.scans.filter(Boolean).length}ページ)は、整え方を選ぶまで調べません`);
       if (!choice) {
         this.suggestToast = this.toast.show("見開きを横に置いてスキャンしたようです。回して、1ページずつに分けて表示できます", {
           duration: 10000,
@@ -831,6 +836,8 @@ export class ScanArranger {
       return;
     }
     this.setState("suggest");
+    // 0.9.1: 待っている間、解析は止まっていることを記録する
+    this.debugNote(`整え方を待っています。残りのページ(約 ${base.pageCount - base.scans.filter(Boolean).length}ページ)は、整え方を選ぶまで調べません`);
     if (!choice) {
       this.suggestToast = this.toast.show(`傾いたスキャンのようです(約 ${Math.abs(sum.median)}° ${sum.median > 0 ? "反時計回り" : "時計回り"}に傾いています)。まっすぐにして表示できます`, {
         duration: 10000,
@@ -889,12 +896,21 @@ export class ScanArranger {
    */
   async forceTurned(base) {
     base.turnForce = true;
+    // 0.9.1: 横置きではないと調べたページを、横に置いた見開きとして調べ直す(その数を記録する)
+    const targets = [];
     for (let i = 0; i < base.scans.length; i++) {
       if (base.scans[i] && !base.scans[i].turned && !base.scans[i].landscape) {
-        await this.analyzePage(base, i, { force: true });
-        if (!this.alive(base)) {
-          return;
-        }
+        targets.push(i);
+      }
+    }
+    if (targets.length) {
+      this.debugNote(`横置きの可能性のページを調べ直します(${targets.length} ページ)`);
+    }
+    for (const i of targets) {
+      this.debugNote(`ページ ${i + 1} を調べ直します(横置きとして)`);
+      await this.analyzePage(base, i, { force: true });
+      if (!this.alive(base)) {
+        return;
       }
     }
   }
@@ -943,7 +959,12 @@ export class ScanArranger {
     if (base.key) {
       return base.key;
     }
-    base.bytes ||= await base.doc.getData();
+    if (!base.bytes) {
+      // 0.9.1: ここで元の PDF のデータを取る(保存済みの整えの結果があるかを確認するため)。大きな PDF では時間がかかる
+      this.debugNote("元の PDF のデータを取得します(整えの結果の確認)");
+      base.bytes = await base.doc.getData();
+      this.debugNote(`元の PDF を読み込みました(${Math.round(base.bytes.length / 1024 / 1024)}MB)`);
+    }
     if (!this.alive(base)) {
       return null;
     }
@@ -1003,7 +1024,10 @@ export class ScanArranger {
   /** prepareSource() の中身 */
   async prepareSourceNow(base) {
     try {
-      base.bytes ||= await base.doc.getData();
+      if (!base.bytes) {
+        this.debugNote("元の PDF を読み込みます(調べる用)");
+        base.bytes = await base.doc.getData();
+      }
       let plain = base.bytes;
       let source;
       try {
@@ -1449,6 +1473,15 @@ export class ScanArranger {
     }
     this.busyArrange = true; // 組み立て(調べる・作る・開く)に入る。ダイアログからの再適用(force)以外は受けない
     this.debugNote(auto ? "開いたときの自動の整えを始めます" : "整え方を適用します");
+    // 0.9.1: どんな整え方かを言葉で残す(選んだ構成と補正)
+    this.debugNote(
+      `整え方: ${[
+        options.mode === "spread" ? "見開きを1ページずつに分ける" : options.mode === "booklet" ? "ばらした冊子を並べ替える" : "分けない",
+        options.turn ? "横置きの見開きを回す" : null,
+        options.trim ? "余白を除く" : null,
+        options.deskew ? "傾きをまっすぐにする" : null,
+      ].filter(Boolean).join("・")}`
+    );
     const before = this.state;
     this.setState("busy", "調べています…");
     this.suggestToast?.();

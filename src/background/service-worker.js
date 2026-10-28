@@ -323,7 +323,12 @@ chrome.webNavigation.onBeforeNavigate.addListener(
 //     Chrome はこれらを表示できない(ダウンロードになる)ため、開こうとしたタブを製本ビューアに切り替える
 //     (ビューアがファイルの種類を見分け、コミックは PDF にして表示、文字の本は電子書籍リーダーで表示する)。
 const LOCAL_EBOOK = /^file:\/\/.*\.(epub|mobi|azw|azw3|kfx|prc|cbz|cbr|cb7|fb2)$/i;
-/** 製本ビューアに切り替えた file:// の本(URL → 時刻)。同じ本のダウンロードを止めるときに、タブを開き直さないため */
+/**
+ * 製本ビューアに切り替えた file:// の本(URL → { time, tabId })。同じ本のダウンロードを止めるときに、
+ * タブを開き直さないため。0.9.1: どのタブを切り替えたのかも記録しておき、切り替えたタブが
+ * その後 Chrome に閉じられていた(EPUB などは開けないため止められることがある)ときは、
+ * 新しいタブでビューアを開き直す。
+ */
 const redirectedEbooks = new Map();
 
 chrome.webNavigation.onBeforeNavigate.addListener(
@@ -338,8 +343,34 @@ chrome.webNavigation.onBeforeNavigate.addListener(
     if (globalThis.__seihonSkipEbookRedirect) {
       return; // 試験用: タブの切り替えより先にダウンロードが始まったときの動きを確かめる
     }
-    redirectedEbooks.set(stripHash(details.url), Date.now());
-    chrome.tabs.update(details.tabId, { url: viewerUrlFor(details.url) });
+    redirectedEbooks.set(stripHash(details.url), { time: Date.now(), tabId: details.tabId });
+    // 0.9.1: 切り替えたタブが、その後も生きていてビューアになっているかを確認する
+    // (EPUB などは開けないため、切り替えの途中で Chrome にタブを閉じられることがある)。
+    // まず 600ms 待つ。タブが無い、またはビューアのページになっていなければ、記録を消して
+    // 新しいタブでビューアを開き直す。
+    setTimeout(() => {
+      const key = stripHash(details.url);
+      const rec = redirectedEbooks.get(key);
+      if (!rec || rec.tabId !== details.tabId) {
+        return;
+      }
+      const check = () => chrome.tabs.get(details.tabId).then(tab => {
+        if (!tab || !isViewerUrl(tab.url || "")) {
+          throw new Error("タブが切り替わり切っていない");
+        }
+      });
+      // 最初の確認でまだ URL が変わっていなければ(切り替えの最中の可能性)、続けて 400ms 待ってからもう一度だけ確認する
+      check()
+        .catch(() => new Promise(resolve => setTimeout(resolve, 400)).then(check))
+        .catch(() => {
+          const rec2 = redirectedEbooks.get(key);
+          if (rec2 && rec2.tabId === details.tabId) {
+            redirectedEbooks.delete(key);
+            chrome.tabs.create({ url: viewerUrlFor(details.url) }).catch(() => {});
+          }
+        });
+    }, 600);
+    chrome.tabs.update(details.tabId, { url: viewerUrlFor(details.url) }).catch(() => {});
   },
   { url: [{ schemes: ["file"], urlMatches: "(?i)\\.(epub|mobi|azw|azw3|kfx|prc|cbz|cbr|cb7|fb2)$" }] }
 );
@@ -362,17 +393,62 @@ chrome.downloads.onCreated.addListener(item => {
     }
     await chrome.downloads.cancel(item.id).catch(() => {});
     chrome.downloads.erase({ id: item.id }).catch(() => {});
-    // タブの切り替えが起きていなければ(ダウンロードだけが始まったとき)、新しいタブで製本ビューアを開く
+    // タブの切り替えが起きていなければ(ダウンロードだけが始まったとき)、新しいタブで製本ビューアを開く。
+    // 0.9.1: 記録にはどのタブを切り替えたのかも入っているので、切り替えたタブがまだ生きていて
+    // ビューアになっていることを chrome.tabs.get で確かめてから「開いた」とみなす。
+    // タブが閉じられていた(または別のページのまま)なら、記録を消して新しいタブで開く。
     const key = stripHash(url);
     setTimeout(async () => {
-      const t = redirectedEbooks.get(key);
-      if (t && Date.now() - t < 15000) {
-        return;
+      const rec = redirectedEbooks.get(key);
+      if (rec && Date.now() - rec.time < 15000) {
+        // 切り替えたタブが生きているかを確かめる
+        const ok = await chrome.tabs.get(rec.tabId)
+          .then(tab => !!tab && isViewerUrl(tab.url || ""))
+          .catch(() => false);
+        if (ok) {
+          return;
+        }
+        if (redirectedEbooks.get(key) === rec) {
+          redirectedEbooks.delete(key);
+        }
       }
       chrome.tabs.create({ url: viewerUrlFor(url) }).catch(() => {});
     }, 600);
   })().catch(e => console.warn(LOG, e));
 });
+
+// 0.9.1: 取り消しの補強。onCreated の取り消しが間に合わなかったとき(保存先を確認する画面が
+// 出てダウンロードが in_progress のまま残ったとき)に、電子書籍のダウンロードを 1 回だけ取り消す。
+const cancelledEbookDownloads = new Set();
+
+chrome.downloads.onChanged.addListener(delta => {
+  if (delta.state?.current !== "in_progress") {
+    return;
+  }
+  if (cancelledEbookDownloads.has(delta.id)) {
+    return;
+  }
+  cancelledEbookDownloads.add(delta.id);
+  chrome.downloads.search({ id: delta.id }).then(items => {
+    const item = items?.[0];
+    const url = [item?.finalUrl, item?.url].find(u => LOCAL_EBOOK.test(stripHash(u || "")));
+    if (!item || !url || item.byExtensionId) {
+      return;
+    }
+    getSettings().then(settings => {
+      if (settings.launchMode !== "auto" || !settings.openLocalEbooks) {
+        return;
+      }
+      return chrome.downloads.cancel(delta.id).catch(() => {});
+    }).catch(() => {});
+  });
+});
+// 取り消した記録は多くなりすぎたら落とす(無限に増えないように)
+setInterval(() => {
+  if (cancelledEbookDownloads.size > 100) {
+    cancelledEbookDownloads.clear();
+  }
+}, 60000);
 
 // ---------------------------------------------------------------------------
 // 5. リファラの引き継ぎ
