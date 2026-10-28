@@ -7,7 +7,7 @@
  * - 面付けすると、ページの注釈(書き込み・フォームの入力内容など)は、印刷される見た目をページに描き込んでから配置する。
  */
 
-import { blankPdfBytes, editedDocumentBytes } from "./page-export.js";
+import { blankPdfBytes, editedDocumentBytes, loadPdfFromBytes } from "./page-export.js";
 import { imposition } from "./bookbinding.js";
 
 let libPromise = null;
@@ -142,6 +142,49 @@ function setMetadata(pdf, title) {
 }
 
 /**
+ * 0.9: 製本用 PDF を「印刷互換性重視」で作るとき、1面(印刷用紙まるごと)を画像にして、
+ * 画像だけの PDF を作り直す。ページの大きさ・配置・順序は元の(画像化する前の)PDF と同じ。
+ * @param {Uint8Array} bytes 画像化する前の PDF
+ * @param {object} o
+ * @param {number} o.dpi 画像の細かさ(面の 72pt = 1in をdpi で割った倍率)
+ * @param {(message:string) => void} [o.progress]
+ * @returns {Promise<import("../../lib/pdf-lib.esm.min.js").PDFDocument>}
+ */
+export async function rasterizePdf(bytes, { dpi, progress }) {
+  const doc = await loadPdfFromBytes(bytes);
+  const { PDFDocument } = await pdfLib();
+  const out = await PDFDocument.create();
+  const count = doc.numPages;
+  try {
+    for (let i = 1; i <= count; i++) {
+      progress?.(`ページを画像にしています…(${i}/${count})`);
+      const page = await doc.getPage(i);
+      const vp = page.getViewport({ scale: 1 });
+      const scale = dpi / 72;
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.min(16384, Math.max(1, Math.round(vp.width * scale)));
+      canvas.height = Math.min(16384, Math.max(1, Math.round(vp.height * scale)));
+      const ctx = canvas.getContext("2d", { alpha: false });
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      await page.render({ canvas, viewport: page.getViewport({ scale }), background: "#ffffff" }).promise;
+      const blob = await new Promise(resolve => canvas.toBlob(b => resolve(b), "image/jpeg", 0.92));
+      canvas.width = canvas.height = 0;
+      if (!blob) {
+        throw new Error("ページを画像にできませんでした");
+      }
+      const jpg = new Uint8Array(await blob.arrayBuffer());
+      const img = await out.embedJpg(jpg);
+      out.addPage([vp.width, vp.height]).drawImage(img, { x: 0, y: 0, width: vp.width, height: vp.height });
+      page.cleanup?.();
+    }
+  } finally {
+    await doc.destroy?.().catch?.(() => {});
+  }
+  return out;
+}
+
+/**
  * 製本用の PDF を作る。
  * @param {object} o
  * @param {PDFDocumentProxy} o.doc 開いている文書
@@ -155,6 +198,7 @@ function setMetadata(pdf, title) {
  * @param {{book:string, imposed:string, obi:string}} o.fileNames
  * @param {(message:string) => void} [o.progress]
  * @param {boolean} [o.includeEdits] 書き込み・フォームの入力を反映する(初期値 true。パスワード付きの PDF では false)
+ * @param {{dpi:number}|null} [o.rasterize] 0.9: 「印刷互換性重視」で出すとき、1面まるごとを dpi の画像にする
  * @returns {Promise<Array<{kind:string, fileName:string, bytes:Uint8Array, pages:number}>>}
  */
 export async function buildBookbindingFiles(o) {
@@ -279,12 +323,31 @@ export async function buildBookbindingFiles(o) {
   }
 
   progress("保存しています…");
+  if (o.rasterize) {
+    // 0.9: 印刷互換性重視。でき上がった面(印刷用紙まるごと)を画像にして載せ直す
+    progress("印刷用にページを画像にしています…");
+    const bytes = await main.save({ useObjectStreams: false });
+    main = await rasterizePdf(bytes, { dpi: o.rasterize.dpi, progress });
+    // 文書を作り直したので、印刷の設定(倍率100%・面付け版は両面の向き)を付け直す
+    const rasterPrefs = main.catalog.getOrCreateViewerPreferences();
+    rasterPrefs.setPrintScaling(PrintScaling.None);
+    if (mainKind === "imposed") {
+      rasterPrefs.setDuplex(duplex === "long" ? Duplex.DuplexFlipLongEdge : Duplex.DuplexFlipShortEdge);
+    }
+  }
   const mainName = mainKind === "imposed" ? fileNames.imposed : fileNames.book;
   setMetadata(main, mainName.replace(/\.pdf$/i, ""));
   files.push({ kind: mainKind, fileName: mainName, bytes: await main.save({ useObjectStreams: true }), pages: main.getPageCount() });
   if (obiPdf && obiOutput === "separate") {
-    setMetadata(obiPdf, fileNames.obi.replace(/\.pdf$/i, ""));
-    files.push({ kind: "obi", fileName: fileNames.obi, bytes: await obiPdf.save({ useObjectStreams: true }), pages: obiPdf.getPageCount() });
+    let obiOut = obiPdf;
+    if (o.rasterize) {
+      progress("付属のページを画像にしています…");
+      obiOut = await rasterizePdf(await obiPdf.save({ useObjectStreams: false }), { dpi: o.rasterize.dpi, progress });
+      obiOut.catalog.getOrCreateViewerPreferences().setPrintScaling(PrintScaling.None);
+    }
+    const obiName = fileNames.obi;
+    setMetadata(obiOut, obiName.replace(/\.pdf$/i, ""));
+    files.push({ kind: "obi", fileName: obiName, bytes: await obiOut.save({ useObjectStreams: true }), pages: obiOut.getPageCount() });
   }
   return files;
 }

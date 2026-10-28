@@ -1471,6 +1471,13 @@
         <div id="shBindMain" class="sh-bind-main">
           <div class="sh-bind-scroll">
             <p id="shBindSummary" class="sh-bind-summary"></p>
+            <!-- 0.9: 3つのサイズ。元PDF は自動取得、印刷用紙は選択、完成する本はとりまとめの導出表示 -->
+            <div class="sh-bind-sizes">
+              <span>元PDFのページ: <output id="shBindSrcSize">調べています…</output></span>
+              <span>印刷用紙: <output id="shBindPaperSize">—</output></span>
+              <span>完成する本のページ: <output id="shBindFinSize">—</output></span>
+              <span id="shBindScaleNote" class="sh-bind-scale-note" hidden></span>
+            </div>
             <section class="sh-bind-roles" aria-labelledby="shBindRolesTitle">
               <div class="sh-bind-roles-head">
                 <h3 id="shBindRolesTitle">カバー・表紙・帯などのページ</h3>
@@ -1481,6 +1488,13 @@
               <p class="sh-bind-help">「カバーの表紙」「カバーの裏表紙」は、本の最初と最後のページになります。そのほかの項目のページは「付属」として、本体とは別の PDF に出力します(使い道は下の「詳細設定」で変えられます)。ページを選ぶと、そのページに役割を付けて保存します。同じ PDF を開き直しても残ります。項目の追加・削除と、複数のページを選べるかどうかは、下の「詳細設定」の「カバー・表紙・帯などの項目」で決められます。</p>
             </section>
             <div class="sh-bind-fields">
+              <div class="sh-bind-field" id="shBindImposeRow">
+                <div class="sh-bind-field-label">製本方式</div>
+                <div class="sh-bind-field-control">
+                  <label><input type="checkbox" id="shBindImpose" /> 中綴じ(面付け)</label>
+                  <p class="sh-bind-help" id="shBindImposeHelp">面付けすると、用紙1枚の表に2ページ・裏に2ページを中綴じの順に並べます。チェックを外すと、読む順に並べた本体の PDF を出力します(プリンターの「小冊子印刷」で印刷するとき)。ほかの製本方式(無線綴じなど)には対応していません。</p>
+                </div>
+              </div>
               <div class="sh-bind-field">
                 <div class="sh-bind-field-label">綴じ方向</div>
                 <div class="sh-bind-field-control">
@@ -1505,26 +1519,42 @@
                   <p class="sh-bind-help" id="shBindPaperHelp">面付けして印刷する用紙です。自動では、元のページ2枚を並べて収まる用紙を選びます(A5 の本なら A4 横、B5 の本なら B4 横)。</p>
                 </div>
               </div>
+              <!-- 0.9: 出力品質。印刷互換性重視を選んだときだけ dpi を出す -->
+              <div class="sh-bind-field" id="shBindQualityRow">
+                <label class="sh-bind-field-label" for="shBindQuality">出力品質</label>
+                <div class="sh-bind-field-control">
+                  <select id="shBindQuality" class="sh-select">
+                    <option value="normal">通常(文字・ベクターを残す)</option>
+                    <option value="print">印刷互換性重視(面を画像にする)</option>
+                  </select>
+                  <div id="shBindDpiRow" hidden class="sh-bind-dpi">
+                    <label for="shBindDpi">dpi:</label>
+                    <select id="shBindDpi" class="sh-select sh-select-small" aria-label="画像の細かさ(dpi)">
+                      <option value="150">150</option>
+                      <option value="300">300(推奨)</option>
+                      <option value="600">600</option>
+                      <option value="custom">指定する</option>
+                    </select>
+                    <input type="number" id="shBindDpiCustom" class="sh-bind-input sh-short" min="50" max="1200" step="10" value="300" aria-label="dpi を指定する" hidden />
+                    <p class="sh-bind-help" id="shBindDpiHelp">面付けした1面(印刷用紙まるごと)を、この細かさの画像にします。大きいほどきれいに、ファイルも大きくなります。文字の検索・選択はできなくなります(通常は文字をそのまま残します)。</p>
+                  </div>
+                </div>
+              </div>
             </div>
             <p id="shBindWarnings" class="sh-bind-warn" role="status" hidden></p>
-            <label class="sh-bind-check"><input type="checkbox" id="shBindHidePreview" /> 出力ページのプレビューを表示しない(サムネイル表示OFF)</label>
-            <div id="shBindPreviewWrap">
-              <h3>プレビュー(読む順)</h3>
+            <!-- 0.9: プレビューは2種類を独立して表示・非表示にする -->
+            <label class="sh-bind-check"><input type="checkbox" id="shBindShowSequence" /> 読む順番のプレビューを表示</label>
+            <label class="sh-bind-check"><input type="checkbox" id="shBindShowSheets" /> 製本の配置(面付け)のプレビューを表示</label>
+            <div id="shBindSequenceWrap">
+              <h3>読む順のプレビュー(役割・白紙を含む本体の組み立て順)</h3>
               <div id="shBindPreview" class="sh-bind-preview" aria-label="本体のページの並び"></div>
-              <div id="shBindSheetsWrap">
-                <h3>面付け(用紙ごとの表・裏。左 | 右)</h3>
-                <div id="shBindSheets" class="sh-bind-sheets"></div>
-              </div>
+            </div>
+            <div id="shBindSheetsWrap">
+              <h3>製本の配置(用紙ごとの表・裏。左 | 右)</h3>
+              <div id="shBindSheets" class="sh-bind-sheets"></div>
             </div>
             <details id="shBindDetails" class="sh-bind-details">
               <summary>詳細設定</summary>
-              <div class="sh-bind-field">
-                <div class="sh-bind-field-label">面付け</div>
-                <div class="sh-bind-field-control">
-                  <label><input type="checkbox" id="shBindImpose" /> 面付けする(中綴じ用。用紙1枚の表裏に4ページ)</label>
-                  <p class="sh-bind-help">外すと、読む順に並べた本体の PDF を出力します(プリンターの「小冊子印刷」で印刷するとき)。</p>
-                </div>
-              </div>
               <div class="sh-bind-field" id="shBindDuplexRow">
                 <div class="sh-bind-field-label">両面の綴じ方向</div>
                 <div class="sh-bind-field-control">

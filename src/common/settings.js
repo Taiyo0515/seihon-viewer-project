@@ -117,6 +117,17 @@ export const DEFAULT_SETTINGS = Object.freeze({
   bindNameSuffix: "_製本",
   /** 付属の出力ファイル名に付ける言葉(元名_付属.pdf) */
   bindObiSuffix: "_付属",
+  /**
+   * 0.9: 製本用PDF出力の品質: "normal" PDF の中身(文字・ベクター・画像)をそのまま面付けする /
+   * "print" 製本後の1面(印刷用紙まるごと)を画像にして載せる(うまく印刷できないときの選択肢)
+   */
+  bindPrintQuality: "normal",
+  /** 0.9: 出力品質が「印刷互換性重視」のときの画像の細かさ(dpi)。印刷用紙1面まるごとに適用する */
+  bindRasterDpi: 300,
+  /** 0.9: 製本用PDF出力の画面で、読む順番のプレビュー(サムネイル)を出す */
+  bindPreviewSequence: true,
+  /** 0.9: 製本用PDF出力の画面で、面付けの配置(用紙ごとの表裏)のプレビューを出す */
+  bindPreviewSheets: true,
 
   // ---- スキャンの整え(0.3) ----
   /**
@@ -203,6 +214,10 @@ export const SETTING_LABELS = Object.freeze({
   bindUseBookmark: "しおりの使い道",
   bindNameSuffix: "出力ファイル名(本体)",
   bindObiSuffix: "出力ファイル名(付属)",
+  bindPrintQuality: "製本用PDF出力の品質",
+  bindRasterDpi: "製本用PDF出力のdpi(画像化するとき)",
+  bindPreviewSequence: "読む順のプレビュー(製本用PDF出力)",
+  bindPreviewSheets: "面付けの配置のプレビュー(製本用PDF出力)",
   scanArrange: "スキャンした見開き",
   scanTrim: "スキャンの余白を除く",
   scanDirection: "スキャンした本を読む向き",
@@ -232,6 +247,7 @@ const ENUMS = {
   bindDuplex: ["short", "long"],
   bindSizeRef: ["mode", "first", "page"],
   bindObiOutput: ["separate", "append", "none"],
+  bindPrintQuality: ["normal", "print"],
   bindUseObiFront: ["obi", "cover", "back", "none"],
   bindUseObiBack: ["obi", "cover", "back", "none"],
   bindUseObi: ["obi", "cover", "back", "none"],
@@ -251,6 +267,7 @@ const NUMBER_RANGES = {
   pngLongSide: [800, 12000],
   pngScale: [1, 8],
   collectLimitMB: [50, 20000],
+  bindRasterDpi: [50, 1200],
 };
 
 /**
@@ -333,6 +350,16 @@ export function normalizeSettings(stored) {
       }
     } else if (typeof val === typeof def) {
       out[key] = val;
+    }
+  }
+  // 0.9: プレビューを2種(読む順・面付けの配置)に分けた。旧の「プレビューを出さない」を引き継ぐ
+  if ("bindHidePreview" in src) {
+    const show = src.bindHidePreview === false;
+    if (!("bindPreviewSequence" in src)) {
+      out.bindPreviewSequence = show;
+    }
+    if (!("bindPreviewSheets" in src)) {
+      out.bindPreviewSheets = show;
     }
   }
   out.bindRoleItems = normalizeRoleItems(out.bindRoleItems);

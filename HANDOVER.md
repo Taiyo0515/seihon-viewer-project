@@ -60,6 +60,8 @@
 
 | 版 | 日付 | 主な内容 | コミット | タグ |
 |---|---|---|---|---|
+
+| 0.9.0 | 2026-10-28 | 製本用PDF出力の改善: ①画面の上に3つのサイズ(元PDF=自動取得(混在は「混在(基準: …)」)/ 印刷用紙=選択 / 完成する本=finishedSize(paper)=用紙の半分の導出・sizeLabelMmは mm 表記)。②出力品質: bindPrintQuality("normal"/"print")。"print" は面付け後の1面まるごとを JPEG(0.92)で画像化して載せ直す(bookbinding-export.rasterizePdf: loadPdfFromBytes→canvas→embedJpg・ページ寸法は 72pt 基準・上限16384px・ViewerPreferences(倍率100%・面付け版はDuplex)を付け直す。付属 PDF も画像化)。dpi は bindRasterDpi(150/300推奨/600/指定・NUMBER_RANGES 50–1200・印刷用紙全体に適用)・dpi 欄は print 選択時のみ表示。画像化してもページ寸法・配置・順序は通常出力と同じ。③プレビュー2種: bindPreviewSequence / bindPreviewSheets(独立チェック・hidden 共有 CSS…#shBindSequenceWrap/#shBindSheetsWrap。出さなくても出力可・非表示でもサムネを作らない)。旧 bindHidePreview は UI から外し、normalizeSettings で「無い→false」を2種に引き継ぐ(保存形式は追加のみで互換)。④「面付け」を基本設定の「製本方式(中綴じ)」に移動(チェックの id・保存名は同じ。無演繹方式は Range 外に実装しない)。⑤印刷案内に「プリンターの『冊子印刷』『中綴じ印刷』は使わない」を追加・印刷互換性重視のときは画像化 dpi を案内に記載。⑥画像だけの最適化(圧縮・ダウンサンプル)は pdf-lib では安全にできないため未実装(UI にも項目を出さない) | 今回 | 未タグ |
 | 0.0.1 | 2026-10-05 ごろ | フェーズ1(表示・自動切り替え・Chrome風の画面・製本表示・強制ダウンロード対策 第1・2層・詳細設定の骨組み) | (git の外) | — |
 | 0.0.2 | 不明 | フェーズ2(右クリックメニュー・AI用コピー・ページ収集・強制ダウンロード対策 第3層) | (git の外。zip も無し) | — |
 | 0.0.3 | 不明 | フェーズ3(ページ役割・製本用PDF出力) | (git の外。zip も無し) | — |

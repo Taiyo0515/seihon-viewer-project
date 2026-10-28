@@ -48,7 +48,7 @@ const RADIO_SETTINGS = [
   "scanFirstPage",
   "scanDeskew",
 ];
-const CHECK_SETTINGS = ["openLocalFiles", "restorePosition", "guardEnabled", "perfLog", "collectClearAfterExport", "bindImpose", "scanTrim", "comicSplitSpreads", "openLocalEbooks", "bindHidePreview", "scanDebugShow"];
+const CHECK_SETTINGS = ["openLocalFiles", "restorePosition", "guardEnabled", "perfLog", "collectClearAfterExport", "bindImpose", "scanTrim", "comicSplitSpreads", "openLocalEbooks", "bindPreviewSequence", "bindPreviewSheets", "scanDebugShow"];
 const SELECT_SETTINGS = [
   "bindPaper",
   "bindUseObiFront",

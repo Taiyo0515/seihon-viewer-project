@@ -2740,8 +2740,35 @@ select.sh-select option:disabled {
 .sh-bind-fields .sh-bind-field:last-child {
   border-bottom: none;
 }
-#shBindPreviewWrap[hidden] {
+/* 0.9: プレビューは読む順・面付けの配置の2種類(独立して表示・非表示) */
+#shBindSequenceWrap[hidden],
+#shBindSheetsWrap[hidden] {
   display: none;
+}
+/* 0.9: 元PDF・印刷用紙・完成する本のサイズの表示 */
+.sh-bind-sizes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0 0 12px;
+  font-size: 12px;
+}
+.sh-bind-sizes output {
+  font-weight: 600;
+}
+.sh-bind-scale-note {
+  flex-basis: 100%;
+}
+/* 0.9: dpi の欄(「印刷互換性重視」のときだけ) */
+.sh-bind-dpi {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+.sh-bind-dpi p.sh-bind-help {
+  flex-basis: 100%;
 }
 .sh-bind-field-control .sh-bind-name-row {
   display: flex;

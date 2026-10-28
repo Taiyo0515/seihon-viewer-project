@@ -314,6 +314,19 @@ export function resolvePaper(choice, refSize) {
 }
 
 /**
+ * 完成する本のページの大きさ(0.9): 面付けした用紙を縦に半分に折った1ページぶん。
+ * 例: A4 横(841.89×595.28) → A5 縦(420.94×595.28)
+ */
+export function finishedSize(paper) {
+  return { width: paper.width / 2, height: paper.height };
+}
+
+/** ページの大きさを mm の表記にする(例: 「148×210 mm」) */
+export function sizeLabelMm({ width, height }) {
+  return `${Math.round((width * 25.4) / 72)}×${Math.round((height * 25.4) / 72)} mm`;
+}
+
+/**
  * 「5, 12」「5の後ろに2枚 → 5, 5」のような白紙の位置の指定を読み取る(1始まりのページ番号の配列)。
  */
 export function parseBlankPositions(text) {

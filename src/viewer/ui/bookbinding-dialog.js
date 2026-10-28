@@ -6,7 +6,7 @@
  */
 
 import { sanitizeFileName, saveFiles } from "../../common/files.js";
-import { ACCESSORY_ROLES, ROLE_USES, ROLE_USE_LABEL, imposition, parseBlankPositions, planBook, referenceSize, resolvePaper, roleUseFromSettings, useOfRole } from "../bookbinding.js";
+import { ACCESSORY_ROLES, ROLE_USES, ROLE_USE_LABEL, finishedSize, imposition, parseBlankPositions, planBook, referenceSize, resolvePaper, roleUseFromSettings, sizeLabelMm, useOfRole } from "../bookbinding.js";
 import { buildBookbindingFiles, pageDisplaySizes } from "../bookbinding-export.js";
 import { sourceIndex, viewPageCount } from "../page-map.js";
 import { ROLES, ROLE_LABEL } from "../roles.js";
@@ -70,16 +70,32 @@ export class BookbindingDialog {
 
   bind() {
     const refresh = () => this.refresh();
-    for (const id of ["shBindImpose", "shBindPaper", "shBindBase", "shBindSuffix", "shBindObiSuffix"]) {
+    for (const id of ["shBindImpose", "shBindPaper", "shBindBase", "shBindSuffix", "shBindObiSuffix", "shBindQuality", "shBindDpi"]) {
       $(id).addEventListener("input", refresh);
       $(id).addEventListener("change", refresh);
     }
-    // カバー・表紙・帯などのページの欄は buildRoleGrid で作る(項目は詳細設定で変えられる)
-    // 0.5: 出力ページのプレビューを出さない(初期値はオン。選んだものを覚えておく)
-    $("shBindHidePreview").addEventListener("change", () => {
-      this.saveSettings?.({ bindHidePreview: $("shBindHidePreview").checked });
+    $("shBindDpiCustom").addEventListener("input", refresh);
+    // 0.9: プレビューは読む順・面付けの配置の2種類。独立して表示・非表示にできる(選んだものを覚えておく)
+    $("shBindShowSequence").addEventListener("change", () => {
+      this.saveSettings?.({ bindPreviewSequence: $("shBindShowSequence").checked });
       this.refresh();
     });
+    $("shBindShowSheets").addEventListener("change", () => {
+      this.saveSettings?.({ bindPreviewSheets: $("shBindShowSheets").checked });
+      this.refresh();
+    });
+    // 0.9: 出力品質。「印刷互換性重視」を選んだときだけ dpi の欄を出す(設定を覚えておく)
+    $("shBindQuality").addEventListener("change", () => {
+      $("shBindDpiRow").hidden = $("shBindQuality").value !== "print";
+      this.saveSettings?.({ bindPrintQuality: $("shBindQuality").value });
+      this.refresh();
+    });
+    $("shBindDpi").addEventListener("change", () => {
+      $("shBindDpiCustom").hidden = $("shBindDpi").value !== "custom";
+      this.saveSettings?.({ bindRasterDpi: this.rasterizeChoice().dpi });
+      this.refresh();
+    });
+    $("shBindDpiCustom").addEventListener("input", refresh);
     // 0.5: 大きさの基準を「ページ指定」にする
     $("shBindSizeRefPage").addEventListener("change", () => {
       this.setRadio("shBindSizeRef", "page");
@@ -131,6 +147,18 @@ export class BookbindingDialog {
     this.dialog.addEventListener("close", () => this.cleanup());
   }
 
+  /** 0.9: 「印刷互換性重視」のときの画像化の指定({dpi})。通常のときは null */
+  rasterizeChoice() {
+    if ($("shBindQuality").value !== "print") {
+      return null;
+    }
+    let dpi = $("shBindDpi").value === "custom" ? Number($("shBindDpiCustom").value) : Number($("shBindDpi").value);
+    if (!Number.isFinite(dpi)) {
+      dpi = 300;
+    }
+    return { dpi: Math.min(1200, Math.max(50, Math.round(dpi))) };
+  }
+
   get isOpen() {
     return this.dialog.open;
   }
@@ -171,7 +199,19 @@ export class BookbindingDialog {
     this.buildRoleGrid();
     this.buildUses(roleUseFromSettings(s));
     this.roleItemsEditor.reload();
-    $("shBindHidePreview").checked = s.bindHidePreview;
+    // 0.9: プレビュー2種(独立した表示・非表示)と出力品質の初期値
+    $("shBindShowSequence").checked = s.bindPreviewSequence;
+    $("shBindShowSheets").checked = s.bindPreviewSheets;
+    $("shBindQuality").value = s.bindPrintQuality || "normal";
+    $("shBindDpiRow").hidden = s.bindPrintQuality !== "print";
+    if (["150", "300", "600"].includes(String(s.bindRasterDpi))) {
+      $("shBindDpi").value = String(s.bindRasterDpi);
+      $("shBindDpiCustom").hidden = true;
+    } else {
+      $("shBindDpi").value = "custom";
+      $("shBindDpiCustom").hidden = false;
+      $("shBindDpiCustom").value = String(s.bindRasterDpi || 300);
+    }
     this.sizeRefPage = null;
     $("shBindBase").value = this.docSource.baseName();
     $("shBindSuffix").value = s.bindNameSuffix;
@@ -602,6 +642,29 @@ export class BookbindingDialog {
     // 「自動」の選択肢に、推定した用紙を表示する
     $("shBindPaperAuto").textContent = `自動(${resolvePaper("auto", ref).label})`;
 
+    // ---- 3つのサイズ(0.9): 元PDF=自動取得・印刷用紙=選択・完成する本=導出 ----
+    const scaleNote = $("shBindScaleNote");
+    if (impose) {
+      $("shBindPaperSize").textContent = `${paper.label}(${sizeLabelMm(paper)})`;
+      $("shBindFinSize").textContent = sizeLabelMm(finishedSize(paper));
+      if (Math.abs(paper.scale - 1) > 0.03) {
+        scaleNote.hidden = false;
+        scaleNote.textContent = `元のページ(基準 ${sizeLabelMm(ref)})を縦横比のまま ${Math.round(paper.scale * 100)}% にして面に収めます(はみ出して拡大はしません)`;
+      } else if (ref.mixed) {
+        scaleNote.hidden = false;
+        scaleNote.textContent = `元PDFのページは ${ref.kinds} 種類の大きさが混ざっています(基準: ${sizeLabelMm(ref)})。各ページを面(用紙の半分)に収まる大きさにします`;
+      } else {
+        scaleNote.hidden = true;
+      }
+    } else {
+      $("shBindPaperSize").textContent = "使わない(面付けしない)";
+      $("shBindFinSize").textContent = `元のページのまま(${sizeLabelMm(ref)})`;
+      scaleNote.hidden = true;
+    }
+    $("shBindSrcSize").textContent = ref.mixed
+      ? `混在(基準: ${sizeLabelMm(ref)})`
+      : sizeLabelMm(ref);
+
     // ---- 概要 ----
     if (plan.error) {
       $("shBindSummary").textContent = plan.error;
@@ -621,7 +684,8 @@ export class BookbindingDialog {
     const n0 = plan.N - plan.blanks;
     let summary = `${parts.join(" / ")}\n本体 ${n0}ページ + 白紙 ${plan.blanks}枚 = ${plan.N}ページ`;
     if (impose) {
-      summary += `(${paper.label} に面付けして ${plan.N / 4}枚・両面)`;
+      const raster = this.rasterizeChoice();
+      summary += `(${paper.label} に面付けして ${plan.N / 4}枚・両面${raster ? `、画像化 ${raster.dpi}dpi` : ""})`;
     }
     const obiOutput = this.radio("shBindObiOutput");
     if (plan.obi.length) {
@@ -682,17 +746,21 @@ export class BookbindingDialog {
     $("shBindFiles").textContent = `保存するファイル: ${files.join("、")}`;
     $("shBindRun").disabled = this.busy;
 
-    // 0.5: プレビューを出さない設定のときは、サムネイルも作らない
-    const hide = $("shBindHidePreview").checked;
-    $("shBindPreviewWrap").hidden = hide;
-    if (hide) {
+    // 0.9: プレビューは読む順・面付けの配置の2種類。それぞれ独立して出す(出さなくても出力はできる)
+    const showSeq = $("shBindShowSequence").checked;
+    const showSheets = impose && $("shBindShowSheets").checked;
+    $("shBindSequenceWrap").hidden = !showSeq;
+    $("shBindSheetsWrap").hidden = !showSheets;
+    if (!showSeq) {
       this.observer?.disconnect();
       $("shBindPreview").textContent = "";
-      $("shBindSheets").textContent = "";
-      return;
     }
-    this.renderPreview(plan);
-    this.renderSheets(plan, impose);
+    if (showSeq) {
+      this.renderPreview(plan);
+    }
+    if (showSheets) {
+      this.renderSheets(plan, impose);
+    }
   }
 
   /** 0.5: 大きさの基準の「ページ指定」の欄(全部のページ。大きさも出す) */
@@ -859,6 +927,7 @@ export class BookbindingDialog {
     const obiOutput = this.radio("shBindObiOutput") || "separate";
     const direction = this.radio("shBindDirection") || "ltr";
     const names = this.fileNames();
+    const rasterize = this.rasterizeChoice();
     this.busy = true;
     $("shBindRun").disabled = true;
     $("shBindCancel").disabled = true;
@@ -882,6 +951,8 @@ export class BookbindingDialog {
         obiOutput,
         fileNames: names,
         progress,
+        // 0.9: 「印刷互換性重視」では、でき上がった面(印刷用紙まるごと)を画像にする
+        rasterize,
         // パスワードを入力して開いた PDF は、書き込みを反映した写しにもパスワードが必要になるため反映しない
         includeEdits: !this.docSource.passwordDocs.has(doc),
       });
@@ -896,7 +967,7 @@ export class BookbindingDialog {
         throw new Error(res.error || "保存できませんでした");
       }
       const saved = files.map((f, i) => ({ ...f, fileName: res.saved[i]?.fileName || f.fileName, id: res.saved[i]?.id }));
-      this.showResult(saved, { impose, duplex, plan });
+      this.showResult(saved, { impose, duplex, plan, rasterize });
     } catch (e) {
       console.error(e);
       progress("");
@@ -908,7 +979,7 @@ export class BookbindingDialog {
     }
   }
 
-  showResult(saved, { impose, duplex, plan }) {
+  showResult(saved, { impose, duplex, plan, rasterize }) {
     $("shBindMain").hidden = true;
     $("shBindResult").hidden = false;
     const list = $("shBindResultFiles");
@@ -944,11 +1015,15 @@ export class BookbindingDialog {
     };
     if (impose) {
       $("shBindGuideTitle").textContent = "プリンターでは、この設定で両面印刷してください";
+      add("プリンターの「冊子印刷」「中綴じ印刷」などの機能は使わないでください(この PDF はすでに並べ替えてあります。重ねて使うとページの順番が崩れます)");
       add(`用紙: ${this.paper.label}`);
       add(`両面印刷: ${duplex === "long" ? "長辺とじ(長辺で綴じる)" : "短辺とじ(短辺で綴じる)"}`);
       add("倍率: 実際のサイズ(100%)/「用紙に合わせる」は使わない");
       add("ページの順番: 1枚目から順に(並べ替えない)");
       add("印刷した紙を順に重ね、まとめて真ん中で二つ折りにして、折り目をホチキスで留めると本になります。", "sh-note");
+      if (rasterize) {
+        add(`この PDF の各面は ${rasterize.dpi}dpi の画像になっています(文字の選択・検索はできません。ページの配置・大きさは通常の出力と同じです)。`, "sh-note");
+      }
     } else {
       $("shBindGuideTitle").textContent = "印刷のしかた";
       add("プリンターの「小冊子印刷」の機能で印刷すると、中綴じの本になります(並べ替えはプリンターに任せます)。");
