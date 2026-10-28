@@ -52,6 +52,18 @@ const AUTO_LIMIT_BYTES = 1024 * 1024 * 1024;
 const PORTRAIT_LIMIT_BYTES = 1024 * 1024 * 1024;
 /** 縦長の PDF で、1ページがこれより軽く文字があれば、スキャンではないとみなす */
 const LIGHT_PAGE_BYTES = 100 * 1024;
+// 0.9.3: 読み位置に先行して補正しておく仕組み(部分表示の更新)の、調節の値
+// 最初に、読んでいる位置から前方にこれだけのページを調べておく(後ろは少し少なめ)
+const READ_AHEAD_PAGES = 15;
+const READ_BEHIND_PAGES = 8;
+// 表示位置より前方の、この数以上「元のまま」のページが近づいたら、調べた分を反映して開き直す
+const REFRESH_PENDING_PAGES = 3;
+// 開き直しは、前回からこれ以上の間隔をあける(開き直しの連発を防ぐ)
+const REFRESH_MIN_INTERVAL = 15000;
+// 反映するのは、前回の開き直しからこれ以上のページを調べたときだけ(中身が変わらない開き直しをしない)
+const REFRESH_MIN_PAGES = 8;
+// 捲っている最中(このミリ秒連続でページが動かないまで待つ)は開き直さない
+const REFRESH_QUIET_STEPS = 2;
 
 export const MODE_SUFFIX = Object.freeze({ spread: "_分割", booklet: "_並べ替え", straighten: "_傾き補正", trim: "_余白" });
 
@@ -998,6 +1010,36 @@ export class ScanArranger {
     return order;
   }
 
+  /**
+   * 0.9.3: 読んでいる位置に「先行して」調べる順。いまの位置の前方(次のページの方向)に READ_AHEAD_PAGES 分を
+   * 先に調べ、後ろに READ_BEHIND_PAGES 分(戻って読むときの分)を調べてから、遠い方から順に残りを調べる。
+   * ページを移動したら、そのつど移動先から張り直す(いま読んでいる先が補正済みで出るように)。
+   * @returns {number[]}
+   */
+  readAheadOrder(base = this.base, ahead = READ_AHEAD_PAGES, behind = READ_BEHIND_PAGES) {
+    if (!base) {
+      return [];
+    }
+    const n = Math.max(0, base.pageCount);
+    const cur = Math.min(Math.max(0, this.currentSourcePage()), n - 1);
+    const out = [cur]; // いまの位置自身も入れる(まだ調べていなければ、まずそこから)
+    for (let i = cur + 1; i <= Math.min(n - 1, cur + ahead); i++) {
+      out.push(i);
+    }
+    for (let i = cur - 1; i >= Math.max(0, cur - behind); i--) {
+      out.push(i);
+    }
+    for (let d = 1; d < n; d++) {
+      if (cur + ahead + d < n) {
+        out.push(cur + ahead + d);
+      }
+      if (cur - behind - d >= 0) {
+        out.push(cur - behind - d);
+      }
+    }
+    return out;
+  }
+
   /** 自動適用の判断に使うページ: いまのページのまわりと、中ほどの2ページ(約40%・約70%の位置。重複は除く)(0.8.1) */
   samplePages(base = this.base) {
     const n = Math.max(0, base?.pageCount || 0);
@@ -1243,11 +1285,14 @@ export class ScanArranger {
   }
 
   /**
-   * 全部のページを調べる(0.8.2: まだ調べていないページを、そのつど「いま見ているページのまわり」から調べる。ページを移動したら、移動先のまわりを先に調べる)。
+   * 全部のページを調べる(0.8.2: まだ調べていないページを、そのつど「いま見ているページのまわり」から調べる。
+   * 0.9.3: 読む方向(前方)に先に調べる順。ページを移動したら、移動先から前方を先に調べるので、
+   * 読み進めた先のページがすぐ補正される)。
    * @param {(done:number, total:number) => void} [onProgress] done: 調べたページの数
+   * @param {{step?:() => Promise<void>}} [o] step: 1ページ調べるごとに呼ぶ(部分表示の反映の判断など。0.9.3)
    * @returns {Promise<boolean>} やめた(ほかの PDF を開いた)ときは false
    */
-  async analyzeAll(base, onProgress = null) {
+  async analyzeAll(base, onProgress = null, { step = null } = {}) {
     if (base.analyzed) {
       return true;
     }
@@ -1256,8 +1301,8 @@ export class ScanArranger {
     }
     const total = base.pageCount;
     base.cancel = false;
-    // 0.8.2: 次に調べるページは、そのつど「いま見ているページのまわり」で選び直す。
-    // ページを移動したら移動先のまわりを先に調べるので、動いているページの表示がすぐ整う
+    // 0.8.2: 次に調べるページは、そのつど「いま見ているページから前方」で選び直す。
+    // ページを移動したら移動先の前方を先に調べるので、読み進めた先の表示がすぐ整う
     while (true) {
       if (!this.alive(base)) {
         return false;
@@ -1267,13 +1312,16 @@ export class ScanArranger {
         base.cancel = false;
         return false;
       }
-      const i = this.analysisOrder(base).find(idx => !base.scans[idx]);
+      const i = this.readAheadOrder(base).find(idx => !base.scans[idx]);
       if (i === undefined) {
         break;
       }
       this.debugNote(`ページ ${i + 1} を調べます`);
       await this.analyzePage(base, i);
       onProgress?.(base.scans.filter(Boolean).length, total);
+      if (step) {
+        await step();
+      }
     }
     if (!base.checked) {
       base.kind = classifyDocument(base.scans);
@@ -1601,6 +1649,71 @@ export class ScanArranger {
   }
 
   /**
+   * 0.9.3: 表示している位置より前方 READ_AHEAD_PAGES 分に、「元のまま」のページがいくつあるか
+   * (読み進めると補正前のページが出てくる距離)。部分表示でないときは Infinity(判断しない)。
+   * @returns {number}
+   */
+  pendingAheadWindow() {
+    const arr = this.arranged?.pages;
+    if (!arr || !this.isArranged) {
+      return Number.POSITIVE_INFINITY;
+    }
+    const p = Math.min(arr.length, Math.max(1, this.app.page || 1)) - 1;
+    let count = 0;
+    const end = Math.min(arr.length, p + 1 + READ_AHEAD_PAGES);
+    for (let k = p + 1; k < end; k++) {
+      if (arr[k]?.pending) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  /**
+   * 0.9.3: 読み位置に先行する補正が切れそうなとき、その時点までに調べた分を反映して開き直す(部分表示のまま)。
+   * 変わるのはまだ見ていない前方のページなので、読みながらのページの変化(ちらつき・位置ずれ)が起きない。
+   * まだ調べていないページが無くなったとき(全部調べ終えたとき)は、完成版として出す(保存もする)。
+   * @returns {Promise<false|"partial"|"final">} final: 完成版まで出た(もう組み直さない)
+   */
+  async rebuildPartial(base, options, { remember = true } = {}) {
+    if (this.pageEditor.dirty) {
+      // 書き込みの途中で開き直すと、書き込んだ内容が消えるので触らない(完成版はあとで保存だけする)
+      return false;
+    }
+    const plan = this.plan(options, base, { partial: true });
+    if (plan.error || !plan.pages?.length || !plan.pages.some(p => !p.pending)) {
+      return false; // 反映する新しさが無い(まだ何も整えられない)
+    }
+    try {
+      const id = await arrangedId(this.plannedSeed(base, options));
+      // 調べるのに読み込んだ pdf-lib の文書があれば、作るのに使う(読み直さずに済む。作ると中身が変わるので、使うのは1回だけ)
+      const pdf = base.source?.pdf || null;
+      base.source = null;
+      const started = performance.now();
+      const bytes = await buildArrangedPdf(base.plain, plan.pages, { id, pdf });
+      if (!this.alive(base)) {
+        return false;
+      }
+      this.debugNote(
+        `調べた分を反映します(${plan.pages.filter(p => !p.pending).length}ページ整え・${((performance.now() - started) / 1000).toFixed(1)}秒)`
+      );
+      // 全部調べ終わっていたら、部分表示でなく完成版として出す(保存と「整え方として覚える」もする)
+      const final = !!plan.complete;
+      const opened = await this.presentArranged(base, options, plan.pages, bytes, {
+        auto: true,
+        remember: final && remember,
+        fromStart: false,
+        partial: !final,
+      });
+      return !opened ? false : final ? "final" : "partial";
+    } catch (e) {
+      console.warn("[製本ビューア] 調べた分を反映できませんでした", e);
+      this.debugNote(`調べた分を反映できませんでした(${e?.message || e})`);
+      return false;
+    }
+  }
+
+  /**
    * 部分の計画(0.8)で、いったん表示する。保存はしない(完成版を出したときに保存する)。
    * @returns {Promise<boolean>} 開けたら true
    */
@@ -1642,6 +1755,8 @@ export class ScanArranger {
 
   /**
    * 部分表示(0.8)のあと、残りのページを調べ、完成版を作り直して開く(表示しながら・裏で)。
+   * 0.9.3: 読む方向に先行して調べ、前方に「元のまま」のページが迫ったら、そのつど調べた分を反映して
+   * 開き直す(変わるのはまだ見ていないページなので、読みながらの変化が起きない)。
    * その間に元に戻す・別の整え方を選んだときは、組み直さずにやめる(結果を混ぜないため)。
    */
   async finishPartial(options, base, { fromStart = false, remember = true } = {}) {
@@ -1650,11 +1765,17 @@ export class ScanArranger {
       const note = this.toast.show("残りのページも調べています…", { duration: 0 });
       try {
         let ok = false;
+        let finalDone = false;
         // 残りの解析の進みは 5 ページごとに記録する(記録の上限 60 件にすぐ達しないように)
         const analyzedStarted = performance.now();
         this.debugNote("残りの解析を始めます");
         let firstPageNoted = false;
         let notedAt = 0;
+        // 0.9.3: 読み位置に先行するバッファの判断(調べた分の反映)
+        let newPages = 0; // 前回の反映から調べたページの数
+        let lastRebuildAt = 0;
+        let lastPage = 0;
+        let quietSteps = 0;
         try {
           // 調べる進みを聞き手(ダイアログ・ボタン)に知らせる(状態は部分表示のまま)
           ok = await this.analyzeAll(base, (done, total) => {
@@ -1667,6 +1788,29 @@ export class ScanArranger {
               this.debugNote(`解析 ${done}/${total}ページ(${((performance.now() - analyzedStarted) / 1000).toFixed(1)}秒経過)`);
             }
             this.emit();
+          }, {
+            step: async () => {
+              newPages++;
+              // あわてて捲っている最中は開き直さない(止まってから反映する)
+              const page = this.app.page || 0;
+              quietSteps = page === lastPage ? quietSteps + 1 : 0;
+              lastPage = page;
+              if (
+                finalDone ||
+                newPages < REFRESH_MIN_PAGES ||
+                Date.now() - lastRebuildAt < REFRESH_MIN_INTERVAL ||
+                quietSteps < REFRESH_QUIET_STEPS ||
+                this.pendingAheadWindow() < REFRESH_PENDING_PAGES
+              ) {
+                return; // まだ先に補正前が出る心配が無い
+              }
+              lastRebuildAt = Date.now();
+              newPages = 0;
+              const r = await this.rebuildPartial(base, options, { remember });
+              if (r === "final") {
+                finalDone = true;
+              }
+            },
           });
         } finally {
           note?.();
@@ -1674,8 +1818,12 @@ export class ScanArranger {
         if (!ok || !this.alive(base)) {
           return; // やめた(ほかの PDF を開いた・調べるのをやめた)
         }
-        if (!this.isArranged || this.arranged?.options !== options || !this.arranged?.partial) {
-          return; // その間に元に戻した、または別の整え方を選んだ
+        if (finalDone || !this.isArranged || this.arranged?.options !== options) {
+          // 最後の反映で完成版が出ている / その間に元に戻した、または別の整え方を選んだ
+          return;
+        }
+        if (!this.arranged?.partial) {
+          return; // 念のため: 部分表示でなくなっていたら、もう組み直さない
         }
         const plan = this.plan(options, base);
         if (plan.error) {
@@ -1792,17 +1940,18 @@ export class ScanArranger {
    * 整えた文書の表示への切り替えと、結果の保存(0.6.7)。
    * arrange() の後半。保存しておいてある計画で開くとき(cachedArrange())にも使う。
    * partial: 部分の計画(0.8)での表示 — 保存と「整え方として覚える」はせず、完成版を出したときにする
+   * quiet: 読み位置に先行する反映(0.9.3)での開き直し — 部分表示の案内(トースト)を出さない
    * @param {Array<{src:number, rect:number[]|null, rotate:number, ...}>} pages 作るページ(順に)
    * @param {Uint8Array} bytes できた PDF
    * @returns {Promise<boolean>} 開けたら true。開けなければ false
    */
-  async presentArranged(base, options, pages, bytes, { auto = false, remember = false, fromStart = false, fromCache = false, partial = false } = {}) {
+  async presentArranged(base, options, pages, bytes, { auto = false, remember = false, fromStart = false, fromCache = false, partial = false, quiet = false } = {}) {
     const sig = signature(options);
     const fileName = `${sanitizeFileName(base.baseName)}${fileNameSuffix(options) || ""}.pdf`;
     // いま見ているページに当たるページから表示する
     const viewing = !fromStart && (this.isArranged || this.app.pdfDocument === base.doc) ? this.currentSourcePage() : -1;
     const target = Math.max(1, pages.findIndex(p => p.src === viewing) + 1);
-    this.arranged = { options, pages, fileName, key: `${base.key}#scan:${sig}`, doc: null, auto, size: bytes.length, partial };
+    this.arranged = { options, pages, fileName, key: `${base.key}#scan:${sig}`, doc: null, auto, size: bytes.length, partial, quiet };
     // 1ページ目でも指定する(PDF.js が前回見ていた位置に戻さないように。0.4.1)
     this.app.initialBookmark = `page=${target}`;
     // 0.5: 読む向きに合わせて、ビューアの綴じ方向を変える(右から左に読むなら右綴じ。設定は変えない)。
@@ -1864,9 +2013,13 @@ export class ScanArranger {
     }
     this.arranged.doc = doc;
     this.setState("arranged");
-    const { options, auto, partial } = this.arranged;
+    const { options, auto, partial, quiet } = this.arranged;
     const skewed = this.arranged.pages.filter(p => p.angle).length;
     if (partial) {
+      if (quiet) {
+        // 0.9.3: 読み位置に先行する反映での開き直し。変わるのはまだ見ていないページなので、案内を出さない
+        return;
+      }
       // 0.8: 部分表示の途中(残りのページを調べて、すぐ組み直して開き直す)
       this.toast.show("近くのページだけ整えて表示しています(残りのページも調べています。終わりしだい、全部のページで整えます)", {
         duration: auto ? 9000 : 5000,
