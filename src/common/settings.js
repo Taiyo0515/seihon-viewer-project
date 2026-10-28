@@ -139,6 +139,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
    * "off" 既定では入れない(傾きの自動検出・ツールバーの知らせもしない。「スキャンを整える」の画面からは、いつも使える)
    */
   scanDeskew: "auto",
+  /** 0.8.2: スキャンを整えている処理の様子(調べるページ・判定・部分表示の進み)を、ビューアの右下に表示する(開発者向け。初期値オフ) */
+  scanDebugShow: false,
 
   // ---- 電子書籍・コミック(0.4) ----
   /**
@@ -206,6 +208,7 @@ export const SETTING_LABELS = Object.freeze({
   scanDirection: "スキャンした本を読む向き",
   scanFirstPage: "スキャンの1ページ目",
   scanDeskew: "スキャンの傾きを直す",
+  scanDebugShow: "スキャンの処理の表示",
   comicDirection: "コミックの読む向き",
   comicSplitSpreads: "コミックの見開きの画像を分ける",
   openLocalEbooks: "パソコン内の電子書籍・コミックを開く",

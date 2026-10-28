@@ -47,9 +47,9 @@ const PREVIEW_WIDTH = 240;
 /** 開いたときに調べる最初のページ数 */
 const QUICK_PAGES = 4;
 /** これより大きな PDF は、開いたときには調べない(メニューからは整えられる) */
-const AUTO_LIMIT_BYTES = 400 * 1024 * 1024;
+const AUTO_LIMIT_BYTES = 1024 * 1024 * 1024;
 /** 縦長の PDF は、これより大きければ傾きを調べない(ふつうの文書を開くのを遅くしないため) */
-const PORTRAIT_LIMIT_BYTES = 150 * 1024 * 1024;
+const PORTRAIT_LIMIT_BYTES = 1024 * 1024 * 1024;
 /** 縦長の PDF で、1ページがこれより軽く文字があれば、スキャンではないとみなす */
 const LIGHT_PAGE_BYTES = 100 * 1024;
 
@@ -478,6 +478,24 @@ export class ScanArranger {
     }
   }
 
+  /**
+   * 0.8.2: 処理の記録(開発者向け)。詳細設定の「スキャンの処理の表示」がオンのときだけ記録して、
+   * 聞き手(画面の表示など)に変わったことを知らせる。記録は新しいものだけを残す。
+   * @param {string} text
+   */
+  debugNote(text) {
+    if (!this.getSettings().scanDebugShow) {
+      return;
+    }
+    const t = new Date();
+    const at = `${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}:${String(t.getSeconds()).padStart(2, "0")}`;
+    (this.debugLog ||= []).push({ at, text });
+    if (this.debugLog.length > 60) {
+      this.debugLog.splice(0, this.debugLog.length - 60);
+    }
+    this.emit();
+  }
+
   setState(state, progress = "") {
     this.state = state;
     this.progress = progress;
@@ -563,6 +581,7 @@ export class ScanArranger {
       checked: false,
     };
     this.base = base;
+    this.debugNote(`PDF を開きました(${base.pageCount}ページ)。スキャンかどうかを調べます`);
     this.detect(base).catch(e => console.warn("[製本ビューア] スキャンかどうかを調べられませんでした", e));
   }
 
@@ -642,8 +661,8 @@ export class ScanArranger {
       if (!(await this.prepareSource(base))) {
         return;
       }
-      // 調べる最初のページは、いま見ているページのまわり(0.8)
-      const quick = this.analysisOrder(base).slice(0, Math.min(base.pageCount, QUICK_PAGES));
+      // 調べる最初のページは、いま見ているページのまわりと中ほどの数ページ(0.8.2)
+      const quick = this.samplePages(base);
       const pure = quick.filter(i => base.source.inspect(i).pureImage);
       if (pure.length < Math.ceil(quick.length * 0.6)) {
         return; // スキャンではない(文字・図の PDF)
@@ -656,6 +675,7 @@ export class ScanArranger {
       }
       base.kind = classifyDocument(quick.map(i => base.scans[i]));
       base.checked = true;
+      this.debugNote(`判定サンプル(${quick.length}ページ)で種類を判定しました: ${base.kind || "スキャンではない"}`);
       if (!base.kind) {
         return;
       }
@@ -742,6 +762,7 @@ export class ScanArranger {
     }
     const sum = skewSummary(quick.map(i => base.scans[i]));
     base.checked = true;
+    this.debugNote(`判定サンプル(${quick.length}ページ): 傾きあり ${sum.skewed} ページ・横置き ${quick.filter(i => base.scans[i]?.turned).length} ページ`);
     const choice = base.choice;
     // 横に置いてスキャンした見開き(回すとノドが見つかるページが多い)。
     // 設定「スキャンした見開き」が「何もしない」なら、横長の見開きと同じく案内も自動の分割もしない(⋮ メニューからは使える)
@@ -785,6 +806,7 @@ export class ScanArranger {
     }
     base.kind = "skewed";
     base.skew = sum;
+    this.debugNote(`傾いたスキャンと判定しました(サンプル ${quick.length} ページ中 ${sum.skewed} ページで傾き)`);
     // 0.8.1: 設定「スキャンした見開き」が「自動」のときは、開いたときにまっすぐにして表示する(案内は出さない)
     if (!choice && settings.scanArrange === "auto") {
       await this.arrange(this.defaultOptions("skewed"), { auto: true });
@@ -1171,7 +1193,7 @@ export class ScanArranger {
   }
 
   /**
-   * 全部のページを調べる(まだ調べていないページを、いまのページのまわり(0.8)から調べる)。
+   * 全部のページを調べる(0.8.2: まだ調べていないページを、そのつど「いま見ているページのまわり」から調べる。ページを移動したら、移動先のまわりを先に調べる)。
    * @param {(done:number, total:number) => void} [onProgress] done: 調べたページの数
    * @returns {Promise<boolean>} やめた(ほかの PDF を開いた)ときは false
    */
@@ -1184,7 +1206,9 @@ export class ScanArranger {
     }
     const total = base.pageCount;
     base.cancel = false;
-    for (const i of this.analysisOrder(base)) {
+    // 0.8.2: 次に調べるページは、そのつど「いま見ているページのまわり」で選び直す。
+    // ページを移動したら移動先のまわりを先に調べるので、動いているページの表示がすぐ整う
+    while (true) {
       if (!this.alive(base)) {
         return false;
       }
@@ -1193,10 +1217,13 @@ export class ScanArranger {
         base.cancel = false;
         return false;
       }
-      if (!base.scans[i]) {
-        await this.analyzePage(base, i);
-        onProgress?.(base.scans.filter(Boolean).length, total);
+      const i = this.analysisOrder(base).find(idx => !base.scans[idx]);
+      if (i === undefined) {
+        break;
       }
+      this.debugNote(`ページ ${i + 1} を調べます`);
+      await this.analyzePage(base, i);
+      onProgress?.(base.scans.filter(Boolean).length, total);
     }
     if (!base.checked) {
       base.kind = classifyDocument(base.scans);
@@ -1403,6 +1430,7 @@ export class ScanArranger {
       }
     }
     this.busyArrange = true; // 組み立て(調べる・作る・開く)に入る。ダイアログからの再適用(force)以外は受けない
+    this.debugNote(auto ? "開いたときの自動の整えを始めます" : "整え方を適用します");
     const before = this.state;
     this.setState("busy", "調べています…");
     this.suggestToast?.();
@@ -1506,6 +1534,7 @@ export class ScanArranger {
    * @returns {Promise<boolean>} 開けたら true
    */
   async presentPartial(base, options, pages, { fromStart = false } = {}) {
+    this.debugNote(`部分表示に切り替えます(解析できている ${pages.filter(p => !p.pending).length} ページ)`);
     this.setState("busy", "PDF を作っています…");
     this.busyToast?.update?.("PDF を作っています…");
     try {
@@ -1530,6 +1559,7 @@ export class ScanArranger {
    */
   async finishPartial(options, base, { fromStart = false, remember = true } = {}) {
     const job = (async () => {
+      this.debugNote("残りのページを、表示しながら裏で調べます");
       const note = this.toast.show("残りのページも調べています…", { duration: 0 });
       try {
         let ok = false;
@@ -1550,6 +1580,7 @@ export class ScanArranger {
           console.warn(`[製本ビューア] 残りのページを調べたところ、この整え方は使えませんでした(${plan.error})`);
           return;
         }
+        this.debugNote("全ページの解析が終わりました。組み直します");
         if (this.pageEditor.dirty) {
           // 開いたままで編集が始まっていたら、開き直さない(いまの表示のまま。結果だけ保存しておく)
           try {
@@ -1882,6 +1913,7 @@ export class ScanArranger {
   cancelAnalysis() {
     if (this.base && this.state === "busy" && !this.arranged) {
       this.base.cancel = true;
+      this.debugNote("解析をやめます");
     }
   }
 

@@ -2851,3 +2851,29 @@ select.sh-select option:disabled {
 .sh-bind-uses[hidden] {
   display: none;
 }
+
+/* 0.8.2: スキャンの整えの処理の記録(開発者向け。詳細設定の「スキャンの処理の表示」で出す) */
+.sh-scan-log {
+  position: fixed;
+  right: 10px;
+  bottom: 10px;
+  z-index: 999;
+  max-width: 330px;
+  max-height: 45vh;
+  overflow: auto;
+  padding: 6px 9px;
+  border-radius: 6px;
+  background: rgb(32 32 32 / 0.92);
+  color: #eee;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.sh-scan-log-head {
+  font-weight: 700;
+  white-space: pre-wrap;
+}
+
+.sh-scan-log-list {
+  white-space: pre-wrap;
+}

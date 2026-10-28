@@ -31,6 +31,7 @@ import { RolesPanel } from "./ui/roles-panel.js";
 import { RotateButton } from "./ui/rotate-menu.js";
 import { ScanArranger } from "./scan/scan-arranger.js";
 import { EbookRouter } from "./ebook/ebook-router.js";
+import { ScanLogView } from "./scan/scan-log-view.js";
 import { PdfConvertDialog } from "./ui/convert-dialog.js";
 import { OPEN_ACCEPT } from "../common/ebook-formats.js";
 import { getHandoff } from "../common/handoff.js";
@@ -132,6 +133,8 @@ const scanArranger = new ScanArranger({
 });
 const scanDialog = new ScanDialog({ arranger: scanArranger });
 scanArranger.openDialog = () => scanDialog.open();
+// 0.8.2: スキャンの整えの処理の様子(開発者向け。詳細設定の「スキャンの処理の表示」で出す)
+const scanLogView = new ScanLogView({ arranger: scanArranger, getSettings });
 new ScanChip({ arranger: scanArranger, dialog: scanDialog, toolbar });
 // ---- 0.4: 電子書籍・コミック(EPUB・MOBI・AZW・AZW3・CBZ・CBR)と、PDF からの変換 ----
 const ebookRouter = new EbookRouter({
