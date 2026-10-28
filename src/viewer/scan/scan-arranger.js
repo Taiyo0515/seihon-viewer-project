@@ -1490,7 +1490,13 @@ export class ScanArranger {
     this.busyToast = auto ? this.toast.show("スキャンを整えています…", { duration: 0 }) : null;
     try {
       // 0.6.7: 保存しておいた整えの結果(計画と出来上がりの PDF)で済むときは、もう調べ直さない
+      this.debugNote("保存した整えの結果を確認します");
+      const cacheStarted = performance.now();
       const fromCache = await this.cachedArrange(options, base, { auto, remember, fromStart });
+      this.debugNote(`保存した整えの結果の確認が終わりました(${((performance.now() - cacheStarted) / 1000).toFixed(1)}秒)`);
+      if (fromCache === true) {
+        this.debugNote("保存した整えの結果を使います");
+      }
       if (fromCache !== null) {
         return fromCache;
       }
@@ -1585,7 +1591,9 @@ export class ScanArranger {
    * @returns {Promise<boolean>} 開けたら true
    */
   async presentPartial(base, options, pages, { fromStart = false } = {}) {
-    this.debugNote(`部分表示に切り替えます(解析できている ${pages.filter(p => !p.pending).length} ページ)`);
+    const arrangedCount = pages.filter(p => !p.pending).length;
+    this.debugNote(`部分表示の PDF を作ります(整え${arrangedCount}ページ+そのまま${pages.length - arrangedCount}ページ)`);
+    this.debugNote(`部分表示に切り替えます(解析できている ${arrangedCount} ページ)`);
     this.setState("busy", "PDF を作っています…");
     this.busyToast?.update?.("PDF を作っています…");
     try {
@@ -1593,11 +1601,23 @@ export class ScanArranger {
       // 調べるのに読み込んだ pdf-lib の文書があれば、作るのに使う(読み直さずに済む。作ると中身が変わるので、使うのは1回だけ)
       const pdf = base.source?.pdf || null;
       base.source = null;
+      const madeStarted = performance.now();
       const bytes = await buildArrangedPdf(base.plain, pages, { id, pdf });
+      this.debugNote(
+        `部分表示の PDF ができました(${((performance.now() - madeStarted) / 1000).toFixed(1)}秒・${Math.round(bytes.length / 1024 / 1024)}MB)`
+      );
       if (!this.alive(base)) {
         return false;
       }
-      return await this.presentArranged(base, options, pages, bytes, { auto: true, remember: false, fromStart, partial: true });
+      const openedStarted = performance.now();
+      const opened = await this.presentArranged(base, options, pages, bytes, {
+        auto: true,
+        remember: false,
+        fromStart,
+        partial: true,
+      });
+      this.debugNote(`部分表示の PDF を開きました(${((performance.now() - openedStarted) / 1000).toFixed(1)}秒)`);
+      return opened;
     } catch (e) {
       console.warn("[製本ビューア] まわりのページだけでは整えられなかったため、全部を調べてから整えます", e);
       return false;
@@ -1614,9 +1634,24 @@ export class ScanArranger {
       const note = this.toast.show("残りのページも調べています…", { duration: 0 });
       try {
         let ok = false;
+        // 残りの解析の進みは 5 ページごとに記録する(記録の上限 60 件にすぐ達しないように)
+        const analyzedStarted = performance.now();
+        this.debugNote("残りの解析を始めます");
+        let firstPageNoted = false;
+        let notedAt = 0;
         try {
           // 調べる進みを聞き手(ダイアログ・ボタン)に知らせる(状態は部分表示のまま)
-          ok = await this.analyzeAll(base, () => this.emit());
+          ok = await this.analyzeAll(base, (done, total) => {
+            if (!firstPageNoted) {
+              firstPageNoted = true;
+              this.debugNote(`残りの解析の最初のページが終わりました(${((performance.now() - analyzedStarted) / 1000).toFixed(1)}秒)`);
+            }
+            if (done > 0 && done % 5 === 0 && done !== notedAt) {
+              notedAt = done;
+              this.debugNote(`解析 ${done}/${total}ページ(${((performance.now() - analyzedStarted) / 1000).toFixed(1)}秒経過)`);
+            }
+            this.emit();
+          });
         } finally {
           note?.();
         }
@@ -1654,8 +1689,13 @@ export class ScanArranger {
         } catch {
           // 描画の待ち合わせができないときは、そのまま進む
         }
+        this.debugNote(`残りのページを調べて、完成版の PDF を作ります(${plan.pages.length}ページ)`);
         const id = await arrangedId(this.plannedSeed(base, options));
+        const madeStarted = performance.now();
         const bytes = await buildArrangedPdf(base.plain, plan.pages, { id });
+        this.debugNote(
+          `完成版の PDF ができました(${((performance.now() - madeStarted) / 1000).toFixed(1)}秒・${Math.round(bytes.length / 1024 / 1024)}MB)`
+        );
         if (!this.alive(base) || !this.isArranged || this.arranged?.options !== options) {
           return;
         }
