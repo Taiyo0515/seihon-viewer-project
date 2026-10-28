@@ -1623,6 +1623,15 @@
           <div class="sh-bind-foot">
             <p id="shBindFiles" class="sh-bind-files"></p>
             <p id="shBindProgress" class="sh-bind-progress" role="status"></p>
+            <!-- 0.9.3: PDF を作るのに時間がかかって、保存先を選ぶ画面を出せない(クリックから時間がたちすぎ)ときに、
+                 ここで「保存する」を押してもらう(押した直後なら画面を出せる。ダイアログの上に出るので見える) -->
+            <div id="shBindSaveAsk" class="sh-bind-save-ask" hidden>
+              <p id="shBindSaveAskText" class="sh-bind-progress"></p>
+              <div class="sh-dialog-buttons">
+                <button id="shBindSaveAskNo" class="sh-btn" type="button">やめる</button>
+                <button id="shBindSaveAskOk" class="sh-btn sh-btn-primary" type="button">保存する</button>
+              </div>
+            </div>
             <div class="sh-dialog-buttons">
               <button id="shBindCancel" class="sh-btn" type="button">キャンセル</button>
               <button id="shBindRun" class="sh-btn sh-btn-primary" type="button">出力</button>

@@ -248,6 +248,25 @@ export function sheetSides(sheet, duplex = "short") {
     : { front: sheet.front, back: sheet.back, backRotate: 0 };
 }
 
+// 0.9.3: 「印刷互換性重視」(画像化)の出力の、見込みの大きさ。保存(Chrome の Blob)に
+// 載せられる目安(2GB)より少し小さめにしておく
+export const RASTER_SAFE_BYTES = 1.8 * 1024 * 1024 * 1024;
+
+/**
+ * 画像化した出力の見込みの大きさ(バイト)。JPEG(0.92)の 1px あたりを 1.6バイト と見て概算する
+ * (スキャンの画像(白っぽくない部分が多い)では、0.92 でも 1px あたり 1.5〜2.5バイト になることがある)。
+ * @param {number} N 本体のページ数(4の倍数)
+ * @param {{width:number,height:number,label:string}} paper 印刷用紙(pt)
+ * @param {number} dpi
+ * @returns {number}
+ */
+export function estimateRasterizedBytes(N, paper, dpi) {
+  const pxW = Math.round((paper.width / 72) * dpi);
+  const pxH = Math.round((paper.height / 72) * dpi);
+  const faces = Math.max(0, Math.ceil(N / 4)) * 2; // 用紙1枚 = 表+裏の2面
+  return Math.round(faces * pxW * pxH * 1.6);
+}
+
 /** ページの大きさ(回転を反映した見た目の大きさ) */
 export function displaySize(width, height, rotate = 0) {
   return ((rotate % 180) + 180) % 180 === 90 ? { width: height, height: width } : { width, height };

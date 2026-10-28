@@ -87,6 +87,7 @@ export class ScanSource {
     this.context = pdf.context;
     this.pages = pdf.getPages();
     this.info = new Map();
+    this.lite = new Map(); // inspectLite の結果(ページの大きさ・回転だけ。中身は見ない)
   }
 
   get pageCount() {
@@ -133,6 +134,34 @@ export class ScanSource {
    *   pureImage: 画像1枚がページのほとんどを覆い、ほかに見えるものが無い(スキャンしたページ)
    *   image: その画像 {width, height, ctm, filters, jpeg(JPEG のデータ。JPEG で取り出せるとき)}
    */
+  /**
+   * 0.9.3: ページ(0始まり)の「大きさ・回転」だけを軽く調べる(中身の命令は解釈しない)。
+   * 部分表示で「まだ調べていないページをそのまま入れる」(pending)のときに使い、
+   * 時間のかかる inspect() を全ページで走らせない(320ページのスキャンで表示が固まる問題の直し)。
+   * @returns {{view:number[], rotate:number, pureImage:false, hasText:false, image:null}}
+   */
+  inspectLite(index) {
+    if (this.lite.has(index)) {
+      return this.lite.get(index);
+    }
+    const { lib, context } = this;
+    const N = n => lib.PDFName.of(n);
+    const leaf = this.pages[index].node;
+    const media = readBox(lib, context, leaf.getInheritableAttribute(N("MediaBox"))) || [0, 0, 612, 792];
+    const crop = readBox(lib, context, leaf.getInheritableAttribute(N("CropBox")));
+    const view = crop
+      ? [Math.max(media[0], crop[0]), Math.max(media[1], crop[1]), Math.min(media[2], crop[2]), Math.min(media[3], crop[3])]
+      : media;
+    if (view[2] <= view[0] || view[3] <= view[1]) {
+      view.splice(0, 4, ...media);
+    }
+    const rotateValue = num(lib, context.lookup(leaf.getInheritableAttribute(N("Rotate"))));
+    const rotate = ((((Math.round((rotateValue || 0) / 90) * 90) % 360) + 360) % 360);
+    const result = { view, rotate, pureImage: false, hasText: false, image: null };
+    this.lite.set(index, result);
+    return result;
+  }
+
   inspect(index) {
     if (this.info.has(index)) {
       return this.info.get(index);
@@ -355,7 +384,9 @@ export async function buildArrangedPdf(bytes, pages, { id, onProgress = null, pd
   for (let k = 0; k < pages.length; k++) {
     const out = pages[k];
     const leaf = srcPages[out.src].node;
-    const info = source.inspect(out.src);
+    // 0.9.3: まだ調べていないページ(pending・元のまま入れる)は、大きさと回転だけを軽く調べる。
+    // inspect() はページの中身の命令を全部解釈するため、大きいスキャン(数百ページ)では数分かかっていた
+    const info = out.pending ? source.inspectLite(out.src) : source.inspect(out.src);
     const rect = out.rect || info.view;
     const [x0, y0, x1, y1] = rect;
     const w = Math.max(1, x1 - x0);

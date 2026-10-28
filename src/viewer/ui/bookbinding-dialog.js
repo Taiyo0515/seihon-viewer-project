@@ -6,7 +6,7 @@
  */
 
 import { sanitizeFileName, saveFiles } from "../../common/files.js";
-import { ACCESSORY_ROLES, ROLE_USES, ROLE_USE_LABEL, finishedSize, imposition, parseBlankPositions, planBook, referenceSize, resolvePaper, roleUseFromSettings, sheetSides, sizeLabelMm, useOfRole } from "../bookbinding.js";
+import { ACCESSORY_ROLES, ROLE_USES, ROLE_USE_LABEL, RASTER_SAFE_BYTES, estimateRasterizedBytes, finishedSize, imposition, parseBlankPositions, planBook, referenceSize, resolvePaper, roleUseFromSettings, sheetSides, sizeLabelMm, useOfRole } from "../bookbinding.js";
 import { buildBookbindingFiles, pageDisplaySizes } from "../bookbinding-export.js";
 import { sourceIndex, viewPageCount } from "../page-map.js";
 import { ROLES, ROLE_LABEL } from "../roles.js";
@@ -144,6 +144,18 @@ export class BookbindingDialog {
     $("shBindClose").addEventListener("click", () => this.close());
     $("shBindCancel").addEventListener("click", () => this.close());
     $("shBindRun").addEventListener("click", () => this.run());
+    // 0.9.3: 保存の確認(「保存する」を押すと、その直後に保存先を選ぶ画面を出せる)
+    this.saveAskResolve = null;
+    $("shBindSaveAskOk").addEventListener("click", () => {
+      const r = this.saveAskResolve;
+      this.hideSaveAsk();
+      r?.(true);
+    });
+    $("shBindSaveAskNo").addEventListener("click", () => {
+      const r = this.saveAskResolve;
+      this.hideSaveAsk();
+      r?.(false);
+    });
     $("shBindResultClose").addEventListener("click", () => this.close());
     $("shBindOpenRoles").addEventListener("click", () => {
       this.close();
@@ -738,6 +750,19 @@ export class BookbindingDialog {
     if (impose && Math.abs(paper.scale - 1) > 0.03) {
       warnings.push(`ページは ${Math.round(paper.scale * 100)}% の大きさで配置されます(用紙: ${paper.label})。`);
     }
+    // 0.9.3: 印刷互換性重視(画像化)では、出力の見込みの大きさを知らせる。あまり大きいと、
+    // 保存(Chrome の Blob)に失敗してフリーズのような見た目になるため、出す前に知らせる
+    const rasterEst = this.rasterizeChoice();
+    if (impose && rasterEst) {
+      const est = estimateRasterizedBytes(plan.N, paper, rasterEst.dpi);
+      if (est > RASTER_SAFE_BYTES) {
+        const size = est > 2 * RASTER_SAFE_BYTES ? "大きすぎる" : `${(est / 1024 ** 3).toFixed(1)}GB 級`;
+        const lighter = rasterEst.dpi > 150 ? `dpi を 150 にすると約 ${(estimateRasterizedBytes(plan.N, paper, 150) / 1024 ** 3).toFixed(1)}GB になります` : "dpi を下げると小さくなります";
+        warnings.push(
+          `「印刷互換性重視」の出力は ${size} の見込みです(用紙 ${plan.N / 4}枚 × 両面・${rasterEst.dpi}dpi)。${lighter}。あまり大きいと、保存に失敗するかもしれません。`
+        );
+      }
+    }
     if (!this.roles.size && this.coverChoice === null && this.backChoice === null) {
       warnings.push("カバーの表紙・裏表紙を指定していないため、1ページ目を本の最初のページ、最後のページを本の最後のページにします(上の「カバーの表紙」「カバーの裏表紙」で変えられます)。");
     }
@@ -957,6 +982,27 @@ export class BookbindingDialog {
     }
   }
 
+  /**
+   * 0.9.3: 保存の直前に、クリックを待つ(保存先を選ぶ画面は、押した直後の約5秒以内しか出せないため)。
+   * PDF を作るのに時間がかかったときに、ビューア側のトースト(ダイアログの下に隠れる)ではなく、
+   * ダイアログの中で「保存する」を押してもらう。
+   * @param {string} [fileName] 保存するファイルの名前(出す文に入れる)
+   * @returns {Promise<boolean>} 「保存する」なら true
+   */
+  askSaveConfirm(fileName = "") {
+    $("shBindSaveAskText").textContent = `保存の準備ができました${fileName ? `(${fileName})` : ""}。「保存する」を押すと、保存先を選ぶ画面が出ます。`;
+    $("shBindSaveAsk").hidden = false;
+    $("shBindSaveAskOk").focus();
+    return new Promise(resolve => {
+      this.saveAskResolve = resolve;
+    });
+  }
+
+  hideSaveAsk() {
+    $("shBindSaveAsk").hidden = true;
+    this.saveAskResolve = null;
+  }
+
   /** 出力 */
   async run() {
     if (this.busy || !this.plan || this.plan.error) {
@@ -999,6 +1045,34 @@ export class BookbindingDialog {
         // パスワードを入力して開いた PDF は、書き込みを反映した写しにもパスワードが必要になるため反映しない
         includeEdits: !this.docSource.passwordDocs.has(doc),
       });
+      // 0.9.3: でき上がりが大きすぎる(Chrome の Blob に載せられない)ときは、保存せずに教える。
+      // 大きいまま保存しようとすると、Chrome が固まったように見えて、途中までしか書かれないことがある
+      const tooBig = files.filter(f => f.bytes.length > RASTER_SAFE_BYTES);
+      if (tooBig.length) {
+        progress("");
+        this.busy = false;
+        $("shBindRun").disabled = false;
+        $("shBindCancel").disabled = false;
+        const over = tooBig.map(f => `${f.fileName}(約 ${(f.bytes.length / 1024 ** 3).toFixed(1)}GB)`).join("・");
+        this.toast.show(
+          `${over} は大きすぎるため、保存しません。dpi を 150 に下げるなどして、出力を小さくしてください(「出力品質: 通常」にすると、画像にしないで出せます)。`,
+          { kind: "error", duration: 12000 }
+        );
+        return;
+      }
+      // 0.9.3: 保存先を選ぶ画面は、クリックの直後(約5秒)しか出せない。PDF を作るのに時間が
+      // かかってクリックから遠くなったときは、ここで「保存する」を押してもらう
+      if (navigator.userActivation && !navigator.userActivation.isActive) {
+        const ok = await this.askSaveConfirm(files[0]?.fileName);
+        if (!ok) {
+          progress("");
+          this.busy = false;
+          $("shBindRun").disabled = false;
+          $("shBindCancel").disabled = false;
+          this.toast.show("保存をやめました");
+          return;
+        }
+      }
       progress("保存しています…");
       const res = await saveFiles(files.map(f => ({ blob: new Blob([f.bytes], { type: "application/pdf" }), fileName: f.fileName })));
       if (!res.ok) {

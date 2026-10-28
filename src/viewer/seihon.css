@@ -2514,6 +2514,17 @@ body.sh-has-error #viewerContainer {
 .sh-dialog p.sh-bind-progress:empty {
   display: none;
 }
+/* 0.9.3: 保存の確認(ダイアログの中で「保存する」を押してもらう欄) */
+.sh-bind-save-ask {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--sh-menu-sep);
+  border-radius: 8px;
+  background: var(--sh-toast-bg);
+}
+.sh-bind-save-ask p.sh-bind-progress {
+  margin: 0 0 8px;
+}
 .sh-bind-result {
   padding: 4px 24px 18px;
   overflow-y: auto;
