@@ -563,7 +563,8 @@ export class ScanArranger {
         }
       }
     }
-    this.base?.analysisDoc?.destroy().catch(() => {});
+    // 0.9.3: 調べるために別に開いた文書があれば手放す(loadingTask の destroy で)
+    this.dropAnalysisDoc(this.base);
     this.base = null;
     this.arranged = null;
     this.busyToast?.();
@@ -1120,13 +1121,39 @@ export class ScanArranger {
     if (!base.analysisDocJob) {
       // 元のデータは、整えの確認のときに取得済み(base.bytes・base.plain)なので、ふつうは読み直さない
       const data = base.plain || base.bytes || (await base.doc.getData());
-      base.analysisDocJob = loadPdfFromBytes(data)
+      const task = loadPdfFromBytes(data);
+      // 0.9.3: 手放すときは loadingTask の destroy で(pdf.js 6 の文書自身には destroy が無い。
+      // 以前は文書を直接 destroy しようとして、解析の終わりに落ちて、完成版の保存が行われなかった)
+      base.analysisTask = task;
+      base.analysisDocJob = task
         .then(doc => (base.analysisDoc = doc))
         .finally(() => {
           base.analysisDocJob = null;
         });
     }
     return base.analysisDocJob;
+  }
+
+  /**
+   * 0.9.3: 調べるために別に開いた文書を手放す。pdf.js 6 の文書自身には destroy が無いので、
+   * 開くときの loadingTask の destroy を使う(pdf.mjs で確認済み)。捨てる機会(解析の終わり・
+   * 別の PDF を開くとき)に落としても、処理がそこで止まらないようにする。
+   */
+  dropAnalysisDoc(base = this.base) {
+    if (!base) {
+      return;
+    }
+    const task = base.analysisTask;
+    base.analysisTask = null;
+    base.analysisDoc = null;
+    base.analysisDocJob = null;
+    if (task?.destroy) {
+      try {
+        task.destroy().catch(() => {});
+      } catch {
+        // 手放しに失敗しても、そのほかの処理(完成版の作成など)は続ける
+      }
+    }
   }
 
   /** 1ページを調べる(0始まり)。同じページを並行して調べない(0.8) */
@@ -1329,10 +1356,7 @@ export class ScanArranger {
     }
     base.analyzed = true;
     // 調べるために開いた文書は手放す(pdf-lib の読み込みは、最初に PDF を作るときに使う)
-    if (base.analysisDoc) {
-      base.analysisDoc.destroy().catch(() => {});
-      base.analysisDoc = null;
-    }
+    this.dropAnalysisDoc(base);
     return true;
   }
 
