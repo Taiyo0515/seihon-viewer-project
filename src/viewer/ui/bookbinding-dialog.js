@@ -5,6 +5,7 @@
  * 本体の並び(白紙の位置)と面付けの並びはプレビューで確認できる。
  */
 
+import { printWithChrome } from "../print-native.js";
 import { sanitizeFileName, saveFiles } from "../../common/files.js";
 import { ACCESSORY_ROLES, ROLE_USES, ROLE_USE_LABEL, RASTER_SAFE_BYTES, estimateRasterizedBytes, finishedSize, imposition, parseBlankPositions, planBook, referenceSize, resolvePaper, roleUseFromSettings, sheetSides, sizeLabelMm, useOfRole } from "../bookbinding.js";
 import { buildBookbindingFiles, pageDisplaySizes } from "../bookbinding-export.js";
@@ -58,6 +59,7 @@ export class BookbindingDialog {
    */
   constructor(o) {
     Object.assign(this, o);
+    this.generation = 0;
     this.dialog = $("shBindDialog");
     this.sizes = null;
     this.thumbCache = new Map();
@@ -70,7 +72,7 @@ export class BookbindingDialog {
 
   bind() {
     const refresh = () => this.refresh();
-    for (const id of ["shBindImpose", "shBindPaper", "shBindBase", "shBindSuffix", "shBindObiSuffix", "shBindQuality", "shBindDpi"]) {
+    for (const id of ["shBindImpose", "shBindPaper", "shBindBase", "shBindSuffix", "shBindObiSuffix", "shBindQuality", "shBindDpi", "shBindTone"]) {
       $(id).addEventListener("input", refresh);
       $(id).addEventListener("change", refresh);
     }
@@ -104,6 +106,11 @@ export class BookbindingDialog {
       if (raster) {
         this.saveSettings?.({ bindRasterDpi: raster.dpi });
       }
+      this.refresh();
+    });
+    // 0.13.0: 画像化するときの文字の濃さを保存する
+    $("shBindTone").addEventListener("change", () => {
+      this.saveSettings?.({ bindRasterTone: $("shBindTone").value });
       this.refresh();
     });
     // 0.5: 大きさの基準を「ページ指定」にする
@@ -144,6 +151,8 @@ export class BookbindingDialog {
     $("shBindClose").addEventListener("click", () => this.close());
     $("shBindCancel").addEventListener("click", () => this.close());
     $("shBindRun").addEventListener("click", () => this.run());
+    $("shBindPrint").addEventListener("click", () => this.run("print"));
+    $("shBindNormal").addEventListener("click", () => { this.close(); this.onNormalOutput?.(); });
     // 0.9.3: 保存の確認(「保存する」を押すと、その直後に保存先を選ぶ画面を出せる)
     this.saveAskResolve = null;
     $("shBindSaveAskOk").addEventListener("click", () => {
@@ -166,10 +175,18 @@ export class BookbindingDialog {
         e.preventDefault();
       }
     });
-    this.dialog.addEventListener("close", () => this.cleanup());
+    this.dialog.addEventListener("close", () => { if (!this.dialog.open) { this.cleanup(); } });
+    this.app.eventBus.on("documentinit", () => {
+      this.generation++;
+      this.plan = null;
+      this.busy = false;
+      const resolve = this.saveAskResolve;
+      this.hideSaveAsk(); resolve?.(false);
+      if (this.dialog.open) { this.dialog.close(); }
+    });
   }
 
-  /** 0.9: 「印刷互換性重視」のときの画像化の指定({dpi})。通常のときと、面付けしないときは null */
+  /** 0.9: 「印刷互換性重視」のときの画像化の指定({dpi, tone})。通常のときと、面付けしないときは null */
   rasterizeChoice() {
     // 0.9.2: 画像化は「面付けした1面(印刷用紙まるごと)」に適用するため、面付けするときだけ使う
     if (!$("shBindImpose").checked) {
@@ -182,7 +199,9 @@ export class BookbindingDialog {
     if (!Number.isFinite(dpi)) {
       dpi = 300;
     }
-    return { dpi: Math.min(1200, Math.max(50, Math.round(dpi))) };
+    // 0.13.0: 文字の濃度補正(標準が初期値。写真だけの面には掛けない)
+    const tone = ["none", "standard", "strong"].includes($("shBindTone").value) ? $("shBindTone").value : "standard";
+    return { dpi: Math.min(1200, Math.max(50, Math.round(dpi))), tone };
   }
 
   get isOpen() {
@@ -201,6 +220,13 @@ export class BookbindingDialog {
 
   /** ダイアログを開く(設定の初期値から始める) */
   async open() {
+    if (!this.getSettings().bindingEnabled) {
+      this.toast.show("製本機能は詳細設定から有効にできます"); return;
+    }
+    if (this.dialog.open) { return; }
+    const generation = ++this.generation;
+    this.plan = null;
+    $("shBindPrint").disabled = true;
     const app = this.app;
     if (!app.pdfDocument) {
       this.toast.show("PDF を開いてから使ってください");
@@ -238,6 +264,8 @@ export class BookbindingDialog {
       $("shBindDpiCustom").hidden = false;
       $("shBindDpiCustom").value = String(s.bindRasterDpi || 300);
     }
+    // 0.13.0: 文字の濃度補正(知らない値は標準に戻す)
+    $("shBindTone").value = ["none", "standard", "strong"].includes(s.bindRasterTone) ? s.bindRasterTone : "standard";
     this.sizeRefPage = null;
     $("shBindBase").value = this.docSource.baseName();
     $("shBindSuffix").value = s.bindNameSuffix;
@@ -262,16 +290,12 @@ export class BookbindingDialog {
     if (!this.sizes) {
       // 表示しているページ(削除したページを除く)の大きさ。getPage は表示上のページ番号で引く
       const sizes = await pageDisplaySizes(doc, Array.from({ length: viewPageCount(doc) }, (_, i) => i));
-      if (doc !== app.pdfDocument) {
-        return;
-      }
+      if (doc !== app.pdfDocument || this.generation !== generation || !this.dialog.open) { return; }
       this.sizes = sizes;
     }
     // 保存済みのページ役割を読み込み終えてから、最初のページなどを決める
     await rolesReady;
-    if (doc !== app.pdfDocument || !this.dialog.open) {
-      return;
-    }
+    if (doc !== app.pdfDocument || this.generation !== generation || !this.dialog.open) { return; }
     this.fillCandidates();
     this.refresh();
     $("shBindRun").focus();
@@ -710,6 +734,7 @@ export class BookbindingDialog {
     if (plan.error) {
       $("shBindSummary").textContent = plan.error;
       $("shBindRun").disabled = true;
+      $("shBindPrint").disabled = true;
       return;
     }
     const parts = [];
@@ -726,7 +751,8 @@ export class BookbindingDialog {
     let summary = `${parts.join(" / ")}\n本体 ${n0}ページ + 白紙 ${plan.blanks}枚 = ${plan.N}ページ`;
     if (impose) {
       const raster = this.rasterizeChoice();
-      summary += `(${paper.label} に面付けして ${plan.N / 4}枚・両面${raster ? `、画像化 ${raster.dpi}dpi` : ""})`;
+      const toneLabel = { none: "", standard: "・濃さ標準", strong: "・濃さ濃い" }[raster?.tone] || "";
+      summary += `(${paper.label} に面付けして ${plan.N / 4}枚・両面${raster ? `、画像化 ${raster.dpi}dpi${toneLabel}` : ""})`;
     }
     const obiOutput = this.radio("shBindObiOutput");
     if (plan.obi.length) {
@@ -812,6 +838,7 @@ export class BookbindingDialog {
     }
     $("shBindFiles").textContent = `保存するファイル: ${files.join("、")}`;
     $("shBindRun").disabled = this.busy;
+    $("shBindPrint").disabled = this.busy;
 
     // 0.9: プレビューは読む順・面付けの配置の2種類。それぞれ独立して出す(出さなくても出力はできる)
     const showSeq = $("shBindShowSequence").checked;
@@ -1004,13 +1031,20 @@ export class BookbindingDialog {
   }
 
   /** 出力 */
-  async run() {
-    if (this.busy || !this.plan || this.plan.error) {
+  async run(action = "save") {
+    if (this.busy || !this.plan || this.plan.error || !this.getSettings().bindingEnabled) {
       return;
     }
     const app = this.app;
     const doc = app.pdfDocument;
+    if (!this.dialog.open || this.sizesDoc !== doc) { return; }
+    const generation = this.generation;
+    const current = () => this.generation === generation && app.pdfDocument === doc && this.dialog.open;
     const plan = this.plan;
+    if (action === "print" && this.docSource.passwordDocs.has(doc) && (doc.annotationStorage?.size || 0) > 0) {
+      this.toast.show("パスワード付きPDFの書き込みを製本印刷へ安全に反映できません。編集内容を反映したPDFを開き直してから製本してください。通常の印刷は「通常の印刷・PDF保存へ」から使えます。", { kind: "error", duration: 12000 });
+      return;
+    }
     const impose = $("shBindImpose").checked;
     const duplex = this.radio("shBindDuplex") || "short";
     const obiOutput = this.radio("shBindObiOutput") || "separate";
@@ -1019,8 +1053,10 @@ export class BookbindingDialog {
     const rasterize = this.rasterizeChoice();
     this.busy = true;
     $("shBindRun").disabled = true;
+    $("shBindPrint").disabled = true;
+    $("shBindNormal").disabled = true;
     $("shBindCancel").disabled = true;
-    const progress = msg => ($("shBindProgress").textContent = msg);
+    const progress = msg => { if (current()) { $("shBindProgress").textContent = msg; } };
     // 計画は表示上のページ番号で立てているので、抜き出し用に元の PDF のページ番号に直す
     const toSource = i => sourceIndex(doc, i + 1);
     const sourcePlan = {
@@ -1045,6 +1081,18 @@ export class BookbindingDialog {
         // パスワードを入力して開いた PDF は、書き込みを反映した写しにもパスワードが必要になるため反映しない
         includeEdits: !this.docSource.passwordDocs.has(doc),
       });
+      if (!current() || !this.getSettings().bindingEnabled) { return; }
+      if (action === "print") {
+        const accessory = $("shBindPrintTarget").value === "accessory";
+        const file = files.find(f => accessory ? f.kind === "obi" : f.kind !== "obi");
+        if (!file) { throw new Error(accessory ? "別のPDFになる付属ページがありません" : "印刷する本体がありません"); }
+        if (file.bytes.length > RASTER_SAFE_BYTES) { throw new Error("印刷するPDFが大きすぎます。出力品質を通常にするか、dpiを下げてください"); }
+        progress("Chromeの印刷画面を開いています…");
+        await this.printBytes(file.bytes);
+        if (!current()) { return; }
+        progress("印刷画面を開きました。用紙の大きさ・倍率・両面の綴じ方向を確認してください。");
+        return;
+      }
       // 0.9.3: でき上がりが大きすぎる(Chrome の Blob に載せられない)ときは、保存せずに教える。
       // 大きいまま保存しようとすると、Chrome が固まったように見えて、途中までしか書かれないことがある
       const tooBig = files.filter(f => f.bytes.length > RASTER_SAFE_BYTES);
@@ -1064,6 +1112,7 @@ export class BookbindingDialog {
       // かかってクリックから遠くなったときは、ここで「保存する」を押してもらう
       if (navigator.userActivation && !navigator.userActivation.isActive) {
         const ok = await this.askSaveConfirm(files[0]?.fileName);
+        if (!current()) { return; }
         if (!ok) {
           progress("");
           this.busy = false;
@@ -1073,8 +1122,10 @@ export class BookbindingDialog {
           return;
         }
       }
+      if (!current() || !this.getSettings().bindingEnabled) { return; }
       progress("保存しています…");
       const res = await saveFiles(files.map(f => ({ blob: new Blob([f.bytes], { type: "application/pdf" }), fileName: f.fileName })));
+      if (!current()) { return; }
       if (!res.ok) {
         progress("");
         if (res.canceled) {
@@ -1086,15 +1137,23 @@ export class BookbindingDialog {
       const saved = files.map((f, i) => ({ ...f, fileName: res.saved[i]?.fileName || f.fileName, id: res.saved[i]?.id }));
       this.showResult(saved, { impose, duplex, plan, rasterize, obiOutput });
     } catch (e) {
+      if (!current()) { return; }
       console.error(e);
       progress("");
       this.toast.show(`製本用PDFを作成できませんでした: ${e.message || e}`, { kind: "error", duration: 10000 });
     } finally {
-      this.busy = false;
-      $("shBindRun").disabled = false;
-      $("shBindCancel").disabled = false;
+      if (this.generation === generation) {
+        this.busy = false;
+        $("shBindRun").disabled = false;
+        $("shBindPrint").disabled = false;
+        $("shBindNormal").disabled = false;
+        $("shBindCancel").disabled = false;
+      }
     }
   }
+
+  /** 作成済みPDFを通常印刷と同じChrome経路へ渡す。 */
+  printBytes(bytes) { return printWithChrome(bytes); }
 
   showResult(saved, { impose, duplex, plan, rasterize, obiOutput }) {
     $("shBindMain").hidden = true;

@@ -74,7 +74,9 @@ export async function launch({
   }
   fs.writeFileSync(prefFile, JSON.stringify(p));
   const ctx = await chromium.launchPersistentContext(userDir, {
-    headless: false,
+    headless: process.env.SEIHON_HEADLESS === '1',
+    executablePath: process.env.CHROMIUM_EXECUTABLE || undefined,
+    ignoreDefaultArgs: ['--disable-extensions'],
     viewport: { width, height },
     colorScheme: dark ? 'dark' : 'light',
     acceptDownloads: true,

@@ -14,7 +14,7 @@ import { Collection } from "./collection.js";
 import { DocSource, decryptedCopy } from "./doc-source.js";
 import { PageCopy } from "./page-copy.js";
 import { PageEditor } from "./page-edit.js";
-import { canPrintWithChrome, printWithChrome, removePrintFrame, withTitle } from "./print-native.js";
+import { removePrintFrame } from "./print-native.js";
 import { isRearranged, viewPageCount } from "./page-map.js";
 import { PageRoles, applyRoleItems } from "./roles.js";
 import { hydrateIcons, setIcon } from "./icons.js";
@@ -22,6 +22,7 @@ import { PerfLog } from "./perf.js";
 import { RenderBudget } from "./render-budget.js";
 import { applyThemePreference } from "./theme.js";
 import { AnnotationTools } from "./ui/annotate.js";
+import { OutputDialog } from "./ui/output-dialog.js";
 import { BookbindingDialog } from "./ui/bookbinding-dialog.js";
 import { CollectPanel } from "./ui/collect-panel.js";
 import { ViewerContextMenu } from "./ui/context-menu.js";
@@ -135,7 +136,7 @@ const scanDialog = new ScanDialog({ arranger: scanArranger });
 scanArranger.openDialog = () => scanDialog.open();
 // 0.8.2: スキャンの整えの処理の様子(開発者向け。詳細設定の「スキャンの処理の表示」で出す)
 const scanLogView = new ScanLogView({ arranger: scanArranger, getSettings });
-new ScanChip({ arranger: scanArranger, dialog: scanDialog, toolbar });
+const scanChip = new ScanChip({ arranger: scanArranger, dialog: scanDialog, toolbar });
 // ---- 0.4: 電子書籍・コミック(EPUB・MOBI・AZW・AZW3・CBZ・CBR)と、PDF からの変換 ----
 const ebookRouter = new EbookRouter({
   app,
@@ -176,6 +177,7 @@ rolesPanel = new RolesPanel({
       collectPanel.close();
     }
   },
+  getSettings,
   onOpenBookbinding: () => bindDialog.open(),
 });
 {
@@ -200,14 +202,16 @@ bindDialog = new BookbindingDialog({
 });
 document.getElementById("shBindOutput").addEventListener("click", () => bindDialog.open());
 // ---------------------------------------------------------------------------
-// 普段の画面のボタンの出し分け(0.9.3: 詳細設定の分類3「印刷・製本出力」のカードのスイッチ)。
-// オフのときは「印刷」「製本用PDF出力」のボタンを隠す(印刷は Ctrl+P・⋮ の「Chrome標準ビューアで開いて印刷」で使える)
+// 0.12: 印刷ボタンの表示と、製本機能の有効・無効を別々に扱う。
+// 通常の印刷は、ボタンを隠してもCtrl+Pとその他の操作から使える。
 // ---------------------------------------------------------------------------
 function applyFeatureButtons() {
-  const show = !!settings.printBindVisible;
-  document.getElementById("shPrint").hidden = !show;
+  const show = !!settings.bindingEnabled;
+  document.getElementById("shPrint").hidden = !settings.printButtonVisible;
   document.getElementById("shBindOutput").hidden = !show;
   document.getElementById("shRolesOutput")?.toggleAttribute("hidden", !show);
+  document.getElementById("shThumbSelectRoles")?.toggleAttribute("hidden", !show);
+  if (!show) { rolesPanel.close(); }
 }
 applyFeatureButtons();
 let contextMenu = null;
@@ -953,86 +957,23 @@ window.addEventListener(
 
 document.getElementById("shPrint").addEventListener("click", () => app.triggerPrinting());
 
-/**
- * 印刷(印刷ボタン・Ctrl+P)。画質が「元の PDF で印刷」(初期値。0.7.0 までの名前は「最高画質」)なら、元の PDF のまま Chrome の印刷機能で印刷する
- * (画像は元の解像度、文字・OCR の文字も残る。print-native.js)。それ以外は PDF.js の印刷(ページを画像にして印刷)。
- * ブラウザのメニューから印刷したときは、PDF.js の印刷になる(高画質)。
- */
-{
-  const pdfjsPrint = app.triggerPrinting.bind(app);
-  let preparing = false;
-  app.triggerPrinting = () => {
-    if (!app.pdfDocument) {
-      return;
-    }
-    if (settings.printQuality !== "max" || !canPrintWithChrome()) {
-      updatePrintResolution();
-      pdfjsPrint();
-      return;
-    }
-    if (preparing) {
-      return;
-    }
-    preparing = true;
-    printOriginal()
-      .catch(e => {
-        console.warn("[製本ビューア] 元の PDF のままで印刷できなかったため、ページを画像にして印刷します", e);
-        toast.show(`元の PDF のままで印刷できなかったため、ページを画像にして印刷します(${e.message || e})`, { duration: 6000 });
-        updatePrintResolution();
-        pdfjsPrint();
-      })
-      .finally(() => {
-        preparing = false;
-      });
-  };
-  // Ctrl+P(boot.js が PDF.js より先に受け取る): 元の PDF で印刷 なら、ここで印刷する
-  boot.printHandler = () => {
-    if (!app.pdfDocument || settings.printQuality !== "max" || !canPrintWithChrome()) {
-      return false; // PDF.js の印刷(ページを画像にして印刷)
-    }
-    app.triggerPrinting();
-    return true;
-  };
-}
-
-/** 元の PDF(編集していれば編集を反映した PDF)を Chrome の印刷画面で印刷する */
-async function printOriginal() {
-  const doc = app.pdfDocument;
-  const passwordDoc = docSource.passwordDocs.has(doc);
-  const edited = hasEdits();
-  if (passwordDoc && edited) {
-    // 編集を反映した写しにもパスワードが必要になるため、画像にして印刷する
-    throw new Error("パスワード付きの PDF を編集しているため");
-  }
-  const busy = toast.show("印刷の準備をしています…", { duration: 0 });
-  try {
-    let bytes;
-    if (edited) {
-      pageEditor.sweepDeletedEditors();
-      bytes = await pageEditor.buildEditedBytes(doc);
-    } else if (passwordDoc) {
-      bytes = await decryptedCopy(doc);
-    } else {
-      bytes = await doc.getData();
-    }
-    if (!bytes?.length) {
-      throw new Error("印刷する PDF を作れませんでした");
-    }
-    // 題名の無い PDF は、「PDF に保存」のファイル名の候補が英数字の羅列にならないよう、ファイル名を題名にする
-    const info = await doc.getMetadata().catch(() => null);
-    if (pageEditor.title === null && !String(info?.info?.Title || "").trim()) {
-      const base = sanitizeFileName(docSource.baseName());
-      bytes = await withTitle(bytes, edited ? `${base}_編集済み` : base);
-    }
-    if (doc !== app.pdfDocument) {
-      return;
-    }
-    busy();
-    await printWithChrome(bytes);
-  } finally {
-    busy();
-  }
-}
+// 通常の印刷とPDF保存は同じ設定画面を使い、製本はそこから追加できる。
+const pdfjsPrint = app.triggerPrinting.bind(app);
+const outputDialog = new OutputDialog({
+  app, pageEditor, docSource, toast, getSettings, hasEdits,
+  onBookbinding: () => bindDialog.open(),
+  onFallback: quality => {
+    window.PDFViewerApplicationOptions.set("printResolution", quality === "standard" ? 150 : 300);
+    pdfjsPrint();
+  },
+});
+bindDialog.onNormalOutput = () => outputDialog.open();
+app.triggerPrinting = () => outputDialog.open();
+boot.printHandler = () => {
+  if (!app.pdfDocument) { return false; }
+  outputDialog.open();
+  return true;
+};
 app.eventBus.on("documentinit", () => removePrintFrame());
 
 /**
@@ -1114,16 +1055,20 @@ async function openEditedInNative() {
 // ---------------------------------------------------------------------------
 // 表示モード(製本表示・見開き・単ページ)と綴じ方向
 // ---------------------------------------------------------------------------
-// 表示モードのボタンは、押すたびに 単ページ → 製本表示 → 見開き → 単ページ… と切り替える(0.2)。
-// その右の綴じ方向のボタンで、左綴じ・右綴じを切り替える。
-const NEXT_VIEW_MODE = Object.freeze({ single: "book", book: "spread", spread: "single" });
+// 表示モードは一覧から直接選ぶ。狭い画面では同じ項目をその他の操作にも出す。
 const viewModeButton = document.getElementById("shViewMode");
 const bindDirButton = document.getElementById("shBindDir");
-viewModeButton.addEventListener("click", () => {
-  const next = NEXT_VIEW_MODE[book.mode] || "book";
-  book.setMode(next);
-  toast.show(`表示モード: ${VIEW_MODES[next].label}`, { duration: 1500 });
-});
+const viewModeItems = () => ["single", "book", "spread"].map(mode => ({
+  label: VIEW_MODES[mode].label,
+  icon: VIEW_MODES[mode].icon,
+  hint: VIEW_MODES[mode].detail,
+  checked: book.mode === mode,
+  radio: true,
+  disabled: !app.pdfDocument,
+  onSelect: () => book.setMode(mode),
+}));
+const viewModeMenu = new PopupMenu({ anchor: viewModeButton, align: "center", items: viewModeItems });
+viewModeButton.addEventListener("click", () => viewModeMenu.toggle());
 bindDirButton.addEventListener("click", () => {
   const next = book.direction === "rtl" ? "ltr" : "rtl";
   changeDirection(next);
@@ -1141,10 +1086,9 @@ function changeDirection(direction) {
 
 function updateViewButtons() {
   const m = VIEW_MODES[book.mode] || VIEW_MODES.book;
-  const next = VIEW_MODES[NEXT_VIEW_MODE[book.mode] || "book"];
   setIcon(viewModeButton, m.icon);
-  viewModeButton.title = `表示モード: ${m.label}(${m.detail})。押すと「${next.label}」に切り替えます`;
-  viewModeButton.setAttribute("aria-label", `表示モード: ${m.label}。押すと${next.label}`);
+  viewModeButton.title = `表示モード: ${m.label}(${m.detail})。クリックして選択`;
+  viewModeButton.setAttribute("aria-label", `表示モード: ${m.label}。一覧から選択`);
   viewModeButton.dataset.mode = book.mode;
   const rtl = book.direction === "rtl";
   setIcon(bindDirButton, rtl ? "bind-rtl" : "bind-ltr");
@@ -1163,12 +1107,21 @@ updateViewButtons();
 // メニューから外した(Ctrl+O・Ctrl+[・Ctrl+]・コピーのショートカット・ツールバーのボタンは残す)
 // ---------------------------------------------------------------------------
 const moreButton = document.getElementById("shMore");
+const compactScanMenu = new PopupMenu({ anchor: moreButton, items: () => scanChip.items() });
 const moreMenu = new PopupMenu({
   anchor: moreButton,
   items: () => {
     const hasDoc = !!app.pdfDocument;
     const handOn = app.pdfCursorTools?.activeTool === 1;
+    const compact = id => !document.getElementById(id).getClientRects().length;
+    const scanInMenu = compact("shScan") && !document.getElementById("shScan").hidden;
     return [
+      { header: "閲覧" },
+      ...(compact("shViewMode") ? viewModeItems() : []),
+      ...(compact("shBindDir") ? [{ label: book.direction === "rtl" ? "左綴じに切り替える" : "右綴じに切り替える", icon: "bind-ltr", disabled: !hasDoc, onSelect: () => changeDirection(book.direction === "rtl" ? "ltr" : "rtl") }] : []),
+      ...(compact("shFit") ? [{ label: "ページに合わせる", icon: "fit-page-height", disabled: !hasDoc, onSelect: () => book.fitPageCentered() }, { label: "幅に合わせる", icon: "fit-page-width", disabled: !hasDoc, onSelect: () => (app.pdfViewer.currentScaleValue = "page-width") }] : []),
+      ...(compact("shZoomIn") ? [{ label: "拡大", icon: "add", disabled: !hasDoc, onSelect: () => app.zoomIn() }, { label: "縮小", icon: "remove", disabled: !hasDoc, onSelect: () => app.zoomOut() }] : []),
+      ...(compact("shRotate") ? [{ label: "回転の向きと角度…", icon: "rotate-ccw", disabled: !hasDoc, onSelect: () => rotateButton.open(moreButton) }] : []),
       { label: "最初のページ", icon: "first-page", shortcut: "Home", disabled: !hasDoc, onSelect: () => (app.page = 1) },
       { label: "最後のページ", icon: "last-page", shortcut: "End", disabled: !hasDoc, onSelect: () => (app.page = app.pagesCount) },
       {
@@ -1179,21 +1132,24 @@ const moreMenu = new PopupMenu({
       },
       { label: "プレゼンテーション(全画面)", icon: "present", shortcut: "Ctrl+Alt+P", disabled: !hasDoc || !app.supportsFullscreen, onSelect: () => app.requestPresentationMode() },
       { separator: true },
-      { label: "Chrome標準ビューアで開いて印刷", icon: "print", disabled: !hasDoc && current.kind !== "url", hint: "巨大なPDFで印刷が遅い・崩れる場合に", onSelect: () => openNativeForPrint() },
-      { label: "ドキュメントのプロパティ", icon: "info", disabled: !hasDoc, onSelect: () => app.pdfDocumentProperties?.open() },
-      { separator: true },
+      { header: "ページの整理・収集" },
+      ...(settings.bindingEnabled ? [{ label: "ページ役割(カバー・表紙・帯など)の一覧", icon: "label", disabled: !hasDoc, onSelect: () => rolesPanel.open() }] : []),
       { label: "表示中のページを収集に追加", icon: "collect", disabled: !hasDoc, onSelect: () => collection.addCurrentPages([app.page]) },
       { label: `ページ収集を表示(${collection.count}ページ)`, icon: "collect", onSelect: () => collectPanel.open() },
       { separator: true },
-      ...(settings.printBindVisible
+      { header: "補正・変換・出力" },
+      ...(compact("shOpenNative") ? [{ label: "Chrome標準で開く", icon: "open-native", disabled: !hasDoc && current.kind !== "url", onSelect: () => openNative() }] : []),
+      ...(!document.getElementById("shPrint").getClientRects().length ? [{ label: "印刷・PDF保存…", icon: "print", disabled: !hasDoc, onSelect: () => app.triggerPrinting() }] : []),
+      { label: "Chrome標準ビューアで開いて印刷", icon: "print", disabled: !hasDoc && current.kind !== "url", hint: "巨大なPDFで印刷が遅い・崩れる場合に", onSelect: () => openNativeForPrint() },
+      ...(settings.bindingEnabled
         ? [{ label: "製本用PDF出力…", icon: "bind-output", disabled: !hasDoc, onSelect: () => bindDialog.open() }]
         : []),
       {
-        label: "スキャンを整える(見開きの分割・余白の除去・冊子の並べ替え)…",
+        label: scanInMenu ? "スキャンの操作…" : "スキャンを整える…",
         icon: "scan-split",
         disabled: !hasDoc || !scanArranger.base || scanArranger.state === "busy",
         hint: "スキャンした見開きを1ページずつに分けたり、紙の周りの余白(写真など)を除いたり、ばらした冊子を表紙から順に並べ替えたりします(画質は元のまま)",
-        onSelect: () => scanDialog.open(),
+        onSelect: () => scanInMenu ? compactScanMenu.open() : scanDialog.open(),
       },
       {
         label: "ほかの形式に変換して保存…",
@@ -1202,9 +1158,11 @@ const moreMenu = new PopupMenu({
         hint: "画像(ZIP)・コミック(CBZ)・EPUB・テキストにして保存します",
         onSelect: () => convertDialog.open(),
       },
-      { label: "ページ役割(カバー・表紙・帯など)の一覧", icon: "label", disabled: !hasDoc, onSelect: () => rolesPanel.open() },
-      ...(settings.perfLog ? [{ label: "速度ログを表示", icon: "speed", disabled: !perf.done, onSelect: () => perf.render() }] : []),
       { separator: true },
+      { header: "設定・文書情報" },
+      ...(compact("shSource") && !document.getElementById("shSource").disabled ? [{ label: "元のリンク・ファイルの場所をコピー…", icon: "link", onSelect: () => sourceMenu.open(moreButton) }] : []),
+      { label: "ドキュメントのプロパティ", icon: "info", disabled: !hasDoc, onSelect: () => app.pdfDocumentProperties?.open() },
+      ...(settings.perfLog ? [{ label: "速度ログを表示", icon: "speed", disabled: !perf.done, onSelect: () => perf.render() }] : []),
       { label: "詳細設定", icon: "settings", onSelect: () => chrome.runtime.openOptionsPage() },
     ];
   },
@@ -1401,9 +1359,11 @@ onSettingsChanged(next => {
   if (next.printQuality !== prev.printQuality) {
     updatePrintResolution();
   }
-  // 0.9.3: 普段の画面の「印刷」「製本用PDF出力」のボタンの出し分け
-  if (next.printBindVisible !== prev.printBindVisible) {
+  // 印刷ボタン・製本機能の変更を開いている画面にも反映する
+  if (next.bindingEnabled !== prev.bindingEnabled || next.printButtonVisible !== prev.printButtonVisible) {
     applyFeatureButtons();
+    outputDialog.updateFeatureVisibility();
+    if (!next.bindingEnabled) { bindDialog.close(); }
   }
 });
 
@@ -1437,6 +1397,7 @@ window.__seihonViewer = {
   convertDialog,
   rolesPanel,
   bindDialog,
+  outputDialog,
   pageEditor,
   contextMenu,
   get current() {

@@ -61,13 +61,13 @@ export class ViewerContextMenu {
           : "このページを画像にしてクリップボードに入れます。チャット欄や文書に貼り付けられます";
     return [
       {
-        label: "コピー",
+        label: s.aiCopySingle === "file-pdf" ? "PDFを保存…" : s.aiCopySingle === "file-png" ? "画像を保存…" : "コピー",
         icon: "copy",
         shortcut: shortcutLabel(s.aiCopyShortcut),
         hint: copyHint,
         onSelect: () => this.pageCopy.copySinglePage(pageNumber),
       },
-      { label: "画像として保存", icon: "file-png", onSelect: () => this.pageCopy.savePageImage(pageNumber) },
+      { label: "画像を保存…", icon: "file-png", onSelect: () => this.pageCopy.savePageImage(pageNumber) },
       { separator: true },
       collected
         ? { label: "収集から外す", icon: "collect-remove", onSelect: () => this.collection.removeCurrentPage(pageNumber) }
@@ -77,13 +77,15 @@ export class ViewerContextMenu {
         icon: "list-alt",
         onSelect: () => this.collectPanel.open(),
       },
-      { separator: true },
-      {
-        label: `ページ役割: ${ROLE_LABEL[this.roles.get(pageNumber)] || "なし"}`,
-        icon: "label",
-        shortcut: "▸",
-        onSelect: () => this.openRoleMenu([pageNumber]),
-      },
+      ...(s.bindingEnabled ? [
+        { separator: true },
+        {
+          label: `ページ役割: ${ROLE_LABEL[this.roles.get(pageNumber)] || "なし"}`,
+          icon: "label",
+          shortcut: "▸",
+          onSelect: () => this.openRoleMenu([pageNumber]),
+        },
+      ] : []),
       ...(this.pageEditor
         ? [
             { separator: true },
@@ -107,7 +109,7 @@ export class ViewerContextMenu {
 
   /** ページ役割を選ぶメニュー(右クリックメニューから開く) */
   openRoleMenu(pages) {
-    if (!pages.length) {
+    if (!this.getSettings().bindingEnabled || !pages.length) {
       return;
     }
     const { x, y } = this.lastPoint || { x: 100, y: 100 };
@@ -179,10 +181,12 @@ export class ViewerContextMenu {
     let items;
     if (sel.size > 1 && sel.has(pageNumber)) {
       const pages = sel.pages();
-      const multi = { "pdf-copy": "PDF", "image-copy": "画像", pdf: "PDF で保存", zip: "画像の ZIP で保存" }[this.getSettings().aiCopyMulti] || "PDF";
+      const format = this.getSettings().aiCopyMulti;
+      const multi = { "pdf-copy": "PDF", "image-copy": "画像", pdf: "PDF", zip: "画像ZIP" }[format] || "PDF";
+      const action = format === "pdf" || format === "zip" ? `選んだ${pages.length}ページを${multi}で保存…` : `選んだ${pages.length}ページをコピー(${multi})`;
       items = [
         {
-          label: `選んだ${pages.length}ページをコピー(${multi})`,
+          label: action,
           icon: "copy",
           shortcut: shortcutLabel(this.getSettings().aiCopyShortcut),
           onSelect: () => this.pageCopy.copyPages(pages),
@@ -198,7 +202,7 @@ export class ViewerContextMenu {
           onSelect: () => this.pageCopy.copyImages(this.pageCopy.currentPages(pages)),
         },
         { label: `選んだ${pages.length}ページを収集に追加`, icon: "collect", onSelect: () => this.collection.addCurrentPages(pages) },
-        { label: `選んだ${pages.length}ページに役割を付ける`, icon: "label", shortcut: "▸", onSelect: () => this.openRoleMenu(pages) },
+        ...(this.getSettings().bindingEnabled ? [{ label: `選んだ${pages.length}ページに役割を付ける`, icon: "label", shortcut: "▸", onSelect: () => this.openRoleMenu(pages) }] : []),
         ...(this.pageEditor
           ? [
               {

@@ -153,6 +153,7 @@ export function setupDropZone({ onFile, onUrl }) {
   window.addEventListener(
     "dragenter",
     e => {
+      if (e.target.closest?.("#shCollectionEditor")) { return; }
       if (!hasFiles(e)) {
         return;
       }
@@ -174,6 +175,7 @@ export function setupDropZone({ onFile, onUrl }) {
   window.addEventListener(
     "dragover",
     e => {
+      if (e.target.closest?.("#shCollectionEditor")) { return; }
       if (!hasFiles(e)) {
         return;
       }
@@ -188,6 +190,7 @@ export function setupDropZone({ onFile, onUrl }) {
     e => {
       depth = 0;
       overlay.hidden = true;
+      if (e.target.closest?.("#shCollectionEditor")) { return; }
       if (!hasFiles(e)) {
         return;
       }

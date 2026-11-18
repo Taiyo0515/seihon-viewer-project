@@ -29,12 +29,12 @@ def tracked_files():
     """src/ の中の入れるファイル(src/ からの相対パス、/ 区切り)"""
     try:
         out = subprocess.run(
-            ["git", "-C", ROOT, "ls-files", "-z", "--", "src"],
+            ["git", "-C", ROOT, "ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", "src"],
             capture_output=True, check=True,
         ).stdout
         names = [n.decode("utf-8") for n in out.split(b"\0") if n]
         if names:
-            return sorted(n[len("src/"):] for n in names if n.startswith("src/"))
+            return sorted({n[len("src/"):] for n in names if n.startswith("src/")})
     except (OSError, subprocess.CalledProcessError):
         pass
     found = []

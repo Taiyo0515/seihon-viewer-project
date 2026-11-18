@@ -76,7 +76,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   aiCopyShortcut: "Ctrl+Shift+C",
 
   // ---- ページ収集 ----
-  /** 書き出し後に収集を自動で空にする */
+  /** 保存・コピー後に収集を自動で空にする */
   collectClearAfterExport: false,
   /** 収集の保存上限(MB) */
   collectLimitMB: 1024,
@@ -124,6 +124,12 @@ export const DEFAULT_SETTINGS = Object.freeze({
   bindPrintQuality: "normal",
   /** 0.9: 出力品質が「印刷互換性重視」のときの画像の細かさ(dpi)。印刷用紙1面まるごとに適用する */
   bindRasterDpi: 300,
+  /**
+   * 0.13.0: 画像化するときの文字の濃度補正。
+   * "none" 補正なし / "standard" 標準(薄い灰色の輪郭を濃くする) / "strong" 濃い。
+   * 写真だけの面には掛けない(図表・写真の色を変えないため)。
+   */
+  bindRasterTone: "standard",
   /** 0.9: 製本用PDF出力の画面で、読む順番のプレビュー(サムネイル)を出す */
   bindPreviewSequence: true,
   /** 0.9: 製本用PDF出力の画面で、面付けの配置(用紙ごとの表裏)のプレビューを出す */
@@ -132,10 +138,10 @@ export const DEFAULT_SETTINGS = Object.freeze({
   // ---- スキャンの整え(0.3) ----
   /**
    * スキャンした見開き(本・ノートを開いてスキャンしたもの)を開いたとき:
-   * "auto" 自動で1ページずつに分けて表示する / "ask" ツールバーのボタンで知らせる / "off" 何もしない
-   * (ばらした冊子の並べ替えは、いつもボタンを押してから。PDF ごとに選んだ整え方は覚えておく)
+   * 現在は手動のみ。旧auto/askも読み込み時にoffへ統一する。
+   * PDFごとの整え方や検査結果は保持するが、開いただけでは適用しない。
    */
-  scanArrange: "auto",
+  scanArrange: "off",
   /** 分けるときに、スキャンで入った余分なふち(余白・影・本の縁・ごみ)を除いて、ページの大きさをそろえる(「補正」のチェックの初期値) */
   scanTrim: true,
   /**
@@ -176,6 +182,10 @@ export const DEFAULT_SETTINGS = Object.freeze({
    * 0.9.3 で「初期値オフ」にした(使わない人のツールバーを減らす)。
    */
   printBindVisible: false,
+  /** 製本用PDF出力を使う。通常の印刷とPDF保存はオフでも使える。 */
+  bindingEnabled: false,
+  /** ツールバーに印刷・PDF保存ボタンを表示する。メニューとCtrl+Pは常に使える。 */
+  printButtonVisible: true,
 });
 
 /**
@@ -204,7 +214,7 @@ export const SETTING_LABELS = Object.freeze({
   pngLongSide: "画像の長辺(廃止: 0.7.0 から dpi)",
   pngScale: "画像の倍率(廃止: 0.7.0 から dpi)",
   aiCopyShortcut: "コピーのショートカット",
-  collectClearAfterExport: "書き出し後の収集",
+  collectClearAfterExport: "保存・コピー後の収集",
   collectLimitMB: "収集の保存上限",
   bindBlankPosition: "白紙を入れる位置",
   bindImpose: "面付け",
@@ -224,9 +234,10 @@ export const SETTING_LABELS = Object.freeze({
   bindObiSuffix: "出力ファイル名(付属)",
   bindPrintQuality: "製本用PDF出力の品質",
   bindRasterDpi: "製本用PDF出力のdpi(画像化するとき)",
+  bindRasterTone: "製本用PDF出力の文字の濃さ(画像化するとき)",
   bindPreviewSequence: "読む順のプレビュー(製本用PDF出力)",
   bindPreviewSheets: "面付けの配置のプレビュー(製本用PDF出力)",
-  scanArrange: "スキャンした見開き",
+  scanArrange: "補正の開始(手動のみ)",
   scanTrim: "スキャンの余白を除く",
   scanDirection: "スキャンした本を読む向き",
   scanFirstPage: "スキャンの1ページ目",
@@ -236,7 +247,9 @@ export const SETTING_LABELS = Object.freeze({
   comicSplitSpreads: "コミックの見開きの画像を分ける",
   openLocalEbooks: "パソコン内の電子書籍・コミックを開く",
   perfLog: "速度ログ",
-  printBindVisible: "普段の画面の「印刷」「製本用PDF出力」のボタン",
+  printBindVisible: "旧版の印刷・製本ボタン表示(製本機能・印刷ボタンへ引き継ぎ)",
+  bindingEnabled: "製本機能を使う",
+  printButtonVisible: "ツールバーに印刷ボタンを表示する",
 });
 
 const ENUMS = {
@@ -257,6 +270,7 @@ const ENUMS = {
   bindSizeRef: ["mode", "first", "page"],
   bindObiOutput: ["separate", "append", "none"],
   bindPrintQuality: ["normal", "print"],
+  bindRasterTone: ["none", "standard", "strong"],
   bindUseObiFront: ["obi", "cover", "back", "none"],
   bindUseObiBack: ["obi", "cover", "back", "none"],
   bindUseObi: ["obi", "cover", "back", "none"],
@@ -361,6 +375,11 @@ export function normalizeSettings(stored) {
       out[key] = val;
     }
   }
+  // 0.12: 旧版のまとめて表示する設定は、明示された新設定がない場合だけ引き継ぐ。
+  if (typeof src.printBindVisible === "boolean") {
+    if (!("bindingEnabled" in src)) { out.bindingEnabled = src.printBindVisible; }
+    if (!("printButtonVisible" in src)) { out.printButtonVisible = src.printBindVisible; }
+  }
   // 0.9: プレビューを2種(読む順・面付けの配置)に分けた。旧の「プレビューを出さない」を引き継ぐ
   if ("bindHidePreview" in src) {
     const show = src.bindHidePreview === false;
@@ -371,6 +390,8 @@ export function normalizeSettings(stored) {
       out.bindPreviewSheets = show;
     }
   }
+  // 0.12.2: 旧版やバックアップに自動設定が残っていても、補正は手動のみ。
+  out.scanArrange = "off";
   out.bindRoleItems = normalizeRoleItems(out.bindRoleItems);
   return out;
 }
@@ -383,11 +404,20 @@ export function normalizeSettings(stored) {
  * @returns {object|null} 書き換えた設定(変えるものが無ければ null)
  */
 export function migrateSettings(stored, previousVersion) {
-  if (!stored || typeof stored !== "object" || !previousVersion || compareVersions(previousVersion, "0.7.0") >= 0) {
+  if (!stored || typeof stored !== "object" || !previousVersion) {
     return null;
   }
   const next = { ...stored };
   let changed = false;
+  for (const key of ["bindingEnabled", "printButtonVisible"]) {
+    if (!(key in next)) {
+      next[key] = typeof stored.printBindVisible === "boolean" ? stored.printBindVisible : DEFAULT_SETTINGS[key];
+      changed = true;
+    }
+  }
+  if (compareVersions(previousVersion, "0.7.0") >= 0) {
+    return changed ? normalizeSettings(next) : null;
+  }
   if (compareVersions(previousVersion, "0.2.0") < 0) {
     // 0.2: 印刷とコピーの初期値を「最高画質」「クリップボードへ」に、付属の出力ファイル名を「_付属」に
     const defaultsBefore12 = { printQuality: "auto", aiCopyMulti: "pdf", bindObiSuffix: "_帯" };
@@ -444,7 +474,13 @@ export async function loadSettings() {
 /** 設定の一部を書き換えて保存し、保存後の設定を返す */
 export async function saveSettings(patch) {
   const current = await loadSettings();
-  const next = normalizeSettings({ ...current, ...patch });
+  // 旧形式のバックアップや旧画面からの変更も、新しい二つの設定へ引き継ぐ。
+  const update = { ...patch };
+  if (typeof update.printBindVisible === "boolean") {
+    if (!("bindingEnabled" in update)) { update.bindingEnabled = update.printBindVisible; }
+    if (!("printButtonVisible" in update)) { update.printButtonVisible = update.printBindVisible; }
+  }
+  const next = normalizeSettings({ ...current, ...update });
   await chrome.storage.local.set({ [SETTINGS_KEY]: next });
   return next;
 }

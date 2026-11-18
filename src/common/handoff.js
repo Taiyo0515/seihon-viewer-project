@@ -91,7 +91,8 @@ async function cleanup(db, incoming = 0) {
   const all = await tx(db, "readonly", store => reqP(store.getAll()));
   const now = Date.now();
   const keep = all.filter(r => now - r.time < KEEP_MS).sort((a, b) => b.time - a.time);
-  const drop = new Set(all.filter(r => !keep.includes(r)).map(r => r.id));
+  const kept = new Set(keep);
+  const drop = new Set(all.filter(r => !kept.has(r)).map(r => r.id));
   let total = incoming;
   for (const r of keep) {
     total += r.size || 0;

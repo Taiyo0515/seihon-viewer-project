@@ -48,7 +48,7 @@ const RADIO_SETTINGS = [
   "scanFirstPage",
   "scanDeskew",
 ];
-const CHECK_SETTINGS = ["openLocalFiles", "restorePosition", "guardEnabled", "perfLog", "collectClearAfterExport", "bindImpose", "scanTrim", "comicSplitSpreads", "openLocalEbooks", "bindPreviewSequence", "bindPreviewSheets", "scanDebugShow"];
+const CHECK_SETTINGS = ["bindingEnabled", "printButtonVisible", "openLocalFiles", "restorePosition", "guardEnabled", "perfLog", "collectClearAfterExport", "bindImpose", "scanTrim", "comicSplitSpreads", "openLocalEbooks", "bindPreviewSequence", "bindPreviewSheets", "scanDebugShow"];
 const SELECT_SETTINGS = [
   "bindPaper",
   "bindUseObiFront",
@@ -83,8 +83,10 @@ function render(settings) {
   for (const id of CHECK_SETTINGS) {
     $(id).checked = !!settings[id];
   }
-  // 0.9.3: 分類3のカードのスイッチ
-  $("printBindVisibleSwitch").setAttribute("aria-checked", settings.printBindVisible ? "true" : "false");
+  // 製本の設定は機能を有効にしたときだけ表示する。値は消さず保持する。
+  for (const el of document.querySelectorAll("[data-binding-settings]")) {
+    el.hidden = !settings.bindingEnabled;
+  }
   for (const id of Object.keys(NUMBER_SETTINGS)) {
     if (document.activeElement !== $(id)) {
       $(id).value = String(settings[id]);
@@ -136,7 +138,7 @@ function render(settings) {
   applyThemePreference(settings.theme);
 }
 
-async function save(patch, message = "保存しました") {
+async function save(patch, message = "設定を保存しました") {
   await saveSettings(patch);
   toast(message);
 }
@@ -159,16 +161,6 @@ function bind() {
   for (const id of CHECK_SETTINGS) {
     $(id).addEventListener("change", () => save({ [id]: $(id).checked }));
   }
-  // 0.9.3: 分類3のカードのスイッチ(「印刷」「製本用PDF出力」のボタンを出すか)。
-  // カード自体がリンク(a)なので、スイッチの押した時の動きはここで止める(分類を開かない)
-  const printSwitch = $("printBindVisibleSwitch");
-  printSwitch.addEventListener("click", e => {
-    e.preventDefault();
-    e.stopPropagation();
-    const on = printSwitch.getAttribute("aria-checked") !== "true";
-    printSwitch.setAttribute("aria-checked", on ? "true" : "false");
-    save({ printBindVisible: on });
-  });
   for (const [id, [min, max]] of Object.entries(NUMBER_SETTINGS)) {
     $(id).addEventListener("change", async () => {
       const value = Number($(id).value);

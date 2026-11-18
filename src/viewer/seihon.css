@@ -278,10 +278,12 @@ kbd {
   min-width: 0;
 }
 .sh-start {
+  min-width: 40px;
   overflow: hidden;
   padding-inline-end: 20px;
 }
 .sh-end {
+  flex: 0 0 auto;
   justify-content: flex-end;
   padding-inline-start: 20px;
   white-space: nowrap;
@@ -666,18 +668,27 @@ body.sh-no-document #viewsManagerToggleButton {
     display: none;
   }
 }
-@media (max-width: 560px) {
-  #shFit,
-  #shViewMode,
-  #shBindDir,
-  .sh-center > .sh-sep {
-    display: none;
-  }
+/* 狭いときに省いた操作は「その他の操作」からも使える。 */
+#shToolbar.sh-fit-5 #shOpenNative,
+#shToolbar.sh-fit-5 #shPrint,
+#shToolbar.sh-fit-5 #shSource,
+#shToolbar.sh-fit-6 #shBindOutput,
+#shToolbar.sh-fit-6 #shCollect,
+#shToolbar.sh-fit-6 #shScan,
+#shToolbar.sh-fit-6 #shBindDir,
+#shToolbar.sh-fit-7 #shFit,
+#shToolbar.sh-fit-7 #shViewMode,
+#shToolbar.sh-fit-7 #shRotate,
+#shToolbar.sh-fit-7 .sh-zoom,
+#shToolbar.sh-fit-7 .sh-center > .sh-sep {
+  display: none !important;
 }
-@media (max-width: 440px) {
-  .sh-center {
-    display: none;
-  }
+#shToolbar.sh-fit-5 .sh-start { padding-inline-end: 4px; }
+#shToolbar.sh-fit-5 .sh-end { padding-inline-start: 8px; }
+@media (max-width: 560px) {
+  #shToolbar { padding-inline: 8px; }
+  .sh-page-selector { margin-inline-end: 6px; }
+  #shFit { margin-inline-start: 4px; }
 }
 
 /* ---------------------------------------------------------------------------
@@ -1797,6 +1808,9 @@ body.sh-has-error #viewerContainer {
   padding: 4px 16px 12px;
   display: flex;
   flex-direction: column;
+  /* 0.9.3: 画面の高さが足りないとき(保存などの下の欄が切れるとき)は、パネル自身を縦にスクロールする */
+  overflow-y: auto;
+  overflow-x: hidden;
   background: var(--sh-side-bg);
   color: var(--sh-side-fg);
   border-inline-start: 1px solid var(--sh-side-border);
@@ -1878,7 +1892,8 @@ body.sh-has-error #viewerContainer {
 }
 .sh-collect-list {
   flex: 1 1 auto;
-  min-height: 60px;
+  /* 0.9.3: 画面の高さが足りないときは、下の欄(コピー・保存)を優先して収まる(以前は 60px 固定) */
+  min-height: 0;
   overflow-y: auto;
   list-style: none;
   margin: 0 -10px;
@@ -2100,6 +2115,9 @@ body.sh-has-error #viewerContainer {
   padding: 4px 16px 12px;
   display: flex;
   flex-direction: column;
+  /* 0.9.3: 画面の高さが足りないときは、パネル自身を縦にスクロールする(下の欄が切れないように) */
+  overflow-y: auto;
+  overflow-x: hidden;
   background: var(--sh-side-bg);
   color: var(--sh-side-fg);
   border-inline-start: 1px solid var(--sh-side-border);
@@ -2927,3 +2945,82 @@ select.sh-select option:disabled {
 .sh-scan-log-list {
   white-space: pre-wrap;
 }
+
+/* 画面が低くても操作欄を縮めず、パネル全体で下までスクロールできるようにする。 */
+#shCollectPanel > *, #shRolesPanel > * { flex-shrink: 0; }
+#shCollectPanel .sh-collect-list { flex: 1 0 160px; min-height: 160px; }
+#shRolesPanel .sh-roles-body { flex: 1 0 auto; overflow: visible; }
+
+/* 収集編集: 既存のダイアログと同じ操作部品を使い、残りの高さをプレビューに割り当てる。 */
+.sh-collection-editor {
+  box-sizing: border-box; width: 98vw; max-width: 1800px; height: 96dvh; max-height: 96dvh;
+  padding: 16px; border: 1px solid var(--sh-side-border); border-radius: 12px;
+  background: var(--sh-panel-bg); color: var(--sh-panel-fg); font: 13px var(--sh-font);
+  overflow: auto;
+}
+.sh-collection-editor[open] { display: flex; flex-direction: column; gap: 10px; }
+.sh-collection-editor::backdrop { background: #0009; }
+.sh-collection-editor header, .sh-collection-editor footer, .sh-edit-tools, .sh-edit-crop-tools,
+.sh-edit-tool-group, .sh-edit-add-row, .sh-edit-add-fields, .sh-edit-navigation, .sh-edit-exports {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px; flex-shrink: 0;
+}
+.sh-collection-editor h2 { margin: 0; font-size: 18px; flex: 1; }
+.sh-collection-editor .sh-btn { font-size: 13px; padding-inline: 12px; white-space: nowrap; }
+.sh-collection-editor button:disabled { opacity: .45; cursor: default; }
+.sh-edit-tools { padding-bottom: 10px; border-bottom: 1px solid var(--sh-menu-sep); }
+.sh-edit-tools-label, .sh-edit-add-hint { color: var(--sh-panel-fg2); font-size: 12px; }
+.sh-edit-tool-group + .sh-edit-tool-group { border-inline-start: 1px solid var(--sh-menu-sep); padding-inline-start: 8px; }
+.sh-edit-delete { margin-inline-start: auto; }
+.sh-edit-add-settings { min-width: 0; }
+.sh-edit-add-settings summary { cursor: pointer; color: var(--sh-btn-fg); padding: 8px 4px; }
+.sh-edit-add-settings summary:focus-visible { outline: 2px solid var(--sh-focus); }
+.sh-edit-add-fields { padding: 4px; }
+.sh-edit-add-fields label { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.sh-edit-add-fields .sh-select { max-width: min(350px, 72vw); font-size: 13px; }
+.sh-edit-body { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 14px; flex: 1 1 0; min-height: 220px; }
+.sh-edit-body ol { list-style: none; padding: 0; margin: 0; overflow: auto; min-height: 0; }
+.sh-edit-body li button { width: 100%; text-align: start; display: flex; align-items: center; gap: 8px; margin-bottom: 6px; padding: 8px; border: 1px solid var(--sh-btn-border); border-radius: 6px; color: inherit; background: transparent; font: inherit; cursor: pointer; }
+.sh-edit-body li button:hover { background: var(--sh-btn-hover); }
+.sh-edit-body li button:focus-visible { outline: 2px solid var(--sh-focus); outline-offset: -2px; }
+.sh-edit-body li span { overflow-wrap: anywhere; }
+.sh-edit-body li img { width: 50px; max-height: 72px; object-fit: contain; }
+.sh-edit-body [aria-current=true] { border: 2px solid var(--sh-accent); background: var(--sh-btn-hover); }
+.sh-edit-preview { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--sh-main-bg); border-radius: 6px; padding: 10px; }
+.sh-edit-preview p { flex: 0 0 auto; margin: 0 0 8px; color: var(--sh-panel-fg2); overflow-wrap: anywhere; }
+.sh-edit-stage { flex: 1; min-height: 0; min-width: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.sh-edit-sheet { position: relative; flex: none; line-height: 0; box-shadow: 0 2px 10px #0003; }
+.sh-edit-sheet canvas { display: block; }
+.sh-edit-exports { margin-inline-start: auto; }
+.sh-collection-editor footer { padding-top: 10px; border-top: 1px solid var(--sh-menu-sep); }
+.sh-edit-crop { position: absolute; inset: 0; overflow: hidden; touch-action: none; cursor: crosshair; }
+.sh-edit-selection { position: absolute; border: 2px solid var(--sh-accent); box-sizing: border-box; box-shadow: 0 0 0 2000px #0006; cursor: move; }
+.sh-edit-selection span { position: absolute; width: 12px; height: 12px; background: white; border: 1px solid var(--sh-accent); transform: translate(-50%, -50%); }
+.sh-edit-selection [data-handle=nw] { left: 0; top: 0; cursor: nwse-resize; }
+.sh-edit-selection [data-handle=n] { left: 50%; top: 0; cursor: ns-resize; }
+.sh-edit-selection [data-handle=ne] { left: 100%; top: 0; cursor: nesw-resize; }
+.sh-edit-selection [data-handle=e] { left: 100%; top: 50%; cursor: ew-resize; }
+.sh-edit-selection [data-handle=se] { left: 100%; top: 100%; cursor: nwse-resize; }
+.sh-edit-selection [data-handle=s] { left: 50%; top: 100%; cursor: ns-resize; }
+.sh-edit-selection [data-handle=sw] { left: 0; top: 100%; cursor: nesw-resize; }
+.sh-edit-selection [data-handle=w] { left: 0; top: 50%; cursor: ew-resize; }
+.sh-edit-crop[hidden], .sh-edit-crop-tools[hidden] { display: none; }
+@media (max-width: 650px) { .sh-edit-body { grid-template-columns: 130px minmax(0, 1fr); } .sh-edit-body li img { width: 30px; } }
+
+@media (max-width: 650px) {
+  .sh-collection-editor { padding: 10px; }
+  .sh-edit-add-hint { display: none; }
+  .sh-edit-exports { margin-inline-start: 0; }
+  .sh-edit-tool-group + .sh-edit-tool-group { border: none; padding-inline-start: 0; }
+}
+.sh-bind-roles > summary { color: var(--sh-btn-fg); font-weight: 500; }
+.sh-bind-roles[open] > summary { margin-bottom: 10px; }
+.sh-bind-roles .sh-bind-roles-head { justify-content: flex-end; }
+
+/* 0.12: 通常の印刷・PDF保存は必要な設定だけを出す。 */
+.sh-output-dialog { width: min(540px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; }
+.sh-output-dialog h2 { margin-top: 0; }
+.sh-output-dialog p { line-height: 1.6; }
+.sh-output-field { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-block: 18px; }
+.sh-output-field input, .sh-output-field select { flex: 1; min-width: 160px; padding: 8px; color: inherit; background: var(--sh-side-bg); border: 1px solid var(--sh-side-border); border-radius: 4px; font: inherit; }
+.sh-output-dialog .sh-dialog-buttons { flex-wrap: wrap; margin-top: 16px; }
+#shBindPrintTarget { max-width: 120px; padding: 6px; font: inherit; color: inherit; background: var(--sh-side-bg); }

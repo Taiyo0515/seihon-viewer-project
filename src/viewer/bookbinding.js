@@ -102,7 +102,7 @@ export const PAPERS = Object.freeze({
  * @param {Map<number,string>} o.roles 0始まりのページ番号 → 役割
  * @param {number|null} [o.coverIndex] 使う表紙(0始まり)。null なら自動
  * @param {number|null} [o.backIndex] 使う裏表紙(0始まり)。null なら自動
- * @param {{mode:"beforeBack"|"afterCover"|"custom", after?:number[]}} [o.blank] 白紙の位置。after は「何ページ目の後ろ」(1始まり、重複可)
+ * @param {{mode:"beforeBack"|"afterCover"|"custom", after?:number[]}} [o.blank] 白紙の位置。after は「何ページ目の後ろ」(0は先頭、1以上は元ページ番号、重複可)
  * @param {Object<string,string>} [o.roleUse] 付属の役割のページの使い道
  */
 export function planBook({ numPages, roles = new Map(), coverIndex = null, backIndex = null, blank = { mode: "beforeBack" }, roleUse = DEFAULT_ROLE_USE }) {
@@ -157,13 +157,18 @@ export function planBook({ numPages, roles = new Map(), coverIndex = null, backI
   }
 
   // ---- 白紙 ----
-  const blanks = (4 - (n0 % 4)) % 4;
+  let blanks = (4 - (n0 % 4)) % 4;
+  // 0は先頭への明示挿入。元が4の倍数でも、指定分を確保して4の倍数へそろえる。
+  const leading = blank.mode === "custom" && Array.isArray(blank.after) ? blank.after.filter(n => n === 0).length : 0;
+  while (blanks < leading) { blanks += 4; }
   let remaining = blanks;
   // 指定の位置(「何ページ目の後ろ」)に1枚ずつ入れる
   if (remaining && blank.mode === "custom" && Array.isArray(blank.after) && blank.after.length) {
     const afterCount = new Map();
-    for (const pageNumber of blank.after) {
-      const inBook = sequence.some(s => s.pageIndex === pageNumber - 1);
+    // 先頭指定を先に確保し、正数指定で必要枚数を使い切らないようにする。
+    const positions = [...blank.after.filter(n => n === 0), ...blank.after.filter(n => n !== 0)];
+    for (const pageNumber of positions) {
+      const inBook = pageNumber === 0 || sequence.some(s => s.pageIndex === pageNumber - 1);
       if (!inBook) {
         warnings.push(`${pageNumber}ページ目は本体に含まれないため、その後ろには白紙を入れられません`);
         continue;
@@ -175,7 +180,7 @@ export function planBook({ numPages, roles = new Map(), coverIndex = null, backI
       afterCount.set(pageNumber - 1, (afterCount.get(pageNumber - 1) || 0) + 1);
       remaining--;
     }
-    const rebuilt = [];
+    const rebuilt = Array.from({ length: afterCount.get(-1) || 0 }, () => ({ kind: "blank" }));
     for (const item of sequence) {
       rebuilt.push(item);
       for (let k = 0; k < (afterCount.get(item.pageIndex) || 0); k++) {
@@ -253,8 +258,8 @@ export function sheetSides(sheet, duplex = "short") {
 export const RASTER_SAFE_BYTES = 1.8 * 1024 * 1024 * 1024;
 
 /**
- * 画像化した出力の見込みの大きさ(バイト)。JPEG(0.92)の 1px あたりを 1.6バイト と見て概算する
- * (スキャンの画像(白っぽくない部分が多い)では、0.92 でも 1px あたり 1.5〜2.5バイト になることがある)。
+ * 画像化した出力の見込みの大きさ(バイト)。写真・スキャンの面を JPEG(0.95)の 1px あたり 1.6バイト と見て概算する
+ * (0.13.0 から文字中心の面は PNG になり、実際はこれより小さくなることが多い)。
  * @param {number} N 本体のページ数(4の倍数)
  * @param {{width:number,height:number,label:string}} paper 印刷用紙(pt)
  * @param {number} dpi
@@ -359,7 +364,7 @@ export function sizeLabelMm({ width, height }) {
 }
 
 /**
- * 「5, 12」「5の後ろに2枚 → 5, 5」のような白紙の位置の指定を読み取る(1始まりのページ番号の配列)。
+ * 「5, 12」「5の後ろに2枚 → 5, 5」のような白紙の位置の指定を読み取る(0は先頭、1以上は元ページ番号の配列)。
  * 区切りは「、」「,」「;」「/」のどれでもよい(0.9.2)。
  * @returns {{after:number[], error:string|null, truncated:boolean}} truncated: 1つの指定が3枚を超えていたら true
  */

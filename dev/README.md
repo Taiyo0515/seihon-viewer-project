@@ -15,6 +15,7 @@
 | `start-servers.sh` | 試験用サーバー(`src/tools/test-server/server.py`)を 127.0.0.1:8765 で起動する。`/files/` で `dev/pdfs/` を配る |
 | `make_dist.py` | 配布用の zip を `src/` から作る(`python3 dev/make_dist.py` → `dist/seihon-viewer-<版>.zip`。中は `seihon-viewer/` フォルダ。同じ名前があれば上書きしない) |
 | `tests/lib.mjs` | 試験の共通部品(拡張機能を読み込んだ Chromium の起動、保存先を選ぶ画面の偽物、結果の記録など) |
+| `tests/raster-tone.mjs` | 0.13.0 の画像化の濃度補正・圧縮方式の表の試験。Playwright を使わず `node dev/tests/raster-tone.mjs` で動く |
 | `tests/regress.mjs` | 0.0.4・0.1 の回帰試験(16 項目) |
 | `tests/phase6.mjs`〜`phase12.mjs` | 0.2〜0.6.1 の試験(33・24・27・8・12・10・8 項目) |
 | `tests/phase13.mjs` | 0.6.3 の試験(段階1 で見つけた不具合の再現と確認。7 項目) |
@@ -95,3 +96,40 @@ sh dev/run-node.sh dev/opt-0.6.3/snap-e2e.mjs <出力フォルダ>              
   引き継ぎ用の構成にするときに、リポジトリの中の相対の場所を使うように直しました(試験の中身・判定は変えていません)。
 - `big-200.cbz` は、0.4 の試験で使ったもの(作り方の記録が無い)と同じ大きさ・枚数・形式のものを `gen/make_big_cbz.py` で作ります。絵は違います。
 - 試験の見本(`skew-*.pdf`・`turned-*.pdf`)は作るたびに PDF の作成日時だけが変わり、中の画像は毎回同じです。
+
+
+## 0.10.0の収集編集・検査保存の確認（Windowsにも対応）
+
+`node dev/tests/collection-editor.cjs` を実行します。Playwrightと拡張機能を読み込めるChromiumが必要です。
+別の場所にあるPlaywrightは環境変数`PLAYWRIGHT_MODULE`（requireで読める入口）、Chromiumは`CHROMIUM_EXECUTABLE`（実行ファイル）で指定できます。
+自分専用の新しいブラウザプロファイルを使い、普段のChromeのデータは使用しません。
+試験用PDFはその場で生成します。回転4方向・CropBox、トリミング、複製、画像追加、ドラッグ並べ替え、PDF・画像生成、再読み込み後の保存、検査結果の再利用、低い画面の操作、通常PDF表示を確認します。
+結果と確認用のPDF・画面は`dev/logs/`に保存します。既存のLinux向け145項目とは別の追加試験です。
+
+## 0.11.0の確認
+
+- `node dev/tests/ui-revision.cjs`: 320〜1440pxの配置、直接モード選択、製本・収集編集画面。
+- `node dev/tests/progressive-scan.cjs`: 読み位置を優先したスキャン検査、先読み、保存、取消と表示保護。
+- `node dev/tests/optimization.cjs`: 最適化前後の結果比較と資源解放。
+- `node dev/tests/collection-editor.cjs`: 既存の収集編集回帰。
+
+上記cjsのPlaywrightはPLAYWRIGHT_MODULEにrequire可能なパスを指定する。既存mjs試験はimport可能なファイルURLを指定する。
+既存試験の共通起動はCHROMIUM_EXECUTABLEでブラウザーを指定でき、SEIHON_HEADLESS=1で画面を出さずに実行できる。
+回帰試験にはlocalhostのテスト用サーバーが必要。今回の旧regress確認範囲はG1/G2/G3/G6/E1/E2/E4/X1/X2の9項目。旧145項目の全実行やOSクリップボードの登録・実プリンター確認はしていない。
+
+## 0.12.0の確認
+
+`dev/tests/output-settings.cjs` は新規値・旧設定移行・独立した切替・設定保存読込と画面反映を確認。
+`dev/tests/print-output.cjs` は通常の印刷・PDF保存・ページ指定・編集反映・画像化・製本の共通作成処理を確認する。実プリンターは使わず、Chromeへ渡す境界でPDFの内容を比較する。
+既存収集編集・UI試験も継続。実プリンターやChromeのネイティブ印刷画面の操作・所要時間は未検証。
+
+## 0.12.1 文字注釈の保存互換性
+
+- `node dev/tests/text-annotation.cjs`: 実際の文字入力・8/14/24pt・ズーム変更・保存/再読込/再編集/再保存・長文狭枠。
+- `node dev/tests/free-text-font.cjs`: Type3/ToUnicode・255字超・Unicode結合字/絵文字・4回転・ページ索引による対象限定。
+- `python -I dev/tests/text-annotation-render.py`: PDFiumで独立描画、外観の有無・Unicode・枠・PDF.jsとの描画比較。pypdf/pypdfium2/Pillowが必要。
+
+実機Acrobat/Safari等を含むすべてのPDFビューアを確認したとは扱わない。今回の確認エンジンはPDF.jsとPDFium。第三者ライブラリは変更せず、全文ラスタ化もしない。
+
+## 0.12.2の確認
+`node dev/tests/manual-scan.cjs` で旧auto設定・選択/キャッシュ保存後の再読込でも自動検査/適用なし、手動適用と手動プレビュー維持、先頭白紙0の7/8ページと既存正数指定を確認する。

@@ -11,11 +11,66 @@
 
 import { blankPdfBytes, editedDocumentBytes, loadPdfFromBytes } from "./page-export.js";
 import { imposition, sheetSides } from "./bookbinding.js";
+import { applyRasterTone, chooseRasterEncoding, inkStats, normalizeToneLevel } from "./raster-tone.js";
 
 let libPromise = null;
 function pdfLib() {
   libPromise ||= import("../lib/pdf-lib.esm.min.js");
   return libPromise;
+}
+
+/** 画像化するときの JPEG の品質(0.13.0 で 0.92 → 0.95。輪郭まわりのにじみを減らす) */
+const JPEG_QUALITY = 0.95;
+/** PNG がこれを超えたら、JPEG のほうが小さくないか確かめる(文字の面としては想定外に大きい) */
+const PNG_DIRECT_LIMIT = 24 * 1024 * 1024;
+/** Chrome の Canvas の1辺の上限 */
+const MAX_CANVAS_SIDE = 16384;
+
+/**
+ * 面を画像にするときの画素数。1辺が上限を超えるときは、縦横の比率を保ったまま縮める
+ * (以前は縦横を別々に切っていたため、超高 dpi で絵がゆがんだ)。
+ * @returns {{width:number, height:number, scale:number}}
+ */
+export function rasterPixels(width, height, dpi) {
+  const scale = dpi / 72;
+  const fit = Math.min(1, MAX_CANVAS_SIDE / (width * scale), MAX_CANVAS_SIDE / (height * scale));
+  return {
+    width: Math.max(1, Math.round(width * scale * fit)),
+    height: Math.max(1, Math.round(height * scale * fit)),
+    scale: scale * fit,
+  };
+}
+
+function canvasBlob(canvas, type, quality) {
+  return new Promise(resolve => canvas.toBlob(resolve, type, quality));
+}
+
+/**
+ * 面を画像にする。文字中心で色の少ない面は PNG(可逆。JPEG より小さく、輪郭がにじまない)、
+ * 写真・スキャンのざらつきがある面は JPEG にする。
+ * @returns {Promise<{kind:"png"|"jpeg", bytes:Uint8Array}>}
+ */
+async function encodeRaster(canvas, stats) {
+  if (chooseRasterEncoding(stats) === "png") {
+    const png = await canvasBlob(canvas, "image/png");
+    if (!png) {
+      throw new Error("ページを画像にできませんでした");
+    }
+    if (png.size <= PNG_DIRECT_LIMIT) {
+      return { kind: "png", bytes: new Uint8Array(await png.arrayBuffer()) };
+    }
+    // 分類が外れて PNG が大きくなったときだけ、JPEG と比べて小さいほうにする
+    const jpeg = await canvasBlob(canvas, "image/jpeg", JPEG_QUALITY);
+    if (jpeg && jpeg.size < png.size) {
+      return { kind: "jpeg", bytes: new Uint8Array(await jpeg.arrayBuffer()) };
+    }
+    return { kind: "png", bytes: new Uint8Array(await png.arrayBuffer()) };
+  }
+  const jpeg = await canvasBlob(canvas, "image/jpeg", JPEG_QUALITY);
+  if (!jpeg) {
+    throw new Error("ページを画像にできませんでした");
+  }
+  return { kind: "jpeg", bytes: new Uint8Array(await jpeg.arrayBuffer()) };
 }
 
 /**
@@ -149,39 +204,52 @@ function setMetadata(pdf, title) {
  * @param {Uint8Array} bytes 画像化する前の PDF
  * @param {object} o
  * @param {number} o.dpi 画像の細かさ(面の 72pt = 1in をdpi で割った倍率)
+ * @param {"none"|"standard"|"strong"} [o.tone] 文字の濃度補正(0.13.0。初期値は補正なし)
  * @param {(message:string) => void} [o.progress]
  * @returns {Promise<import("../../lib/pdf-lib.esm.min.js").PDFDocument>}
  */
-export async function rasterizePdf(bytes, { dpi, progress }) {
+export async function rasterizePdf(bytes, { dpi, tone = "none", progress }) {
   const doc = await loadPdfFromBytes(bytes);
   const { PDFDocument } = await pdfLib();
   const out = await PDFDocument.create();
+  const level = normalizeToneLevel(tone);
   const count = doc.numPages;
   try {
     for (let i = 1; i <= count; i++) {
       progress?.(`ページを画像にしています…(${i}/${count})`);
       const page = await doc.getPage(i);
       const vp = page.getViewport({ scale: 1 });
-      const scale = dpi / 72;
+      const pixels = rasterPixels(vp.width, vp.height, dpi);
       const canvas = document.createElement("canvas");
-      canvas.width = Math.min(16384, Math.max(1, Math.round(vp.width * scale)));
-      canvas.height = Math.min(16384, Math.max(1, Math.round(vp.height * scale)));
+      canvas.width = pixels.width;
+      canvas.height = pixels.height;
       const ctx = canvas.getContext("2d", { alpha: false });
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      await page.render({ canvas, viewport: page.getViewport({ scale }), background: "#ffffff" }).promise;
-      const blob = await new Promise(resolve => canvas.toBlob(b => resolve(b), "image/jpeg", 0.92));
-      canvas.width = canvas.height = 0;
-      if (!blob) {
-        throw new Error("ページを画像にできませんでした");
+      await page.render({ canvas, viewport: page.getViewport({ scale: pixels.scale }), background: "#ffffff" }).promise;
+      // 濃度補正と圧縮方式は、補正する前の画素から決める。
+      // 補正・判定に失敗しても、画像化そのものは止めない(以前と同じ JPEG の経路で続ける)
+      let stats = null;
+      try {
+        stats = inkStats(canvas, ctx);
+      } catch (e) {
+        console.warn("[製本ビューア] 面の内容を調べられませんでした", e);
       }
-      const jpg = new Uint8Array(await blob.arrayBuffer());
-      const img = await out.embedJpg(jpg);
+      if (level !== "none") {
+        try {
+          applyRasterTone(canvas, level, stats);
+        } catch (e) {
+          console.warn("[製本ビューア] 文字の濃度補正を行えませんでした", e);
+        }
+      }
+      const image = await encodeRaster(canvas, stats);
+      canvas.width = canvas.height = 0;
+      const img = image.kind === "png" ? await out.embedPng(image.bytes) : await out.embedJpg(image.bytes);
       out.addPage([vp.width, vp.height]).drawImage(img, { x: 0, y: 0, width: vp.width, height: vp.height });
       page.cleanup?.();
     }
   } finally {
-    await doc.destroy?.().catch?.(() => {});
+    await doc.loadingTask?.destroy().catch(() => {});
   }
   return out;
 }
@@ -200,7 +268,7 @@ export async function rasterizePdf(bytes, { dpi, progress }) {
  * @param {{book:string, imposed:string, obi:string}} o.fileNames
  * @param {(message:string) => void} [o.progress]
  * @param {boolean} [o.includeEdits] 書き込み・フォームの入力を反映する(初期値 true。パスワード付きの PDF では false)
- * @param {{dpi:number}|null} [o.rasterize] 0.9: 「印刷互換性重視」で出すとき、1面まるごとを dpi の画像にする
+ * @param {{dpi:number, tone?:"none"|"standard"|"strong"}|null} [o.rasterize] 0.9: 「印刷互換性重視」で出すとき、1面まるごとを dpi の画像にする
  * @returns {Promise<Array<{kind:string, fileName:string, bytes:Uint8Array, pages:number}>>}
  */
 export async function buildBookbindingFiles(o) {
@@ -325,7 +393,7 @@ export async function buildBookbindingFiles(o) {
     // 0.9: 印刷互換性重視。でき上がった面(印刷用紙まるごと)を画像にして載せ直す
     progress("印刷用にページを画像にしています…");
     const bytes = await main.save({ useObjectStreams: false });
-    main = await rasterizePdf(bytes, { dpi: o.rasterize.dpi, progress });
+    main = await rasterizePdf(bytes, { dpi: o.rasterize.dpi, tone: o.rasterize.tone, progress });
     // 文書を作り直したので、印刷の設定(倍率100%・面付け版は両面の向き)を付け直す
     const rasterPrefs = main.catalog.getOrCreateViewerPreferences();
     rasterPrefs.setPrintScaling(PrintScaling.None);
@@ -340,7 +408,7 @@ export async function buildBookbindingFiles(o) {
     let obiOut = obiPdf;
     if (o.rasterize) {
       progress("付属のページを画像にしています…");
-      obiOut = await rasterizePdf(await obiPdf.save({ useObjectStreams: false }), { dpi: o.rasterize.dpi, progress });
+      obiOut = await rasterizePdf(await obiPdf.save({ useObjectStreams: false }), { dpi: o.rasterize.dpi, tone: o.rasterize.tone, progress });
       obiOut.catalog.getOrCreateViewerPreferences().setPrintScaling(PrintScaling.None);
     }
     const obiName = fileNames.obi;

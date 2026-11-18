@@ -31,7 +31,7 @@
     </div>
     <span class="rd-sep" data-needs-book></span>
     <div class="rd-group">
-      <button id="rdPrint" class="rd-btn rd-btn-text" type="button" data-icon="print" title="PDF に保存(印刷)" data-needs-book>PDF に保存</button>
+      <button id="rdPrint" class="rd-btn rd-btn-text" type="button" data-icon="print" title="印刷・PDF保存" data-needs-book>印刷・PDF保存…</button>
       <button id="rdMore" class="rd-btn" type="button" data-icon="more-vert" title="その他" aria-label="その他" aria-haspopup="menu"></button>
     </div>
   </header>
@@ -98,7 +98,7 @@
 
   <div id="rdMenu" class="rd-menu" role="menu" hidden>
     <button type="button" role="menuitem" data-act="open">ファイルを開く…(Ctrl+O)</button>
-    <button type="button" role="menuitem" data-act="print" data-needs-book>PDF に保存(印刷)…</button>
+    <button type="button" role="menuitem" data-act="print" data-needs-book>印刷・PDF保存…</button>
     <button type="button" role="menuitem" data-act="save-source" data-needs-book>元のファイルを保存</button>
     <hr />
     <button type="button" role="menuitem" data-act="theme-light">背景: 白</button>
@@ -110,7 +110,7 @@
 
   <dialog id="rdPrintDialog" class="rd-dialog" aria-labelledby="rdPrintTitle">
     <form method="dialog" class="rd-dialog-form">
-      <h2 id="rdPrintTitle">PDF に保存(印刷)</h2>
+      <h2 id="rdPrintTitle">印刷・PDF保存</h2>
       <p class="rd-note">本を紙の大きさに合わせて並べ直し、Chrome の印刷画面を開きます。送信先で「<b>PDF に保存</b>」を選ぶと、文字を検索・選択できる PDF として保存できます(紙に印刷することもできます)。</p>
       <label class="rd-field">紙の大きさ
         <select id="rdPaper">

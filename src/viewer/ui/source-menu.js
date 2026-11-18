@@ -114,7 +114,7 @@ export class SourceMenu {
     return null;
   }
 
-  async open() {
+  async open(anchor = this.button) {
     if (this.menu.isOpen) {
       this.menu.close();
       return;
@@ -128,6 +128,7 @@ export class SourceMenu {
         this.download = { id, url: "", referrer: "" };
       }
     }
+    this.menu.anchor = anchor;
     this.menu.open();
   }
 

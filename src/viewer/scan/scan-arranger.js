@@ -1,3 +1,4 @@
+import { getScanAnalysis, putScanAnalysisPage } from "../../common/db.js";
 /**
  * スキャンの整え(0.3): スキャンした見開きを1ページずつに分ける・余白を除く・ばらした冊子を読む順に並べ替える。
  *
@@ -5,7 +6,7 @@
  *  1. PDF を開くと、横長のページの PDF なら最初の数ページを調べる(画像1枚だけのページか、ノドがあるか)。
  *  2. 本・ノートを開いてスキャンした見開きなら(詳細設定が「自動」のとき)、いまのページのまわりを先に調べて
  *     整えた PDF を作って表示し(0.8 部分表示)、残りのページは表示しながら順に調べて組み直す。
- *     ばらした冊子のような平らな紙なら、ツールバーのボタンで知らせる。
+ *     ばらした冊子のような平らな紙は順序を保って補正し、並べ替えは利用者が選んだときだけ行う。
  *  3. 整えた PDF は、元の画像をそのまま使って表示する範囲だけを変えたもの(scan-pages.js)。元の画質のまま。
  *     「元のスキャンに戻す」で元の PDF に戻せる。PDF ごとに選んだ整え方を覚えておき、次に開いたときも同じにする。
  *  元の PDF のファイルは変えない(整えた PDF は、保存を選んだときだけ新しいファイルとして保存する)。
@@ -32,6 +33,7 @@ import {
   turnMatrix,
 } from "./scan-analysis.js";
 import { ScanSource, arrangedId, buildArrangedPdf } from "./scan-pages.js";
+import { ReadAhead } from "./read-ahead.js";
 
 /** PDF ごとに選んだ整え方(chrome.storage.local) */
 const CHOICES_KEY = "scanChoices";
@@ -45,25 +47,17 @@ const ANALYSIS_LONG_SIDE = 1100;
 /** プレビューに使う小さな画像の幅(画素) */
 const PREVIEW_WIDTH = 240;
 /** 開いたときに調べる最初のページ数 */
-const QUICK_PAGES = 4;
+const QUICK_PAGES = 3;
 /** これより大きな PDF は、開いたときには調べない(メニューからは整えられる) */
 const AUTO_LIMIT_BYTES = 1024 * 1024 * 1024;
 /** 縦長の PDF は、これより大きければ傾きを調べない(ふつうの文書を開くのを遅くしないため) */
 const PORTRAIT_LIMIT_BYTES = 1024 * 1024 * 1024;
 /** 縦長の PDF で、1ページがこれより軽く文字があれば、スキャンではないとみなす */
 const LIGHT_PAGE_BYTES = 100 * 1024;
-// 0.9.3: 読み位置に先行して補正しておく仕組み(部分表示の更新)の、調節の値
-// 最初に、読んでいる位置から前方にこれだけのページを調べておく(後ろは少し少なめ)
-const READ_AHEAD_PAGES = 15;
-const READ_BEHIND_PAGES = 8;
-// 表示位置より前方の、この数以上「元のまま」のページが近づいたら、調べた分を反映して開き直す
-const REFRESH_PENDING_PAGES = 3;
-// 開き直しは、前回からこれ以上の間隔をあける(開き直しの連発を防ぐ)
-const REFRESH_MIN_INTERVAL = 15000;
-// 反映するのは、前回の開き直しからこれ以上のページを調べたときだけ(中身が変わらない開き直しをしない)
-const REFRESH_MIN_PAGES = 8;
-// 捲っている最中(このミリ秒連続でページが動かないまで待つ)は開き直さない
-const REFRESH_QUIET_STEPS = 2;
+// 読んでいる最中の開き直しを避け、先読みした分を短いまとまりで反映する。
+const REFRESH_MIN_INTERVAL = 2500;
+const REFRESH_MIN_PAGES = 3;
+const REFRESH_QUIET_MS = 450;
 
 export const MODE_SUFFIX = Object.freeze({ spread: "_分割", booklet: "_並べ替え", straighten: "_傾き補正", trim: "_余白" });
 
@@ -413,12 +407,12 @@ export function skewSummary(scans) {
   return { pages: list.length, skewed: angles.length, median: Math.round(median * 100) / 100 };
 }
 
-const idle = (timeout = 1500) =>
+const idle = (timeout = 350) =>
   new Promise(resolve => {
     if ("requestIdleCallback" in window) {
       requestIdleCallback(() => resolve(), { timeout });
     } else {
-      setTimeout(resolve, 300);
+      setTimeout(resolve, 50);
     }
   });
 
@@ -472,7 +466,67 @@ export class ScanArranger {
     this.busyToast = null;
     /** 「整えられます」の通知(整えたら消す) */
     this.suggestToast = null;
+    this.readAhead = new ReadAhead();
+    this.lastScrollAt = 0;
+    this.navigationRevision = 0;
+    this.presenting = false;
+    this.editorMode = 0;
     app.eventBus.on("documentloaded", () => this.onDocumentLoaded());
+    app.eventBus.on("pagechanging", () => {
+      if (this.presenting || !this.base) { return; }
+      this.readAhead.move(this.currentSourcePage(), { jump: !!this.jumpPending });
+      this.jumpPending = false;
+      this.navigationRevision++;
+      this.scheduleRefresh(this.base);
+    });
+    app.eventBus.on("annotationeditormodechanged", ({ mode }) => {
+      this.editorMode = mode;
+      if (mode <= 0) { this.scheduleRefresh(this.base); }
+    });
+    for (const event of ["scalechanging", "rotationchanging"]) {
+      app.eventBus.on(event, () => {
+        if (this.presenting) { return; }
+        this.navigationRevision++;
+        this.scheduleRefresh(this.base);
+      });
+    }
+    pageEditor?.onChange?.(() => this.scheduleRefresh(this.base));
+    pageEditor?.roles?.onChange?.(() => {
+      if (this.isArranged && this.arranged.partial && this.hasAssignedRoles()) {
+        if (!this.base.rolesNotified) {
+          this.base.rolesNotified = true;
+          this.toast.show("ページ役割の指定を保つため、補正の表示更新を止めています。残りの検査は続けます", { duration: 7000 });
+        }
+      } else {
+        if (this.base) { this.base.rolesNotified = false; }
+        this.scheduleRefresh(this.base);
+      }
+    });
+    document.addEventListener("close", () => this.scheduleRefresh(this.base), true);
+    document.addEventListener("selectionchange", () => this.scheduleRefresh(this.base));
+    const readingActivity = () => {
+      if (this.presenting) { return; }
+      this.lastScrollAt = performance.now();
+      this.navigationRevision++;
+      this.scheduleRefresh(this.base);
+    };
+    const container = app.pdfViewer?.container;
+    for (const event of ["scroll", "wheel", "touchmove"]) {
+      container?.addEventListener(event, readingActivity, { passive: true });
+    }
+    container?.addEventListener("pointermove", e => {
+      if (e.buttons) { readingActivity(); }
+    }, { passive: true });
+    container?.addEventListener("keydown", e => {
+      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "PageUp", "PageDown", "Home", "End", " "].includes(e.key)) {
+        readingActivity();
+      }
+    });
+    const markJump = () => { this.jumpPending = true; };
+    document.getElementById("shPageInput")?.addEventListener("change", markJump, true);
+    document.getElementById("shPageInput")?.addEventListener("keydown", e => {
+      if (e.key === "Enter") { markJump(); }
+    }, true);
   }
 
   onChange(fn) {
@@ -531,7 +585,13 @@ export class ScanArranger {
 
   /** base がまだ今の文書のものか */
   alive(base) {
-    return !!base && this.base === base;
+    return !!base && this.base === base && !base.invalidated;
+  }
+
+  /** 役割は表示中のページ番号と結び付いているため、自動の構成変更から保護する。 */
+  hasAssignedRoles() {
+    const roles = this.pageEditor?.roles;
+    return roles?.doc === this.app.pdfDocument && (roles?.map?.size || 0) > 0;
   }
 
   // -------------------------------------------------------------------------
@@ -565,7 +625,9 @@ export class ScanArranger {
     }
     // 0.9.3: 調べるために別に開いた文書があれば手放す(loadingTask の destroy で)
     this.dropAnalysisDoc(this.base);
+    clearTimeout(this.base?.refreshTimer);
     this.base = null;
+    this.readAhead.reset();
     this.arranged = null;
     this.busyToast?.();
     this.busyToast = null;
@@ -600,19 +662,17 @@ export class ScanArranger {
       checked: false,
     };
     this.base = base;
-    this.debugNote(`PDF を開きました(${base.pageCount}ページ)。スキャンかどうかを調べます`);
-    this.detect(base).catch(e => {
-      console.warn("[製本ビューア] スキャンかどうかを調べられませんでした", e);
-      this.debugNote(`調べる途中で失敗しました(${e?.message || e})`);
-    });
+    // 0.12.2: 開くだけでは検査・保存済み補正の復元を行わない。手動画面から開始する。
+    this.debugNote(`PDF を開きました(${base.pageCount}ページ)。補正は「スキャンを整える…」から手動で実行できます`);
   }
 
   /** 横長のページが多いか(ページの大きさだけ見る。速い) */
   async mostlyLandscape(doc) {
-    const sample = Math.min(doc.numPages, 6);
+    const nearby = this.samplePages();
+    const sample = nearby.length;
     let land = 0;
-    for (let i = 1; i <= sample; i++) {
-      const page = await doc.getPage(i);
+    for (const i of nearby) {
+      const page = await doc.getPage(i + 1);
       const vp = page.getViewport({ scale: 1, rotation: page.rotate });
       if (vp.width >= vp.height * 1.15) {
         land++;
@@ -686,7 +746,7 @@ export class ScanArranger {
         this.debugNote("調べる用の PDF の読み込みができなかったため、調べません");
         return;
       }
-      // 調べる最初のページは、いま見ているページのまわりと中ほどの数ページ(0.8.2)
+      // 最初は現在とすぐ前後だけ。離れたページの検査を初回表示の前に挟まない。
       const quick = this.samplePages(base);
       const pure = quick.filter(i => base.source.inspect(i).pureImage);
       if (pure.length < Math.ceil(quick.length * 0.6)) {
@@ -703,7 +763,7 @@ export class ScanArranger {
       base.kind = classifyDocument(quick.map(i => base.scans[i]));
       base.checked = true;
       this.debugNote(`判定サンプル(${quick.length}ページ)で種類を判定しました: ${base.kind || "スキャンではない"}`);
-      if (!base.kind) {
+      if (!base.kind && !(settings.scanArrange === "auto" && !choice)) {
         this.debugNote("見開き・冊子のどちらの形でもないため、開いたときには整えません");
         return;
       }
@@ -712,8 +772,10 @@ export class ScanArranger {
       await this.arrange(choice, { auto: true });
       return;
     }
-    if (!choice && base.kind === "spread" && settings.scanArrange === "auto") {
-      await this.arrange(this.defaultOptions(), { auto: true });
+    if (!choice && settings.scanArrange === "auto") {
+      // 平らな紙でも傾き・余白は先に整える。冊子のページ順の変更は、利用者が選んだときだけ。
+      const options = base.kind === "spread" ? this.defaultOptions() : this.correctionOptions();
+      await this.arrange(options, { auto: true });
       return;
     }
     this.setState("suggest");
@@ -752,8 +814,8 @@ export class ScanArranger {
     // OCR の文字つきのスキャンは1ページが重い(画像を含む)ので、調べる
     const perPage = (info?.length || 0) / Math.max(1, base.pageCount);
     if (perPage < LIGHT_PAGE_BYTES) {
-      for (let i = 1; i <= Math.min(base.pageCount, 2); i++) {
-        const page = await base.doc.getPage(i);
+      for (const i of this.samplePages(base).slice(0, 2)) {
+        const page = await base.doc.getPage(i + 1);
         const text = await page.getTextContent().catch(() => null);
         if (!this.alive(base)) {
           return;
@@ -782,7 +844,7 @@ export class ScanArranger {
       this.debugNote("調べる用の PDF の読み込みができなかったため、調べません");
       return;
     }
-    // 調べる最初のページは、いま見ているページのまわりと中ほどの数ページ(0.8.1)
+    // 最初は現在とすぐ前後だけを調べる。
     const quick = this.samplePages(base);
     const pure = quick.filter(i => base.source.inspect(i).pureImage);
     if (pure.length < Math.ceil(quick.length * 0.6)) {
@@ -833,9 +895,14 @@ export class ScanArranger {
       }
       return;
     }
-    if (choice && choice.mode === "none" && choice.deskew) {
+    if (choice && choice.mode === "none" && (choice.deskew || choice.trim)) {
       base.kind = "skewed";
       await this.arrange(choice, { auto: true });
+      return;
+    }
+    if (!choice && settings.scanArrange === "auto") {
+      base.kind = sum.skewed ? "skewed" : "portrait";
+      await this.arrange(this.correctionOptions(), { auto: true });
       return;
     }
     if (sum.skewed < Math.ceil(quick.length / 3)) {
@@ -931,6 +998,12 @@ export class ScanArranger {
     }
   }
 
+  /** 自動補正ではページの順を変えず、余白と傾きを独立して扱う。 */
+  correctionOptions() {
+    const settings = this.getSettings();
+    return normalizeOptions({ mode: "none", deskew: settings.scanDeskew !== "off", trim: settings.scanTrim, direction: this.getDirection() });
+  }
+
   /** 整え方の初期値 */
   defaultOptions(kind = this.base?.kind) {
     const settings = this.getSettings();
@@ -994,7 +1067,7 @@ export class ScanArranger {
    * @returns {number[]}
    */
   analysisOrder(base = this.base) {
-    if (!base) {
+    if (!base || base.pageCount < 1) {
       return [];
     }
     const n = Math.max(0, base.pageCount);
@@ -1011,47 +1084,14 @@ export class ScanArranger {
     return order;
   }
 
-  /**
-   * 0.9.3: 読んでいる位置に「先行して」調べる順。いまの位置の前方(次のページの方向)に READ_AHEAD_PAGES 分を
-   * 先に調べ、後ろに READ_BEHIND_PAGES 分(戻って読むときの分)を調べてから、遠い方から順に残りを調べる。
-   * ページを移動したら、そのつど移動先から張り直す(いま読んでいる先が補正済みで出るように)。
-   * @returns {number[]}
-   */
-  readAheadOrder(base = this.base, ahead = READ_AHEAD_PAGES, behind = READ_BEHIND_PAGES) {
-    if (!base) {
-      return [];
-    }
-    const n = Math.max(0, base.pageCount);
-    const cur = Math.min(Math.max(0, this.currentSourcePage()), n - 1);
-    const out = [cur]; // いまの位置自身も入れる(まだ調べていなければ、まずそこから)
-    for (let i = cur + 1; i <= Math.min(n - 1, cur + ahead); i++) {
-      out.push(i);
-    }
-    for (let i = cur - 1; i >= Math.max(0, cur - behind); i--) {
-      out.push(i);
-    }
-    for (let d = 1; d < n; d++) {
-      if (cur + ahead + d < n) {
-        out.push(cur + ahead + d);
-      }
-      if (cur - behind - d >= 0) {
-        out.push(cur - behind - d);
-      }
-    }
-    return out;
+  /** 読んでいる向きと速さに合わせ、次の検査を毎回選び直す。 */
+  readAheadOrder(base = this.base, ahead = this.readAhead.ahead, behind = 3) {
+    return base ? this.readAhead.order(base.pageCount, this.currentSourcePage(), ahead, behind) : [];
   }
 
-  /** 自動適用の判断に使うページ: いまのページのまわりと、中ほどの2ページ(約40%・約70%の位置。重複は除く)(0.8.1) */
+  /** 開いているページと、すぐ前後を最初に調べる。 */
   samplePages(base = this.base) {
-    const n = Math.max(0, base?.pageCount || 0);
-    const list = [...this.analysisOrder(base).slice(0, Math.min(n, QUICK_PAGES + 2))];
-    for (const part of [0.4, 0.7]) {
-      const i = n > 0 ? Math.min(n - 1, Math.floor(n * part)) : -1;
-      if (i >= 0 && !list.includes(i)) {
-        list.push(i);
-      }
-    }
-    return list;
+    return this.analysisOrder(base).slice(0, QUICK_PAGES);
   }
 
   /** pdf-lib で元の PDF を読み込む(暗号化されていれば、パスワード無しの写しを作って読む)。同じ読み込みを2度始めない(0.8) */
@@ -1147,18 +1187,45 @@ export class ScanArranger {
     base.analysisTask = null;
     base.analysisDoc = null;
     base.analysisDocJob = null;
-    if (task?.destroy) {
-      try {
-        task.destroy().catch(() => {});
-      } catch {
-        // 手放しに失敗しても、そのほかの処理(完成版の作成など)は続ける
-      }
+    if (task) {
+      // loadPdfFromBytes は文書のPromiseを返す。Promiseそのものにdestroyは無い。
+      Promise.resolve(task).then(doc => doc?.loadingTask?.destroy()).catch(e => {
+        console.warn("[製本ビューア] 検査用の文書を閉じられませんでした", e);
+      });
     }
   }
 
   /** 1ページを調べる(0始まり)。同じページを並行して調べない(0.8) */
   async analyzePage(base, i, { force = false } = {}) {
-    if (base.scans[i] && !force) {
+    const variant = base.turnForce ? "forced" : "normal";
+    const restored = (base.analysisRestored ||= new Map());
+    if (!restored.has(variant)) {
+      const job = (async () => {
+        try {
+          const key = await this.ensureKey(base);
+          if (!key || !this.alive(base)) { return; }
+          const rec = await getScanAnalysis(`${key}|analysis-v1|${SCAN_CACHE_SCHEMA}|${variant}`);
+          if (rec?.pageCount !== base.pageCount) { return; }
+          let count = 0;
+          for (const [index, value] of Object.entries(rec.pages || {})) {
+            const n = Number(index);
+            if (Number.isInteger(n) && n >= 0 && n < base.pageCount && value?.scan?.transform?.length === 6 && value.scan.width > 0 && value.scan.height > 0) {
+              base.scans[n] = value.scan;
+              base.previews[n] = value.preview;
+              (base.analysisForced ||= new Set());
+              if (value.forced) { base.analysisForced.add(n); }
+              count++;
+            }
+          }
+          if (count) { this.debugNote(`保存した検査結果を再利用します(${count}ページ)`); }
+        } catch (e) {
+          console.warn("[製本ビューア] 保存した検査結果を読めませんでした", e);
+        }
+      })();
+      restored.set(variant, job);
+    }
+    await restored.get(variant);
+    if (base.scans[i] && !force && (!base.turnForce || base.analysisForced?.has(i))) {
       return base.scans[i];
     }
     const jobs = (base.jobs ||= new Map());
@@ -1168,7 +1235,7 @@ export class ScanArranger {
         return running;
       }
     }
-    const job = this.analyzePageNow(base, i, { force }).finally(() => jobs?.delete(i));
+    const job = this.analyzePageNow(base, i, { force: force || !!base.turnForce }).finally(() => jobs?.delete(i));
     if (!force) {
       jobs.set(i, job);
     }
@@ -1258,6 +1325,14 @@ export class ScanArranger {
     }
     base.scans[i] = scan;
     base.previews[i] = preview;
+    if (base.turnForce) { (base.analysisForced ||= new Set()).add(i); }
+    try {
+      if (base.key && this.alive(base)) {
+        await putScanAnalysisPage(`${base.key}|analysis-v1|${SCAN_CACHE_SCHEMA}|${base.turnForce ? "forced" : "normal"}`, base.pageCount, i, { scan, preview, forced: !!base.turnForce });
+      }
+    } catch (e) {
+      console.warn("[製本ビューア] 検査結果を保存できませんでした", e);
+    }
     return scan;
   }
 
@@ -1327,7 +1402,6 @@ export class ScanArranger {
       throw new Error("PDF を読み込めませんでした");
     }
     const total = base.pageCount;
-    base.cancel = false;
     // 0.8.2: 次に調べるページは、そのつど「いま見ているページから前方」で選び直す。
     // ページを移動したら移動先の前方を先に調べるので、読み進めた先の表示がすぐ整う
     while (true) {
@@ -1336,7 +1410,6 @@ export class ScanArranger {
       }
       if (base.cancel) {
         // 途中でやめた(整え方のダイアログを閉じた)。調べたページの結果は残す
-        base.cancel = false;
         return false;
       }
       const i = this.readAheadOrder(base).find(idx => !base.scans[idx]);
@@ -1344,7 +1417,9 @@ export class ScanArranger {
         break;
       }
       this.debugNote(`ページ ${i + 1} を調べます`);
+      const started = performance.now();
       await this.analyzePage(base, i);
+      this.readAhead.measured(performance.now() - started);
       onProgress?.(base.scans.filter(Boolean).length, total);
       if (step) {
         await step();
@@ -1414,7 +1489,7 @@ export class ScanArranger {
     let order;
     if (options.mode === "none") {
       // 補正だけ: 傾きをまっすぐにする(検出した角度か、指定した角度)・余白を除く
-      if (options.deskew) {
+      if (options.deskew && !options.trim && !base.autoCorrection) {
         const found = base.scans.some(s => s && pageAngle(s, options));
         if (!found && !complete && !base.scans.length) {
           // まだ何も調べていない: 残りを調べてから(部分では作れない)
@@ -1430,10 +1505,10 @@ export class ScanArranger {
       }
       const rects = options.trim ? cropSingles(scans) : null;
       if (options.trim) {
-        if (complete && !rects.some(Boolean)) {
+        if (complete && !base.autoCorrection && !rects.some(Boolean)) {
           return { error: "notrim" };
         }
-        if (!complete && !rects.some(Boolean)) {
+        if (!complete && !base.autoCorrection && !rects.some(Boolean)) {
           // 調べたページに余白の除けるものが無い(残りを調べてから。部分では作れない)
           return { pages: [], complete: false, pendingAll: true };
         }
@@ -1535,13 +1610,17 @@ export class ScanArranger {
     const base = this.base;
     options = normalizeOptions(options);
     // force: ダイアログを開いたときに始めた解析が続いているとき(busyArrange でない)にも適用する
-    if (!base || !options || (this.state === "busy" && this.busyArrange && !force)) {
+    if (!this.alive(base) || !options || (this.state === "busy" && this.busyArrange && !force)) {
       return false;
     }
     if (options.mode === "none" && !options.deskew && !options.trim) {
       // 元のまま表示(構成の「行わない」。補正の指定が無いもの)
       await this.restore({ remember });
       return true;
+    }
+    if (auto && this.hasAssignedRoles()) {
+      this.setState(this.isArranged ? "arranged" : "suggest");
+      return false;
     }
     if (this.pageEditor.dirty) {
       // 開いたときの自動の整えは、その間に書き込みなどを始めていたら行わない(ボタンで知らせるだけ)
@@ -1553,13 +1632,18 @@ export class ScanArranger {
         return false;
       }
     }
+    base.autoCorrection = auto;
+    base.cancel = false;
+    base.activeOptions = options;
+    clearTimeout(base.refreshTimer);
+    base.refreshOptions = null;
     this.busyArrange = true; // 組み立て(調べる・作る・開く)に入る。ダイアログからの再適用(force)以外は受けない
     this.debugNote(auto ? "開いたときの自動の整えを始めます" : "整え方を適用します");
     // 0.9.1: どんな整え方かを言葉で残す(選んだ構成と補正)
     this.debugNote(
       `整え方: ${[
         options.mode === "spread" ? "見開きを1ページずつに分ける" : options.mode === "booklet" ? "ばらした冊子を並べ替える" : "分けない",
-        options.turn ? "横置きの見開きを回す" : null,
+        options.turn !== "none" ? "横置きの見開きを回す" : null,
         options.trim ? "余白を除く" : null,
         options.deskew ? "傾きをまっすぐにする" : null,
       ].filter(Boolean).join("・")}`
@@ -1590,6 +1674,7 @@ export class ScanArranger {
         if (!this.alive(base)) {
           return false;
         }
+        base.cancel = false;
       }
       // 0.8: 全部のページを調べるのを待たず、いまのページのまわりだけ整えて表示を始める
       // (冊子の並べ替えは、紙の順が全部分からないと決められないので除く)
@@ -1622,6 +1707,7 @@ export class ScanArranger {
           if (!this.alive(base)) {
             return false;
           }
+          if (base.cancel || (auto && (this.pageEditor.dirty || this.hasAssignedRoles()))) { return false; }
         }
         // 部分の計画が作れないときは、いつもの道(全部調べてから整える)へ進む
       }
@@ -1672,68 +1758,111 @@ export class ScanArranger {
     return `${base.key}|${SCAN_CACHE_SCHEMA}|${signature(options)}|${base.pageCount}`;
   }
 
-  /**
-   * 0.9.3: 表示している位置より前方 READ_AHEAD_PAGES 分に、「元のまま」のページがいくつあるか
-   * (読み進めると補正前のページが出てくる距離)。部分表示でないときは Infinity(判断しない)。
-   * @returns {number}
-   */
-  pendingAheadWindow() {
-    const arr = this.arranged?.pages;
-    if (!arr || !this.isArranged) {
-      return Number.POSITIVE_INFINITY;
+  /** 読み位置の前後で見えている元ページ。見ている最中の内容は差し替えない。 */
+  visibleSources() {
+    const result = new Set();
+    const views = this.app.pdfViewer?._getVisiblePages?.().views || [];
+    for (const view of views) {
+      result.add(this.arranged?.pages[view.id - 1]?.src ?? view.id - 1);
     }
-    const p = Math.min(arr.length, Math.max(1, this.app.page || 1)) - 1;
-    let count = 0;
-    const end = Math.min(arr.length, p + 1 + READ_AHEAD_PAGES);
-    for (let k = p + 1; k < end; k++) {
-      if (arr[k]?.pending) {
-        count++;
-      }
-    }
-    return count;
+    result.add(this.currentSourcePage());
+    return result;
   }
 
-  /**
-   * 0.9.3: 読み位置に先行する補正が切れそうなとき、その時点までに調べた分を反映して開き直す(部分表示のまま)。
-   * 変わるのはまだ見ていない前方のページなので、読みながらのページの変化(ちらつき・位置ずれ)が起きない。
-   * まだ調べていないページが無くなったとき(全部調べ終えたとき)は、完成版として出す(保存もする)。
-   * @returns {Promise<false|"partial"|"final">} final: 完成版まで出た(もう組み直さない)
-   */
+  /** 補正済みページの範囲を固定し、見えていない未補正ページだけ新しい結果にする。 */
+  progressivePlan(base, options) {
+    const next = this.plan(options, base, { partial: true });
+    if (next.error || !next.pages?.length) { return next; }
+    const previous = new Map();
+    for (const page of this.arranged.pages) {
+      if (!previous.has(page.src)) { previous.set(page.src, []); }
+      previous.get(page.src).push(page);
+    }
+    const visible = this.visibleSources();
+    const kept = new Set();
+    const pages = [];
+    for (const page of next.pages) {
+      const old = previous.get(page.src);
+      if (old && (visible.has(page.src) || old.every(p => !p.pending))) {
+        if (!kept.has(page.src)) {
+          pages.push(...old);
+          kept.add(page.src);
+        }
+      } else {
+        pages.push(page);
+      }
+    }
+    return { pages, complete: next.complete && pages.every(p => !p.pending) };
+  }
+
+  /** スクロール停止後に反映する。入力・ページ移動を待たせることはしない。 */
+  scheduleRefresh(base = this.base) {
+    if (!base?.refreshOptions || !this.alive(base) || this.presenting) { return; }
+    clearTimeout(base.refreshTimer);
+    const interval = Math.max(REFRESH_MIN_INTERVAL, Math.min(15000, (base.refreshCostMs || 0) * 4));
+    const wait = Math.max(REFRESH_QUIET_MS, interval - (performance.now() - (base.lastRefreshAt || 0)));
+    base.refreshTimer = setTimeout(() => {
+      base.refreshTimer = null;
+      this.rebuildPartial(base, base.refreshOptions, { remember: base.refreshRemember }).catch(e => {
+        console.warn("[製本ビューア] 先読みの反映ができませんでした", e);
+      });
+    }, wait);
+  }
+
+  /** 進んだ検査を、読み位置と編集中の内容を守って反映する。 */
   async rebuildPartial(base, options, { remember = true } = {}) {
-    if (this.pageEditor.dirty) {
-      // 書き込みの途中で開き直すと、書き込んだ内容が消えるので触らない(完成版はあとで保存だけする)
+    if (!this.alive(base) || !this.isArranged || this.arranged.options !== options || base.cancel ||
+        base.refreshJob || this.presenting || this.pageEditor.dirty || this.hasAssignedRoles() || this.editorMode > 0 ||
+        document.querySelector("dialog[open]") || window.getSelection()?.isCollapsed === false) {
       return false;
     }
-    const plan = this.plan(options, base, { partial: true });
-    if (plan.error || !plan.pages?.length || !plan.pages.some(p => !p.pending)) {
-      return false; // 反映する新しさが無い(まだ何も整えられない)
+    if (performance.now() - this.lastScrollAt < REFRESH_QUIET_MS) {
+      this.scheduleRefresh(base);
+      return false;
     }
-    try {
-      const id = await arrangedId(this.plannedSeed(base, options));
-      // 調べるのに読み込んだ pdf-lib の文書があれば、作るのに使う(読み直さずに済む。作ると中身が変わるので、使うのは1回だけ)
-      const pdf = base.source?.pdf || null;
-      base.source = null;
-      const started = performance.now();
-      const bytes = await buildArrangedPdf(base.plain, plan.pages, { id, pdf });
-      if (!this.alive(base)) {
+    const done = base.scans.filter(Boolean).length;
+    if (!base.analyzed && done - (base.appliedCount || 0) < REFRESH_MIN_PAGES) { return false; }
+    const plan = this.progressivePlan(base, options);
+    if (plan.error || !plan.pages?.length || JSON.stringify(plan.pages) === JSON.stringify(this.arranged.pages)) {
+      return false;
+    }
+    const revision = this.navigationRevision;
+    const previous = this.arranged;
+    const job = (async () => {
+      try {
+        const started = performance.now();
+        const id = await arrangedId(this.plannedSeed(base, options));
+        // 検査に使う文書は保持する。組み立て側が書き換える文書は専用に読み込む。
+        const bytes = await buildArrangedPdf(base.plain, plan.pages, { id });
+        // 作成中に読書・編集が再開されたら、表示を触らず後で現在地から作り直す。
+        if (!this.alive(base) || base.cancel || this.arranged !== previous || this.pageEditor.dirty || this.hasAssignedRoles() || this.editorMode > 0) { return false; }
+        if (revision !== this.navigationRevision || performance.now() - this.lastScrollAt < REFRESH_QUIET_MS) {
+          this.scheduleRefresh(base);
+          return false;
+        }
+        const opened = await this.presentArranged(base, options, plan.pages, bytes, {
+          auto: true, remember: plan.complete && remember, partial: !plan.complete, quiet: true,
+        });
+        if (opened && this.alive(base) && this.arranged?.options === options) {
+          base.refreshCostMs = performance.now() - started;
+          base.lastRefreshAt = performance.now();
+          base.appliedCount = done;
+          this.debugNote(`読み位置を保って先読みを反映しました(検査 ${done}/${base.pageCount}ページ)`);
+          if (plan.complete) {
+            base.refreshOptions = null;
+            clearTimeout(base.refreshTimer);
+          }
+        }
+        return opened ? (plan.complete ? "final" : "partial") : false;
+      } catch (e) {
+        console.warn("[製本ビューア] 調べた分を反映できませんでした", e);
+        this.debugNote(`調べた分を反映できませんでした(${e?.message || e})`);
         return false;
       }
-      this.debugNote(
-        `調べた分を反映します(${plan.pages.filter(p => !p.pending).length}ページ整え・${((performance.now() - started) / 1000).toFixed(1)}秒)`
-      );
-      // 全部調べ終わっていたら、部分表示でなく完成版として出す(保存と「整え方として覚える」もする)
-      const final = !!plan.complete;
-      const opened = await this.presentArranged(base, options, plan.pages, bytes, {
-        auto: true,
-        remember: final && remember,
-        fromStart: false,
-        partial: !final,
-      });
-      return !opened ? false : final ? "final" : "partial";
-    } catch (e) {
-      console.warn("[製本ビューア] 調べた分を反映できませんでした", e);
-      this.debugNote(`調べた分を反映できませんでした(${e?.message || e})`);
-      return false;
+    })();
+    base.refreshJob = job;
+    try { return await job; } finally {
+      if (base.refreshJob === job) { base.refreshJob = null; }
     }
   }
 
@@ -1777,133 +1906,35 @@ export class ScanArranger {
     }
   }
 
-  /**
-   * 部分表示(0.8)のあと、残りのページを調べ、完成版を作り直して開く(表示しながら・裏で)。
-   * 0.9.3: 読む方向に先行して調べ、前方に「元のまま」のページが迫ったら、そのつど調べた分を反映して
-   * 開き直す(変わるのはまだ見ていないページなので、読みながらの変化が起きない)。
-   * その間に元に戻す・別の整え方を選んだときは、組み直さずにやめる(結果を混ぜないため)。
-   */
-  async finishPartial(options, base, { fromStart = false, remember = true } = {}) {
+  /** 現在地・読む向きに合わせて残りを調べ、スクロールの切れ目で反映する。 */
+  async finishPartial(options, base, { remember = true } = {}) {
+    base.refreshOptions = options;
+    base.refreshRemember = remember;
+    base.appliedCount = base.scans.filter(Boolean).length;
+    base.lastRefreshAt = performance.now();
     const job = (async () => {
-      this.debugNote("残りのページを、表示しながら裏で調べます");
-      const note = this.toast.show("残りのページも調べています…", { duration: 0 });
+      this.debugNote("読む向きに合わせ、残りのページを先に調べます");
       try {
-        let ok = false;
-        let finalDone = false;
-        // 残りの解析の進みは 5 ページごとに記録する(記録の上限 60 件にすぐ達しないように)
-        const analyzedStarted = performance.now();
-        this.debugNote("残りの解析を始めます");
-        let firstPageNoted = false;
-        let notedAt = 0;
-        // 0.9.3: 読み位置に先行するバッファの判断(調べた分の反映)
-        let newPages = 0; // 前回の反映から調べたページの数
-        let lastRebuildAt = 0;
-        let lastPage = 0;
-        let quietSteps = 0;
-        try {
-          // 調べる進みを聞き手(ダイアログ・ボタン)に知らせる(状態は部分表示のまま)
-          ok = await this.analyzeAll(base, (done, total) => {
-            if (!firstPageNoted) {
-              firstPageNoted = true;
-              this.debugNote(`残りの解析の最初のページが終わりました(${((performance.now() - analyzedStarted) / 1000).toFixed(1)}秒)`);
+        const ok = await this.analyzeAll(base, () => this.emit(), {
+          step: async () => {
+            if (this.alive(base) && this.arranged?.options === options) {
+              // 検査は止めず、反映の方だけをスクロールが落ち着くまで待たせる。
+              if (!base.refreshTimer && !base.refreshJob) { this.scheduleRefresh(base); }
             }
-            if (done > 0 && done % 5 === 0 && done !== notedAt) {
-              notedAt = done;
-              this.debugNote(`解析 ${done}/${total}ページ(${((performance.now() - analyzedStarted) / 1000).toFixed(1)}秒経過)`);
-            }
-            this.emit();
-          }, {
-            step: async () => {
-              newPages++;
-              // あわてて捲っている最中は開き直さない(止まってから反映する)
-              const page = this.app.page || 0;
-              quietSteps = page === lastPage ? quietSteps + 1 : 0;
-              lastPage = page;
-              if (
-                finalDone ||
-                newPages < REFRESH_MIN_PAGES ||
-                Date.now() - lastRebuildAt < REFRESH_MIN_INTERVAL ||
-                quietSteps < REFRESH_QUIET_STEPS ||
-                this.pendingAheadWindow() < REFRESH_PENDING_PAGES
-              ) {
-                return; // まだ先に補正前が出る心配が無い
-              }
-              lastRebuildAt = Date.now();
-              newPages = 0;
-              const r = await this.rebuildPartial(base, options, { remember });
-              if (r === "final") {
-                finalDone = true;
-              }
-            },
-          });
-        } finally {
-          note?.();
+          },
+        });
+        if (ok && this.alive(base) && this.arranged?.options === options) {
+          this.debugNote("全ページの検査が終わりました。表示中のページを守って反映します");
+          this.scheduleRefresh(base);
         }
-        if (!ok || !this.alive(base)) {
-          return; // やめた(ほかの PDF を開いた・調べるのをやめた)
-        }
-        if (finalDone || !this.isArranged || this.arranged?.options !== options) {
-          // 最後の反映で完成版が出ている / その間に元に戻した、または別の整え方を選んだ
-          return;
-        }
-        if (!this.arranged?.partial) {
-          return; // 念のため: 部分表示でなくなっていたら、もう組み直さない
-        }
-        const plan = this.plan(options, base);
-        if (plan.error) {
-          console.warn(`[製本ビューア] 残りのページを調べたところ、この整え方は使えませんでした(${plan.error})`);
-          return;
-        }
-        this.debugNote("全ページの解析が終わりました。組み直します");
-        if (this.pageEditor.dirty) {
-          // 開いたままで編集が始まっていたら、開き直さない(いまの表示のまま。結果だけ保存しておく)
-          try {
-            await putScanPlan(scanPlanKey(base.key, signature(options)), plan.pages, base.pageCount, true);
-          } catch (e) {
-            console.warn("[製本ビューア] 整えた結果を保存しておけませんでした", e);
-          }
-          if (remember) {
-            base.choice = options;
-            await storeChoice(base.key, options);
-          }
-          this.toast.show("全部のページを調べ終えました。もう一度「整え方…」を選ぶと、全部のページで整えて表示します", {
-            duration: 9000,
-          });
-          return;
-        }
-        // 前に開いた文書のページの描画が終わってから、開き直す(PDF.js とのデータの受け渡しが途切れないように)
-        try {
-          await this.app.pdfViewer?.pagesPromise;
-        } catch {
-          // 描画の待ち合わせができないときは、そのまま進む
-        }
-        this.debugNote(`残りのページを調べて、完成版の PDF を作ります(${plan.pages.length}ページ)`);
-        const id = await arrangedId(this.plannedSeed(base, options));
-        const madeStarted = performance.now();
-        const bytes = await buildArrangedPdf(base.plain, plan.pages, { id });
-        this.debugNote(
-          `完成版の PDF ができました(${((performance.now() - madeStarted) / 1000).toFixed(1)}秒・${Math.round(bytes.length / 1024 / 1024)}MB)`
-        );
-        if (!this.alive(base) || !this.isArranged || this.arranged?.options !== options) {
-          return;
-        }
-        base.source = null;
-        await this.presentArranged(base, options, plan.pages, bytes, { auto: true, remember, fromStart, partial: false });
       } catch (e) {
-        console.warn("[製本ビューア] 残りのページを調べて組み直すところでエラー", e);
-        // 0.9.3: 表示側の記録にも残す(部分表示のまま使えるが、補正が止まったことが分かるように)
-        this.debugNote(`残りのページを調べるところで失敗しました(${e?.message || e})。部分表示のまま使えます`);
-      } finally {
-        if (base.finishJob === job) {
-          base.finishJob = null;
-        }
+        console.warn("[製本ビューア] 残りのページの検査に失敗しました", e);
+        this.debugNote(`残りの検査で失敗しました(${e?.message || e})。いまの表示はそのまま使えます`);
       }
     })();
     base.finishJob = job;
-    job.catch(() => {});
-    await job;
-    if (base.finishJob === job) {
-      base.finishJob = null;
+    try { await job; } finally {
+      if (base.finishJob === job) { base.finishJob = null; }
     }
   }
 
@@ -1933,8 +1964,8 @@ export class ScanArranger {
       if (!bytes) {
         return null;
       }
-      if (!this.alive(base)) {
-        return null;
+      if (!this.alive(base) || base.cancel) {
+        return false;
       }
       // 組み直しに使う pdf-lib の文書はもう要らない(開いた文書の記憶(元に戻す)には使わない)
       base.source = null;
@@ -1950,6 +1981,10 @@ export class ScanArranger {
       if (opened) {
         return true;
       }
+      // 取消や編集開始はキャッシュの破損ではないので、保存済みの正常な結果を捨てない。
+      if (!this.alive(base) || base.cancel || (base.activeOptions !== undefined && base.activeOptions !== options) || (auto && (this.pageEditor.dirty || this.hasAssignedRoles()))) {
+        return false;
+      }
       // できた PDF が壊れていたりすると起こる。保存しておいたものを捨てて、いつもの道で作り直す
       await deleteScanPlan(scanPlanKey(base.key, sig));
       await deleteScanCache(id);
@@ -1958,6 +1993,44 @@ export class ScanArranger {
       console.warn("[製本ビューア] 保存しておいた整えが使えないため、調べ直します", e);
       return null;
     }
+  }
+
+  /** 元ページとページ内の読書位置を保存する。 */
+  captureReadingPosition() {
+    const viewer = this.app.pdfViewer;
+    const container = viewer?.container;
+    const view = viewer?.getPageView((this.app.page || 1) - 1);
+    if (!container || !view?.div || !view.viewport) { return null; }
+    const frame = container.getBoundingClientRect();
+    const box = view.div.getBoundingClientRect();
+    const entry = this.isArranged ? this.arranged.pages[(this.app.page || 1) - 1] : null;
+    return {
+      src: this.currentSourcePage(), half: entry?.half || null,
+      x: (frame.left - box.left) / Math.max(1, box.width),
+      y: (frame.top - box.top) / Math.max(1, box.height),
+      scale: viewer.currentScaleValue, rotation: viewer.pagesRotation,
+    };
+  }
+
+  /** ページの途中・拡大率・回転を復元する。ページ数が増えても元の内容に追従する。 */
+  async restoreReadingPosition(position, pages, doc) {
+    if (!position || this.app.pdfDocument !== doc) { return; }
+    const viewer = this.app.pdfViewer;
+    await viewer.pagesPromise;
+    if (this.app.pdfDocument !== doc) { return; }
+    let index = pages.findIndex(p => p.src === position.src && p.half === position.half);
+    if (index < 0) { index = pages.findIndex(p => p.src === position.src); }
+    if (index < 0) { return; }
+    viewer.pagesRotation = position.rotation;
+    viewer.currentScaleValue = position.scale;
+    viewer.currentPageNumber = index + 1;
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    if (this.app.pdfDocument !== doc) { return; }
+    const view = viewer.getPageView(index);
+    const frame = viewer.container.getBoundingClientRect();
+    const box = view.div.getBoundingClientRect();
+    viewer.container.scrollLeft += box.left - frame.left + box.width * position.x;
+    viewer.container.scrollTop += box.top - frame.top + box.height * position.y;
   }
 
   /**
@@ -1970,12 +2043,23 @@ export class ScanArranger {
    * @returns {Promise<boolean>} 開けたら true。開けなければ false
    */
   async presentArranged(base, options, pages, bytes, { auto = false, remember = false, fromStart = false, fromCache = false, partial = false, quiet = false } = {}) {
+    // 部分版はページ数も内容も変わるため、収集の保存先を完成版と共有しない。
+    const partialKey = partial ? `#partial:${await arrangedId(JSON.stringify(pages))}` : "";
+    if (auto) { await this.pageEditor.roles?.whenLoaded?.(); }
+    // 新しいPDFの取得待ち中でも、前の補正が画面を取り戻さないよう最後の入口で確かめる。
+    if (!this.alive(base) || base.cancel ||
+        (base.activeOptions !== undefined && base.activeOptions !== options)) { return false; }
+    if (auto && (this.pageEditor.dirty || this.hasAssignedRoles())) {
+      this.setState(this.isArranged ? "arranged" : "suggest");
+      return false;
+    }
+    const position = !fromStart ? this.captureReadingPosition() : null;
     const sig = signature(options);
     const fileName = `${sanitizeFileName(base.baseName)}${fileNameSuffix(options) || ""}.pdf`;
     // いま見ているページに当たるページから表示する
     const viewing = !fromStart && (this.isArranged || this.app.pdfDocument === base.doc) ? this.currentSourcePage() : -1;
     const target = Math.max(1, pages.findIndex(p => p.src === viewing) + 1);
-    this.arranged = { options, pages, fileName, key: `${base.key}#scan:${sig}`, doc: null, auto, size: bytes.length, partial, quiet };
+    this.arranged = { options, pages, fileName, key: `${base.key}#scan:${sig}${partialKey}`, doc: null, auto, size: bytes.length, partial, quiet };
     // 1ページ目でも指定する(PDF.js が前回見ていた位置に戻さないように。0.4.1)
     this.app.initialBookmark = `page=${target}`;
     // 0.5: 読む向きに合わせて、ビューアの綴じ方向を変える(右から左に読むなら右綴じ。設定は変えない)。
@@ -2001,11 +2085,21 @@ export class ScanArranger {
         this.restoreViewMode();
       }
     }
-    const opened = await this.openDocument({
-      data: bytes,
-      filename: fileName,
-      seihon: { current: base.current, arranged: { baseId: base.id, fileName, mode: options.mode }, key: this.arranged.key },
-    });
+    let opened;
+    this.presenting = true;
+    try {
+      opened = await this.openDocument({
+        data: bytes,
+        filename: fileName,
+        seihon: { current: base.current, arranged: { baseId: base.id, fileName, mode: options.mode }, key: this.arranged.key },
+      });
+      if (opened) { await this.restoreReadingPosition(position, pages, this.app.pdfDocument); }
+    } finally {
+      this.presenting = false;
+    }
+    if (!this.alive(base) || base.cancel) { return false; }
+    this.readAhead.page = this.currentSourcePage();
+    this.readAhead.at = performance.now();
     if (!opened) {
       // 開けなかった(エラーの表示は main.js が出す)
       this.arranged = null;
@@ -2039,13 +2133,10 @@ export class ScanArranger {
     this.setState("arranged");
     const { options, auto, partial, quiet } = this.arranged;
     const skewed = this.arranged.pages.filter(p => p.angle).length;
+    if (quiet) { return; }
     if (partial) {
-      if (quiet) {
-        // 0.9.3: 読み位置に先行する反映での開き直し。変わるのはまだ見ていないページなので、案内を出さない
-        return;
-      }
       // 0.8: 部分表示の途中(残りのページを調べて、すぐ組み直して開き直す)
-      this.toast.show("近くのページだけ整えて表示しています(残りのページも調べています。終わりしだい、全部のページで整えます)", {
+      this.toast.show("近くのページを整えました。読む向きに合わせて先のページも調べます", {
         duration: auto ? 9000 : 5000,
         actions: [
           { label: "元に戻す", onClick: () => this.restore({ remember: true }) },
@@ -2081,9 +2172,13 @@ export class ScanArranger {
    */
   async restore({ remember = false } = {}) {
     const base = this.base;
-    if (!base) {
+    if (!this.alive(base)) {
       return;
     }
+    clearTimeout(base.refreshTimer);
+    base.refreshOptions = null;
+    base.cancel = true;
+    base.activeOptions = null;
     if (remember && base.key) {
       base.choice = normalizeOptions({ mode: "none" });
       await storeChoice(base.key, base.choice);
@@ -2105,6 +2200,7 @@ export class ScanArranger {
         return;
       }
     }
+    if (!this.alive(base)) { return; }
     const viewing = this.currentSourcePage();
     this.app.initialBookmark = viewing > 0 ? `page=${viewing + 1}` : null;
     this.restoreViewMode();
@@ -2144,6 +2240,13 @@ export class ScanArranger {
 
   /** 使う人がほかの PDF を開く前(main.js から呼ぶ) */
   beforeUserOpen() {
+    clearTimeout(this.base?.refreshTimer);
+    if (this.base) {
+      this.base.refreshOptions = null;
+      this.base.cancel = true;
+      // documentloadedまで待つと、新しいファイルの取得中に古い処理が再表示できてしまう。
+      this.base.invalidated = true;
+    }
     this.restoreViewMode();
   }
 
@@ -2209,7 +2312,7 @@ export class ScanArranger {
    */
   async ensureAnalyzed(onProgress) {
     const base = this.base;
-    if (!base) {
+    if (!this.alive(base)) {
       return false;
     }
     if (base.analyzed) {
@@ -2226,6 +2329,7 @@ export class ScanArranger {
     }
     let ok;
     try {
+      base.cancel = false;
       ok = await this.analyzeAll(base, (done, total) => {
         if (trackState) {
           this.setState("busy", `スキャンを調べています(${done}/${total})…`);

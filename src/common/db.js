@@ -17,9 +17,13 @@ const CHANNEL_NAME = "seihon-data";
 
 let dbPromise = null;
 
-const STORES = ["pdfs", "collection", "roles", "scanPlans", "scanCache"];
+const STORES = ["pdfs", "collection", "roles", "scanPlans", "scanCache", "scanAnalysis"];
 
 function createStores(db) {
+  if (!db.objectStoreNames.contains("scanAnalysis")) {
+    const store = db.createObjectStore("scanAnalysis", { keyPath: "key" });
+    store.createIndex("byTime", "t", { unique: false });
+  }
   if (!db.objectStoreNames.contains("pdfs")) {
     db.createObjectStore("pdfs", { keyPath: "key" });
   }
@@ -289,13 +293,15 @@ export async function putScanCache(key, bytes, baseKey) {
     });
     // 同じ元の PDF(別の整え方)は使わなくなったので消す
     const recs = (await promisify(s.getAll())).filter(r => r.key !== key);
+    const rest = [];
     for (const r of recs) {
       if (r.baseKey === baseKey) {
         s.delete(r.key);
+      } else {
+        rest.push(r);
       }
     }
     // それでも大きすぎるときは、ほかの PDF の古いものから消す
-    let rest = (await promisify(s.getAll())).filter(r => r.key !== key);
     let total = rest.reduce((sum, r) => sum + (r.size || 0), 0);
     if (total > MAX_SCAN_CACHE_BYTES) {
       rest.sort((a, b) => (a.t || 0) - (b.t || 0));
@@ -345,7 +351,7 @@ export async function addCollectionItems(pdfKey, name, pages) {
     for (const p of pages) {
       order += 1;
       const id = await promisify(
-        s.add({ pdfKey, name, pageIndex: p.pageIndex, label: p.label || "", order, addedAt: Date.now(), thumb: null })
+        s.add({ pdfKey, name, pageIndex: p.pageIndex, sourceType: p.sourceType || "pdf", label: p.label || "", order, addedAt: Date.now(), thumb: null })
       );
       added.push(id);
     }
@@ -356,10 +362,10 @@ export async function addCollectionItems(pdfKey, name, pages) {
 }
 
 /** 項目のサムネイルを保存する(変更通知はしない: 一覧の描き直しを避ける) */
-export async function setCollectionThumb(id, thumb) {
+export async function setCollectionThumb(id, thumb, expectedEdits = null) {
   await withStores(["collection"], "readwrite", async s => {
     const item = await promisify(s.get(id));
-    if (item) {
+    if (item && (expectedEdits === null || JSON.stringify(item.edits || {}) === expectedEdits)) {
       item.thumb = thumb;
       s.put(item);
     }
@@ -433,4 +439,55 @@ export async function listRoles() {
 export async function clearRoles() {
   await withStores(["roles"], "readwrite", s => s.clear());
   notifyChange("roles");
+}
+
+/** ページ単位の検査結果。途中で閉じても、調べ終えたページから再開する。 */
+export async function getScanAnalysis(key) {
+  const prefix = `${key}|page:`;
+  const rows = await withStores(["scanAnalysis"], "readonly", s => promisify(s.getAll(IDBKeyRange.bound(prefix, `${prefix}\uffff`))));
+  if (!rows.length) { return null; }
+  return { pageCount: rows[0].pageCount, pages: Object.fromEntries(rows.map(r => [r.index, r.value])) };
+}
+
+/** 検査結果は1ページ1レコード。長いPDFでも、保存のたびに全ページを複製しない。 */
+export async function putScanAnalysisPage(key, pageCount, index, value) {
+  await withStores(["scanAnalysis"], "readwrite", async s => {
+    s.put({ key: `${key}|page:${index}`, pageCount, index, value, t: Date.now() });
+    const excess = (await promisify(s.count())) - 3000;
+    if (excess > 0) {
+      await new Promise((resolve, reject) => {
+        let left = excess;
+        const req = s.index("byTime").openCursor();
+        req.onerror = () => reject(req.error);
+        req.onsuccess = () => {
+          const cursor = req.result;
+          if (!cursor || left <= 0) { resolve(); return; }
+          cursor.delete(); left--; cursor.continue();
+        };
+      });
+    }
+  });
+}
+
+/** 編集内容を保存する。元PDF・他の画面で変更された順序を保つ。 */
+export async function editCollectionItem(id, edits) {
+  await withStores(["collection"], "readwrite", async s => {
+    const item = await promisify(s.get(id));
+    if (!item) { throw new Error("このページは収集から削除されています"); }
+    s.put({ ...item, edits, thumb: null });
+  });
+  notifyChange("collection");
+}
+
+/** 複製を独立した項目として追加する。 */
+export async function duplicateCollectionItem(id) {
+  const newId = await withStores(["collection"], "readwrite", async s => {
+    const item = await promisify(s.get(id));
+    if (!item) { throw new Error("このページは収集から削除されています"); }
+    const copy = { ...item, order: item.order + 0.5, addedAt: Date.now() };
+    delete copy.id;
+    return promisify(s.add(copy));
+  });
+  notifyChange("collection");
+  return newId;
 }

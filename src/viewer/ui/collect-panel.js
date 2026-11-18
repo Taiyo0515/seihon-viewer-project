@@ -1,7 +1,9 @@
+import { CollectionEditor } from "./collection-editor.js";
+import { editedCollectionPdf } from "../collection-edit.js";
 /**
  * ページ収集のパネル(画面右側)と、ツールバーの件数バッジ。
  *
- * 一覧・並べ替え(ドラッグ、または ↑↓ ボタン)・削除・全消去・範囲指定での追加・書き出しができる。
+ * 一覧・並べ替え(ドラッグ、または ↑↓ ボタン)・削除・全消去・範囲指定での追加・保存ができる。
  */
 
 import { clearCollection, getPdfBytes, removeCollectionItems, reorderCollection, setCollectionThumb, storageUsage } from "../../common/db.js";
@@ -48,6 +50,14 @@ export class CollectPanel {
       root: this.list,
       rootMargin: "200px 0px",
     });
+    this.editor = new CollectionEditor(collection, toast);
+    const editButton = document.createElement("button");
+    editButton.type = "button";
+    editButton.id = "shCollectEdit";
+    editButton.className = "sh-btn";
+    editButton.textContent = "編集・拡大表示";
+    editButton.addEventListener("click", () => this.editor.run(() => this.editor.open()));
+    this.panel.querySelector(".sh-collect-foot").prepend(editButton);
     this.bind();
     collection.onChange(() => this.update());
     this.update();
@@ -236,6 +246,8 @@ export class CollectPanel {
   renderList() {
     const items = this.collection.items;
     this.observer.disconnect();
+    for (const url of this.thumbUrls.values()) { URL.revokeObjectURL(url); }
+    this.thumbUrls.clear();
     // 使わなくなったサムネイルの URL を解放する
     const live = new Set(items.map(i => i.id));
     for (const [id, url] of this.thumbUrls) {
@@ -270,7 +282,7 @@ export class CollectPanel {
       text.className = "sh-collect-text";
       const page = document.createElement("div");
       page.className = "sh-collect-page";
-      page.textContent = `${index + 1}. ${item.pageIndex + 1}ページ目${item.label ? `(${item.label})` : ""}`;
+      page.textContent = `${index + 1}. ${item.sourceType === "image" ? "画像" : `${item.pageIndex + 1}ページ目`}${item.label ? `(${item.label})` : ""}`;
       const name = document.createElement("div");
       name.className = "sh-collect-name";
       name.textContent = item.name || "(名前なし)";
@@ -360,25 +372,32 @@ export class CollectPanel {
       }
       doc = await this.thumbDocs.get(item.pdfKey);
     }
-    const page = await doc.getPage(item.pageIndex + 1);
-    const base = page.getViewport({ scale: 1 });
-    const ratio = Math.min(2, window.devicePixelRatio || 1);
-    const viewport = page.getViewport({ scale: (THUMB_WIDTH * ratio) / base.width });
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.ceil(viewport.width);
-    canvas.height = Math.ceil(viewport.height);
-    await page.render({ canvas, viewport, background: "#ffffff" }).promise;
-    const blob = await new Promise(r => canvas.toBlob(r, "image/png"));
-    canvas.width = canvas.height = 0;
-    if (!blob) {
-      return;
+    let editedDoc = null;
+    if (item.edits?.rotation || item.edits?.crop) {
+      editedDoc = await loadPdfFromBytes(await editedCollectionPdf(await getPdfBytes(item.pdfKey), item));
     }
-    item.thumb = blob;
-    await setCollectionThumb(item.id, blob);
-    const img = li.querySelector("img");
-    if (img) {
-      img.src = this.thumbUrl(item);
-      img.parentElement.removeAttribute("data-pending");
-    }
+    try {
+      const page = await (editedDoc || doc).getPage(editedDoc ? 1 : item.pageIndex + 1);
+      const base = page.getViewport({ scale: 1 });
+      const ratio = Math.min(2, window.devicePixelRatio || 1);
+      const viewport = page.getViewport({ scale: (THUMB_WIDTH * ratio) / base.width });
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.ceil(viewport.width);
+      canvas.height = Math.ceil(viewport.height);
+      await page.render({ canvas, viewport, background: "#ffffff" }).promise;
+      const blob = await new Promise(r => canvas.toBlob(r, "image/png"));
+      canvas.width = canvas.height = 0;
+      if (!blob) {
+        return;
+      }
+      if (!this.collection.items.includes(item)) { return; }
+      item.thumb = blob;
+      await setCollectionThumb(item.id, blob, JSON.stringify(item.edits || {}));
+      const img = li.querySelector("img");
+      if (img) {
+        img.src = this.thumbUrl(item);
+        img.parentElement.removeAttribute("data-pending");
+      }
+    } finally { await editedDoc?.loadingTask?.destroy(); }
   }
 }

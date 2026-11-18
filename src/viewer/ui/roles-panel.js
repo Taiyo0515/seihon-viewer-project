@@ -13,9 +13,10 @@ export class RolesPanel {
    * @param {(open:boolean) => void} o.onToggle
    * @param {() => void} o.onOpenBookbinding 「製本用PDF出力」を開く
    */
-  constructor({ app, roles, onToggle, onOpenBookbinding }) {
+  constructor({ app, roles, onToggle, onOpenBookbinding, getSettings = () => ({ bindingEnabled: true }) }) {
     this.app = app;
     this.roles = roles;
+    this.getSettings = getSettings;
     this.onToggle = onToggle;
     this.outer = document.getElementById("outerContainer");
     this.panel = document.getElementById("shRolesPanel");
@@ -45,7 +46,7 @@ export class RolesPanel {
   }
 
   open() {
-    if (this.isOpen) {
+    if (!this.getSettings().bindingEnabled || this.isOpen) {
       return;
     }
     this.onToggle?.(true);

@@ -31,7 +31,7 @@ export class RotateButton {
     this.button.addEventListener("contextmenu", e => {
       e.preventDefault();
       if (this.app.pdfDocument) {
-        this.popover.open();
+        this.open();
       }
     });
     this.popover = new Popover({
@@ -42,6 +42,12 @@ export class RotateButton {
       build: el => this.build(el),
     });
     this.update();
+  }
+
+  /** 狭い画面では、その他の操作からも同じ向き・角度の選択を開く。 */
+  open(anchor = this.button) {
+    this.popover.anchor = anchor;
+    this.popover.open();
   }
 
   /** ボタンを押したときの回転(設定 rotateStep) */
@@ -122,7 +128,7 @@ export class RotateButton {
         this.update();
         this.toast.show(`回転ボタンの動きを「${rotateLabel(next)}」にしました(右クリックでいつでも変えられます)`, { duration: 5000 });
       }
-      this.button.focus({ preventScroll: true });
+      this.popover.anchor.focus({ preventScroll: true });
     });
     for (const s of [dir, angle]) {
       s.addEventListener("keydown", e => {

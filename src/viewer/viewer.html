@@ -66,7 +66,7 @@
           <button id="shFit" class="sh-icon-btn" type="button" title="ページに合わせる" aria-label="ページに合わせる" data-icon="fit-page-height"></button>
           <button id="shRotate" class="sh-icon-btn" type="button" title="左に回転(反時計回り)" aria-label="左に回転" data-icon="rotate-ccw"></button>
           <span class="sh-sep"></span>
-          <button id="shViewMode" class="sh-icon-btn" type="button" title="表示モード(押すたびに 単ページ → 製本表示 → 見開き)" aria-label="表示モード" data-icon="view-book"></button>
+          <button id="shViewMode" class="sh-icon-btn" type="button" title="表示モードを選ぶ" aria-label="表示モード" aria-haspopup="menu" aria-expanded="false" data-icon="view-book"></button>
           <button id="shBindDir" class="sh-icon-btn" type="button" title="綴じ方向(押すと左綴じ・右綴じを切り替え)" aria-label="綴じ方向" data-icon="bind-ltr"></button>
           <span class="sh-sep sh-annot-part"></span>
           <span class="sh-annot sh-annot-part">
@@ -88,12 +88,12 @@
           <button id="shOpenNative" class="sh-chip-btn" type="button" title="同じPDFをChrome標準のPDFビューアで開きます" aria-label="Chrome標準で開く">
             <span class="sh-chip-icon" data-icon="open-native"></span><span class="sh-chip-label">Chrome標準で開く</span>
           </button>
-          <button id="shBindOutput" class="sh-icon-btn" type="button" title="製本用PDF出力" aria-label="製本用PDF出力" aria-haspopup="dialog" data-icon="bind-output"></button>
+          <button id="shBindOutput" class="sh-chip-btn" type="button" title="製本用PDF出力" aria-label="製本用PDF出力" aria-haspopup="dialog"><span class="sh-chip-icon" data-icon="bind-output"></span><span class="sh-chip-label">製本PDF</span></button>
           <button id="shCollect" class="sh-icon-btn sh-badge-host" type="button" title="ページ収集" aria-label="ページ収集" aria-expanded="false" aria-controls="shCollectPanel" data-icon="collect">
             <span id="shCollectBadge" class="sh-badge" aria-hidden="true" hidden>0</span>
           </button>
-          <button id="shDownload" class="sh-icon-btn" type="button" title="ダウンロード" aria-label="ダウンロード" data-icon="download"></button>
-          <button id="shPrint" class="sh-icon-btn" type="button" title="印刷" aria-label="印刷" data-icon="print"></button>
+          <button id="shDownload" class="sh-icon-btn" type="button" title="保存" aria-label="保存" data-icon="download"></button>
+          <button id="shPrint" class="sh-icon-btn" type="button" title="印刷・PDF保存" aria-label="印刷・PDF保存" data-icon="print"></button>
           <button id="shMore" class="sh-icon-btn sh-menu-btn" type="button" title="その他の操作" aria-label="その他の操作" aria-haspopup="menu" aria-expanded="false" data-icon="more-vert"></button>
         </div>
 
@@ -1353,8 +1353,8 @@
           <div class="sh-collect-actions-row">
             <span class="sh-collect-actions-title">保存</span>
             <div class="sh-collect-actions">
-              <button id="shCollectExportPdf" class="sh-btn sh-btn-small" type="button" title="1つの PDF にまとめて保存(元の文字・画像のまま。OCR の文字も残ります)">PDF で保存</button>
-              <button id="shCollectExportZip" class="sh-btn sh-btn-small" type="button" title="1ページずつ画像にして ZIP で保存">画像(ZIP)で保存</button>
+              <button id="shCollectExportPdf" class="sh-btn sh-btn-small" type="button" title="1つの PDF にまとめて保存(元の文字・画像のまま。OCR の文字も残ります)">PDFを保存…</button>
+              <button id="shCollectExportZip" class="sh-btn sh-btn-small" type="button" title="1ページずつ画像にして ZIP で保存">画像ZIPを保存…</button>
             </div>
           </div>
         </div>
@@ -1478,15 +1478,6 @@
               <span>完成する本のページ: <output id="shBindFinSize">—</output></span>
               <span id="shBindScaleNote" class="sh-bind-scale-note" hidden></span>
             </div>
-            <section class="sh-bind-roles" aria-labelledby="shBindRolesTitle">
-              <div class="sh-bind-roles-head">
-                <h3 id="shBindRolesTitle">カバー・表紙・帯などのページ</h3>
-                <button id="shBindOpenRoles" type="button" class="sh-link-btn">ページ役割の一覧を開く</button>
-              </div>
-              <!-- 0.5: 項目は詳細設定の「カバー・表紙・帯などの項目」に合わせて作る(bookbinding-dialog.js) -->
-              <div id="shBindRoleGrid" class="sh-bind-grid"></div>
-              <p class="sh-bind-help">「カバーの表紙」「カバーの裏表紙」は、本の最初と最後のページになります。そのほかの項目のページは「付属」として、本体とは別の PDF に出力します(使い道は下の「詳細設定」で変えられます)。ページを選ぶと、そのページに役割を付けて保存します。同じ PDF を開き直しても残ります。項目の追加・削除と、複数のページを選べるかどうかは、下の「詳細設定」の「カバー・表紙・帯などの項目」で決められます。</p>
-            </section>
             <div class="sh-bind-fields">
               <div class="sh-bind-field" id="shBindImposeRow">
                 <div class="sh-bind-field-label">製本方式</div>
@@ -1538,10 +1529,27 @@
                     </select>
                     <input type="number" id="shBindDpiCustom" class="sh-bind-input sh-short" min="50" max="1200" step="10" value="300" aria-label="dpi を指定する" hidden />
                     <p class="sh-bind-help" id="shBindDpiHelp">面付けした1面(印刷用紙まるごと)を、この細かさの画像にします。大きいほどきれいに、ファイルも大きくなります。文字の検索・選択はできなくなります(通常は文字をそのまま残します)。</p>
+                    <!-- 0.13.0: 画像化するときの文字の濃度補正 -->
+                    <label for="shBindTone">文字の濃さ:</label>
+                    <select id="shBindTone" class="sh-select sh-select-small" aria-label="画像化するときの文字の濃さ">
+                      <option value="none">補正なし</option>
+                      <option value="standard" selected>標準(推奨)</option>
+                      <option value="strong">濃い</option>
+                    </select>
+                    <p class="sh-bind-help" id="shBindToneHelp">文字の輪郭に出る薄い灰色を濃くして、印刷でかすれにくくします。紙の白と文字の黒は変えず、写真だけの面には掛けません。画面上では差が分かりにくいので、試し印刷で確認してください。</p>
                   </div>
                 </div>
               </div>
             </div>
+            <details id="shBindRolesDetails" class="sh-bind-roles sh-bind-details">
+              <summary id="shBindRolesTitle">カバー・表紙・帯などのページ</summary>
+              <div class="sh-bind-roles-head">
+                <button id="shBindOpenRoles" type="button" class="sh-link-btn">ページ役割の一覧を開く</button>
+              </div>
+              <!-- 0.5: 項目は詳細設定の「カバー・表紙・帯などの項目」に合わせて作る(bookbinding-dialog.js) -->
+              <div id="shBindRoleGrid" class="sh-bind-grid"></div>
+              <p class="sh-bind-help">「カバーの表紙」「カバーの裏表紙」は、本の最初と最後のページになります。そのほかの項目のページは「付属」として、本体とは別の PDF に出力します(使い道は下の「詳細設定」で変えられます)。ページを選ぶと、そのページに役割を付けて保存します。同じ PDF を開き直しても残ります。項目の追加・削除と、複数のページを選べるかどうかは、下の「詳細設定」の「カバー・表紙・帯などの項目」で決められます。</p>
+            </details>
             <p id="shBindWarnings" class="sh-bind-warn" role="status" hidden></p>
             <!-- 0.9: プレビューは2種類を独立して表示・非表示にする -->
             <label class="sh-bind-check"><input type="checkbox" id="shBindShowSequence" /> 読む順番のプレビューを表示</label>
@@ -1570,7 +1578,7 @@
                   <label><input type="radio" name="shBindBlankMode" value="afterCover" /> 最初のページ(カバーの表紙)の直後</label>
                   <label><input type="radio" name="shBindBlankMode" value="custom" /> 指定する:
                     <input type="text" id="shBindBlankAfter" class="sh-bind-input" placeholder="例: 5, 12(5ページ目と12ページ目の後ろ)" autocomplete="off" spellcheck="false" /></label>
-                  <p class="sh-bind-help">何ページ目の後ろに入れるかを、ページ番号(サイドバーのサムネイルの番号)で書きます。複数の場所に分けられます(「5x2」で5ページ目の後ろに2枚)。足りない分は最後のページの直前に入れます。</p>
+                  <p class="sh-bind-help">0を指定すると、元の1ページ目の前に白紙を入れ、1ページ目が白紙になります。1以上は何ページ目の後ろに入れるかを、元のページ番号(サイドバーのサムネイルの番号)で書きます。複数の場所に分けられます(「5x2」で5ページ目の後ろに2枚)。0指定はほかの位置より先に確保し、全体を4の倍数にそろえるため追加の白紙が入ることがあります。足りない分は最後のページの直前に入れます。</p>
                 </div>
               </div>
               <div class="sh-bind-field" id="shBindSizeRefRow">
@@ -1634,7 +1642,10 @@
             </div>
             <div class="sh-dialog-buttons">
               <button id="shBindCancel" class="sh-btn" type="button">キャンセル</button>
-              <button id="shBindRun" class="sh-btn sh-btn-primary" type="button">出力</button>
+              <button id="shBindNormal" class="sh-btn" type="button">通常の印刷・PDF保存へ</button>
+              <label>印刷対象 <select id="shBindPrintTarget"><option value="body">本体</option><option value="accessory">付属</option></select></label>
+              <button id="shBindPrint" class="sh-btn" type="button">印刷へ進む…</button>
+              <button id="shBindRun" class="sh-btn sh-btn-primary" type="button">PDFを保存…</button>
             </div>
           </div>
         </div>

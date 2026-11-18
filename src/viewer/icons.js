@@ -94,7 +94,7 @@ export const ICONS = {
   "delete": s('<path d="M4.5 6.5h15M9.5 6.5V4.5h5v2"/><path d="M6.5 6.5l1 13.5h9l1-13.5"/><path d="M10 10.5v6M14 10.5v6"/>'),
   "drag": s('<path d="M9 6.5h.01M15 6.5h.01M9 12h.01M15 12h.01M9 17.5h.01M15 17.5h.01" stroke-width="3"/>'),
   // ---- フェーズ3: ページ役割・製本用PDF出力 ----
-  "bind-output": s('<path d="M12 5.6c-1.5-1.2-3.8-1.8-7-1.8v10c3.2 0 5.5.6 7 1.8 1.5-1.2 3.8-1.8 7-1.8v-10c-3.2 0-5.5.6-7 1.8Z"/><path d="M12 5.6v10"/><path d="M12 17.8v3.7M9.8 19.4l2.2 2.2 2.2-2.2"/>'),
+  "bind-output": s('<rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M12 4v16" stroke-dasharray="2 2"/><path d="M6 8h3M6 11h3M15 13h3M15 16h3"/>'),
   "label": s('<path d="M3.5 11.6V4.8c0-.7.6-1.3 1.3-1.3h6.8l8.6 8.6c.5.5.5 1.4 0 1.9l-6.8 6.8c-.5.5-1.4.5-1.9 0Z"/><circle cx="8" cy="8" r="1.4"/>'),
   "select-off": s('<rect x="4" y="4" width="16" height="16" rx="2"/><path d="m9 9 6 6M15 9l-6 6"/>'),
   // ---- 0.1: ページの選択・削除・保存 ----

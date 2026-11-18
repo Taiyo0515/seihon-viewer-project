@@ -33,16 +33,27 @@ export class Toolbar {
     // 右側のボタンが増えて(「保存」など)中央のボタンに重なるときは、文字を省いて詰める
     this.endGroup = this.el.querySelector(".sh-end");
     this.centerGroup = document.getElementById("shCenter");
-    new ResizeObserver(() => this.fitToWidth()).observe(this.el);
+    const scheduleFit = () => {
+      if (this.fitQueued) { return; }
+      this.fitQueued = true;
+      queueMicrotask(() => { this.fitQueued = false; this.fitToWidth(); });
+    };
+    new ResizeObserver(scheduleFit).observe(this.el);
+    window.addEventListener("resize", scheduleFit);
+    // 設定や解析の進みによってボタンが増減しても、幅を計り直す。
+    new MutationObserver(scheduleFit).observe(this.el, {
+      subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["hidden"],
+    });
   }
 
   /**
    * ツールバーの右側が中央のボタン(ページ番号・倍率など)に重ならないよう、段階的に詰める。
    * 1: 「Chrome標準で開く」を記号だけに / 2: ほかの文字付きボタン(「保存」)も記号だけに /
-   * 3: 書き込みのボタンを隠す / 4: 倍率の入力欄を隠す
+   * 3: 書き込みのボタンを隠す / 4: 倍率の入力欄を隠す /
+   * 5以降: メニューからも使える操作を移す。ページ番号は小さい画面でも残す。
    */
   fitToWidth() {
-    const levels = ["sh-fit-1", "sh-fit-2", "sh-fit-3", "sh-fit-4"];
+    const levels = ["sh-fit-1", "sh-fit-2", "sh-fit-3", "sh-fit-4", "sh-fit-5", "sh-fit-6", "sh-fit-7"];
     this.el.classList.remove(...levels);
     for (const level of levels) {
       if (!this.endOverlapsCenter()) {
@@ -53,6 +64,11 @@ export class Toolbar {
   }
 
   endOverlapsCenter() {
+    const toolbar = this.el.getBoundingClientRect();
+    const end = this.endGroup.getBoundingClientRect();
+    if (end.right > toolbar.right - 8 || this.el.scrollWidth > this.el.clientWidth) {
+      return true;
+    }
     const center = this.centerGroup?.getBoundingClientRect();
     if (!center || !center.width) {
       return false;

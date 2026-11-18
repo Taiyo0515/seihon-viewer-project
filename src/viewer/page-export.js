@@ -10,6 +10,8 @@
  * まれに PDF.js で抜き出せない文書は、pdf-lib(同梱)で抜き出す。
  */
 
+import { repairFreeTextAnnotations } from "./free-text-appearance.js";
+
 // ---------------------------------------------------------------------------
 // 指紋
 // ---------------------------------------------------------------------------
@@ -25,6 +27,8 @@ export async function computePdfKey(bytes) {
 // PDF の読み込み(保存済みのデータから)
 // ---------------------------------------------------------------------------
 
+let utilityWorker = null;
+
 function pdfjs() {
   return globalThis.pdfjsLib;
 }
@@ -32,13 +36,14 @@ function pdfjs() {
 /** 保存済みの PDF データを PDF.js で開く(ビューアと同じ Worker を共有する) */
 export function loadPdfFromBytes(bytes) {
   const opts = window.PDFViewerApplicationOptions;
-  // ビューアでまだ文書を開いていないと Worker の指定が無いので、ビューアと同じものを使う
-  const workerOptions = pdfjs().GlobalWorkerOptions;
-  if (!workerOptions.workerPort && !workerOptions.workerSrc) {
-    workerOptions.workerPort = opts.get("workerPort") || null;
-    workerOptions.workerSrc = opts.get("workerSrc");
+  // 補助文書は明示的に所有するWorkerを共有する。文書を閉じてもWorkerを破棄せず、
+  // 次のプレビューやメインの文書のWorkerまで終了してしまう競合を防ぐ。
+  pdfjs().GlobalWorkerOptions.workerSrc = opts.get("workerSrc");
+  if (!utilityWorker || utilityWorker.destroyed) {
+    utilityWorker = new (pdfjs().PDFWorker)({ name: "seihon-tools" });
   }
   return pdfjs().getDocument({
+    worker: utilityWorker,
     // PDF.js はデータを Worker に移すので、呼び出し側のデータが使えなくならないよう複製を渡す
     data: bytes.slice(),
     cMapUrl: opts.get("cMapUrl"),
@@ -68,8 +73,7 @@ export async function editedDocumentBytes(doc) {
     return null;
   }
   try {
-    const { transfer } = storage.serializable;
-    let { map } = storage.serializable;
+    let { map, transfer } = storage.serializable;
     if (!map || map.size === 0) {
       return null;
     }
@@ -99,10 +103,11 @@ export async function editedDocumentBytes(doc) {
       },
       transfer
     );
-    return bytes?.length ? bytes : null;
+    if (!bytes?.length) { throw new Error("編集したPDFのデータが空でした"); }
+    return await repairFreeTextAnnotations(bytes, { annotations: [...map.values()] });
   } catch (e) {
-    console.warn("[製本ビューア] 書き込みを反映した文書を作れませんでした(書き込みを含めずに続けます)", e);
-    return null;
+    console.error("[製本ビューア] 書き込みを反映した文書を作れませんでした", e);
+    throw new Error("書き込みを保存できませんでした。編集内容を残したまま、保存を中止します。", { cause: e });
   }
 }
 
@@ -132,6 +137,10 @@ export async function extractPagesToPdf(hostDoc, pages) {
     hostDoc = temporary;
   }
   try {
+    const mapping = hostDoc.pagesMapper?.getMapping?.();
+    const annotations = [...(hostDoc.annotationStorage?.serializable?.map?.values() || [])].map(edit =>
+      mapping && Number.isInteger(edit.pageIndex) && edit.pageIndex >= 0 && edit.pageIndex < mapping.length
+        ? { ...edit, pageIndex: mapping[edit.pageIndex] - 1 } : edit);
     const pageInfos = buildPageInfos(pages);
     let out = null;
     try {
@@ -140,7 +149,12 @@ export async function extractPagesToPdf(hostDoc, pages) {
       console.warn("[製本ビューア] PDF.js での抜き出しに失敗しました", e);
     }
     if (out && out.length) {
-      return out;
+      const outputAnnotations = pages.flatMap((page, pageIndex) => page.source === "current"
+        ? annotations.filter(edit => edit.pageIndex === page.pageIndex).map(edit => ({ ...edit, pageIndex })) : []);
+      return await repairFreeTextAnnotations(out, { annotations: outputAnnotations });
+    }
+    if (annotations.length) {
+      throw new Error("編集内容を含めてページを保存できませんでした。編集内容を残したまま、保存を中止します。");
     }
     // 予備の方法: pdf-lib(暗号化されていない文書のみ)
     return await extractWithPdfLib(hostDoc, pages);
@@ -155,23 +169,22 @@ export async function extractPagesToPdf(hostDoc, pages) {
  * 同じページが2回以上出てくるときは、別の指定に分ける(PDF.js は1つの指定の中で同じページを重ねられない)。
  */
 function buildPageInfos(pages) {
-  /** source -> [{pageIndex, position}][] (重複ごとの層) */
+  /** source -> { layers: [{pageIndex, position}][], counts: Map } (重複ごとの層) */
   const groups = new Map();
   pages.forEach((p, position) => {
-    let layers = groups.get(p.source);
-    if (!layers) {
-      layers = [];
-      groups.set(p.source, layers);
+    let group = groups.get(p.source);
+    if (!group) {
+      group = { layers: [], counts: new Map() };
+      groups.set(p.source, group);
     }
-    let layer = layers.find(l => !l.some(e => e.pageIndex === p.pageIndex));
-    if (!layer) {
-      layer = [];
-      layers.push(layer);
-    }
+    // 同じページの何回目の登場かで層を決める。前の全ページを毎回探さない。
+    const depth = group.counts.get(p.pageIndex) || 0;
+    const layer = group.layers[depth] ||= [];
+    group.counts.set(p.pageIndex, depth + 1);
     layer.push({ pageIndex: p.pageIndex, position });
   });
   const infos = [];
-  for (const [source, layers] of groups) {
+  for (const [source, { layers }] of groups) {
     for (const layer of layers) {
       // PDF.js は元のページ番号の昇順に pageIndices を割り当てるので、その順に並べる
       layer.sort((a, b) => a.pageIndex - b.pageIndex);

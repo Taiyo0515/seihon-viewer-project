@@ -36,7 +36,6 @@
         <span class="cat-text"><span class="cat-title">印刷・製本出力</span>
           <span class="cat-desc">紙に印刷する、製本用の PDF を作る</span>
           <span class="cat-items">印刷の画質・製本用PDF出力・付属とファイル名</span></span>
-        <button type="button" id="printBindVisibleSwitch" class="cat-switch" role="switch" aria-checked="false" aria-label="普段の画面に「印刷」「製本用PDF出力」のボタンを出す" title="普段の画面に「印刷」「製本用PDF出力」のボタンを出す(押しても分類は開きません)"><span class="cat-switch-track" aria-hidden="true"></span></button>
       </a>
       <a class="cat-card" href="#manage">
         <span class="cat-no">4</span>
@@ -184,19 +183,11 @@
 
         <section class="card" aria-labelledby="sec-scan">
           <h3 id="sec-scan">スキャンの整え</h3>
-          <p class="help">見開きの分割、余白の除去、読む向き・1ページ目、PDF ごとの設定。調べる時間を減らすため、開いたときはまずいま見ているページのまわりを調べてすぐ表示を始め、残りのページは表示しながら順に調べます。</p>
+          <p class="help">補正は手動で実行します。PDFを開いただけでは検査や補正を行いません。必要なときに ⋮ メニューの「スキャンを整える…」を開き、プレビューで確認して適用してください。保存済みの補正結果も自動では適用しません。</p>
           <div class="row">
-            <div class="label">スキャンした見開き</div>
+            <div class="label">補正の開始</div>
             <div class="control radios">
-              <label><input type="radio" name="scanArrange" value="auto" /> 自動で1ページずつに分けて表示する<span class="default-mark">初期値</span></label>
-              <label><input type="radio" name="scanArrange" value="ask" /> 分けるかどうか聞く(ツールバーに「見開きを分ける」のボタンを出す)</label>
-              <label><input type="radio" name="scanArrange" value="off" /> 何もしない(⋮ メニューの「スキャンを整える…」からは使えます)</label>
-              <p class="help">
-                本・ノートを開いてプリンター(コピー機)でスキャンした PDF を開くと、ノド(綴じ目)の位置で1ページずつに分けて表示します。
-                ばらした中綴じの冊子を両面スキャンした PDF は、ツールバーの「冊子を並べ替える」で、表紙から裏表紙の順に並べ替えられます。
-                画像は作り直さないので、画質は元のままです。元の PDF のファイルは変えません。
-                「スキャンを整える」の画面は「ページの構成」(分ける・並べ替える・行わない)と「補正」(余白・傾き)と「条件」(読む向きなど)に分かれています。
-              </p>
+              <label><input type="radio" name="scanArrange" value="off" /> 手動のみ<span class="default-mark">初期値</span></label>
             </div>
           </div>
           <div class="row">
@@ -225,12 +216,9 @@
             <div class="label">傾き</div>
             <div class="control radios">
               <label><input type="radio" name="scanDeskew" value="auto" /> 「補正」の「傾きをまっすぐにする」のチェックを、既定で入れておく<span class="default-mark">初期値</span></label>
-              <label><input type="radio" name="scanDeskew" value="off" /> 既定では入れない(傾きの自動検出・ツールバーの知らせもしない。「スキャンを整える」の画面からは、いつも使えます)</label>
+              <label><input type="radio" name="scanDeskew" value="off" /> 既定では入れない(手動画面で必要なときに選べます)</label>
               <p class="help">
                 見開きを分けるときや冊子を並べ替えるときに、ページごとの傾き(約 0.2° 以上)も直します。
-                上の「スキャンした見開き」が「自動」のときは、縦長のスキャンが傾いていると、開いたときにまっすぐにして表示します(0.8.1)
-                (傾きがあるかどうかの判断は、最初の数ページと中ほどの数ページから決めます)。「聞く」のときは、開いたときにボタンと案内で知らせます
-                (どちらの場合も、文字の多い文書の PDF は調べません)。
                 傾きは、画像を作り直さずに、ページの中身を回して直します(画質は元のまま)。
               </p>
             </div>
@@ -339,12 +327,12 @@
 
         <section class="card" aria-labelledby="sec-collect">
           <h3 id="sec-collect">ページ収集</h3>
-          <p class="help">書き出した後に空にするか、保存容量の上限。</p>
+          <p class="help">保存・コピー後に空にするか、保存容量の上限。</p>
           <div class="row">
-            <div class="label">書き出し後</div>
+            <div class="label">保存・コピー後</div>
             <div class="control">
-              <label class="check"><input type="checkbox" id="collectClearAfterExport" /> 書き出したら、収集を自動で空にする</label>
-              <p class="help">初期値はオフ(書き出した後も収集は残ります)。</p>
+              <label class="check"><input type="checkbox" id="collectClearAfterExport" /> 保存・コピーしたら、収集を自動で空にする</label>
+              <p class="help">初期値はオフ(保存・コピーした後も収集は残ります)。</p>
             </div>
           </div>
           <div class="row">
@@ -363,13 +351,31 @@
         <div class="cat-head">
           <a class="cat-back" href="#">← 詳細設定のトップ</a>
           <h2><span class="cat-no">3</span>印刷・製本出力</h2>
-          <p class="cat-desc">紙に印刷する、製本用の PDF を作る。普段の画面の「印刷」「製本用PDF出力」のボタンは、トップのこの分類のカードにあるスイッチで出し分けられます(初期値はオフ・ボタンが無い状態。印刷は Ctrl+P でいつでもできます)。</p>
+          <p class="cat-desc">通常の印刷・PDF保存と、必要な人だけ有効にする製本機能の設定です。印刷ボタンを非表示にしても、メニューと Ctrl+P から使えます。</p>
           <nav class="subnav" aria-label="印刷・製本出力の項目">
           <a href="#sec-print">印刷の画質</a>
-          <a href="#sec-bind">製本用PDF出力</a>
-          <a href="#sec-bindfiles">付属・ファイル名</a>
+          <a href="#sec-bind" data-binding-settings>製本用PDF出力</a>
+          <a href="#sec-bindfiles" data-binding-settings>付属・ファイル名</a>
           </nav>
         </div>
+
+        <section class="card" aria-labelledby="sec-output-features">
+          <h3 id="sec-output-features">使う機能とボタン表示</h3>
+          <div class="row">
+            <div class="label">通常の印刷・PDF保存</div>
+            <div class="control">
+              <label class="check"><input type="checkbox" id="printButtonVisible" /> ツールバーに印刷ボタンを表示する<span class="default-mark">初期値</span></label>
+              <p class="help">ボタンの表示だけを切り替えます。非表示でもメニューと Ctrl+P から印刷・PDF保存ができます。</p>
+            </div>
+          </div>
+          <div class="row">
+            <div class="label">製本用PDF出力</div>
+            <div class="control">
+              <label class="check"><input type="checkbox" id="bindingEnabled" /> 製本機能を使う</label>
+              <p class="help">中綴じの面付けや表紙・帯などの設定を表示します。オフにしても、通常の印刷・PDF保存と、これまでの製本設定・ページ役割は残ります。</p>
+            </div>
+          </div>
+        </section>
 
         <section class="card" aria-labelledby="sec-print">
           <h3 id="sec-print">印刷の画質</h3>
@@ -390,7 +396,7 @@
           </div>
         </section>
 
-        <section class="card" aria-labelledby="sec-bind">
+        <section class="card" aria-labelledby="sec-bind" data-binding-settings>
           <h3 id="sec-bind">製本用PDF出力</h3>
           <p class="help">ここで決めた内容は、製本用PDF出力の画面を開いたときの初期値になります(画面の「詳細設定」で、その回だけ変えることもできます)。</p>
           <div class="row">
@@ -453,7 +459,7 @@
           </div>
         </section>
 
-        <section class="card" aria-labelledby="sec-bindfiles">
+        <section class="card" aria-labelledby="sec-bindfiles" data-binding-settings>
           <h3 id="sec-bindfiles">付属・ファイル名</h3>
           <p class="help">表紙や帯などの付属のページの扱いと、出力するファイルの名前。</p>
           <div class="row">
@@ -588,7 +594,7 @@
 
         <section class="card" aria-labelledby="sec-data">
           <h3 id="sec-data">データ管理</h3>
-          <p class="help">保存しているデータの確認・削除と、設定の書き出し・読み込み。</p>
+          <p class="help">保存しているデータの確認・削除と、設定ファイルの保存・読み込み。</p>
           <div class="row">
             <div class="label">ページ役割</div>
             <div class="control">
@@ -601,17 +607,17 @@
               </div>
               <p class="help">
                 ページ役割は、PDF の内容で見分けて PDF ごとに保存しています(同じ PDF を別の場所から開いても元に戻ります)。
-                消した役割は元に戻せません(下の「設定の書き出し」で書き出したファイルがあれば、読み込みで戻せます)。
+                消した役割は元に戻せません(下の「設定ファイルの保存」で保存したファイルがあれば、読み込みで戻せます)。
               </p>
               <p class="buttons"><button type="button" class="btn small danger" id="rolesClearAll">ページ役割をすべて消す</button></p>
             </div>
           </div>
           <div class="row">
-            <div class="label" id="sec-backup">書き出し</div>
+            <div class="label" id="sec-backup">設定ファイルの保存</div>
             <div class="control">
               <label class="check"><input type="checkbox" id="backupIncludeSettings" checked /> 詳細設定(このページのすべての項目)</label>
               <label class="check"><input type="checkbox" id="backupIncludeRoles" checked /> <span>ページ役割(<span id="backupRolesCount">0</span> 件の PDF)</span></label>
-              <p class="buttons"><button type="button" class="btn primary" id="backupExport">ファイルに書き出す</button></p>
+              <p class="buttons"><button type="button" class="btn primary" id="backupExport">設定をファイルに保存…</button></p>
               <p class="help">
                 JSON 形式のファイル(<code>製本ビューアの設定_日時.json</code>)を、Chrome のダウンロード先のフォルダに保存します。
                 収集したページと元の PDF、速度ログは含めません。

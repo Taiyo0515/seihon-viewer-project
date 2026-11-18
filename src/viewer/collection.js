@@ -1,3 +1,4 @@
+import { editedCollectionPdf } from "./collection-edit.js";
 /**
  * ページ収集(裏で溜めておき、まとめて取り出す)。
  *
@@ -157,7 +158,7 @@ export class Collection {
   }
 
   /**
-   * 収集したページを、書き出し・コピーの指定にする(元の PDF のデータを読み込む)。
+   * 収集したページを、保存・コピーの指定にする(元の PDF のデータを読み込む)。
    * @returns {Promise<Array<{source:Uint8Array, pageIndex:number, name:string}>|null>}
    */
   async collectPages() {
@@ -181,9 +182,16 @@ export class Collection {
         missing.push(item.name);
       }
     }
-    const pages = items
-      .filter(i => bytesByKey.has(i.pdfKey))
-      .map(i => ({ source: bytesByKey.get(i.pdfKey), pageIndex: i.pageIndex, name: baseName(i.name) }));
+    const pages = [];
+    for (const item of items.filter(i => bytesByKey.has(i.pdfKey))) {
+      let source = bytesByKey.get(item.pdfKey);
+      let pageIndex = item.pageIndex;
+      if (item.edits?.rotation || item.edits?.crop) {
+        source = await editedCollectionPdf(source, item);
+        pageIndex = 0;
+      }
+      pages.push({ source, pageIndex, name: baseName(item.name) });
+    }
     if (missing.length) {
       this.toast.show(`元の PDF のデータが見つからないページを除きます(${[...new Set(missing)].join("、")})`, {
         kind: "error",
@@ -194,16 +202,21 @@ export class Collection {
   }
 
   /**
-   * 収集したページを書き出す(ファイルに保存)。
+   * 収集したページをファイルに保存する。
    * @param {"pdf"|"zip"} format
    */
   async exportAll(format) {
-    const pages = await this.collectPages();
+    let pages;
+    try { pages = await this.collectPages(); }
+    catch (e) {
+      this.toast.show(`収集したページを保存できませんでした: ${e.message || e}`, { kind: "error", duration: 8000 });
+      return false;
+    }
     if (!pages) {
       return false;
     }
     const ok = await this.pageCopy.saveMultiple(pages, format);
-    await this.afterExport(ok);
+    await this.afterExport(ok, "保存");
     return ok;
   }
 
@@ -213,19 +226,24 @@ export class Collection {
    * @param {"pdf"|"images"} format
    */
   async copyAll(format) {
-    const pages = await this.collectPages();
+    let pages;
+    try { pages = await this.collectPages(); }
+    catch (e) {
+      this.toast.show(`収集したページをコピーできませんでした: ${e.message || e}`, { kind: "error", duration: 8000 });
+      return false;
+    }
     if (!pages) {
       return false;
     }
     const ok = format === "images" ? await this.pageCopy.copyImages(pages) : await this.pageCopy.copyPdf(pages);
-    await this.afterExport(ok);
+    await this.afterExport(ok, "コピー");
     return ok;
   }
 
-  async afterExport(ok) {
+  async afterExport(ok, action) {
     if (ok && this.getSettings().collectClearAfterExport) {
       await clearCollection();
-      this.toast.show("書き出したので、収集を空にしました(詳細設定で変更できます)");
+      this.toast.show(`${action}したので、収集を空にしました(詳細設定で変更できます)`);
     }
   }
 }
