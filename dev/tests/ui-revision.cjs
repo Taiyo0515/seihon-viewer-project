@@ -119,7 +119,8 @@ const path = require("path"), fs = require("fs"), os = require("os"), assert = r
     assert.equal(await page.locator("[data-action=reset]").innerText(), "回転・トリミングを戻す");
     const preview = await page.evaluate(() => ({ canvas: editor.canvas.getBoundingClientRect().height, stage: editor.stage.clientHeight, height: innerHeight }));
     assert(preview.canvas > preview.height * .55, JSON.stringify(preview));
-    assert(preview.canvas <= preview.stage + 1);
+    await page.locator("#shCollectionEditor [data-field=zoomMode]").selectOption("page");
+    assert(await page.evaluate(() => editor.canvas.getBoundingClientRect().height <= editor.stage.clientHeight + 1));
     await page.locator(".sh-edit-add-settings summary").click();
     await page.locator("[data-field=position]").selectOption("before");
     await page.locator("[data-field=size]").selectOption("image");

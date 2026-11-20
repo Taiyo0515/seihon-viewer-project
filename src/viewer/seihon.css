@@ -2951,47 +2951,54 @@ select.sh-select option:disabled {
 #shCollectPanel .sh-collect-list { flex: 1 0 160px; min-height: 160px; }
 #shRolesPanel .sh-roles-body { flex: 1 0 auto; overflow: visible; }
 
-/* 収集編集: 既存のダイアログと同じ操作部品を使い、残りの高さをプレビューに割り当てる。 */
+/* 収集編集。操作部を上下にまとめ、本文の幅と高さを優先する。 */
 .sh-collection-editor {
-  box-sizing: border-box; width: 98vw; max-width: 1800px; height: 96dvh; max-height: 96dvh;
-  padding: 16px; border: 1px solid var(--sh-side-border); border-radius: 12px;
-  background: var(--sh-panel-bg); color: var(--sh-panel-fg); font: 13px var(--sh-font);
-  overflow: auto;
+  box-sizing: border-box; width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh;
+  margin: auto; padding: 0; border: 0; background: var(--sh-panel-bg); color: var(--sh-panel-fg);
+  font: 13px var(--sh-font); overflow: auto;
 }
-.sh-collection-editor[open] { display: flex; flex-direction: column; gap: 10px; }
+.sh-collection-editor[open] { display: flex; flex-direction: column; }
 .sh-collection-editor::backdrop { background: #0009; }
 .sh-collection-editor header, .sh-collection-editor footer, .sh-edit-tools, .sh-edit-crop-tools,
-.sh-edit-tool-group, .sh-edit-add-row, .sh-edit-add-fields, .sh-edit-navigation, .sh-edit-exports {
-  display: flex; align-items: center; flex-wrap: wrap; gap: 8px; flex-shrink: 0;
+.sh-edit-tool-group, .sh-edit-navigation, .sh-edit-zoom-controls {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 4px; flex-shrink: 0;
 }
-.sh-collection-editor h2 { margin: 0; font-size: 18px; flex: 1; }
-.sh-collection-editor .sh-btn { font-size: 13px; padding-inline: 12px; white-space: nowrap; }
+.sh-collection-editor header, .sh-collection-editor footer, .sh-edit-tools, .sh-edit-crop-tools { padding: 5px 12px; }
+.sh-collection-editor header { border-bottom: 1px solid var(--sh-menu-sep); gap: 8px; }
+.sh-collection-editor h2 { margin: 0; font-size: 16px; flex: 1; }
+.sh-collection-editor .sh-btn { height: 30px; font-size: 13px; padding-inline: 10px; white-space: nowrap; }
 .sh-collection-editor button:disabled { opacity: .45; cursor: default; }
-.sh-edit-tools { padding-bottom: 10px; border-bottom: 1px solid var(--sh-menu-sep); }
-.sh-edit-tools-label, .sh-edit-add-hint { color: var(--sh-panel-fg2); font-size: 12px; }
-.sh-edit-tool-group + .sh-edit-tool-group { border-inline-start: 1px solid var(--sh-menu-sep); padding-inline-start: 8px; }
-.sh-edit-delete { margin-inline-start: auto; }
-.sh-edit-add-settings { min-width: 0; }
-.sh-edit-add-settings summary { cursor: pointer; color: var(--sh-btn-fg); padding: 8px 4px; }
-.sh-edit-add-settings summary:focus-visible { outline: 2px solid var(--sh-focus); }
-.sh-edit-add-fields { padding: 4px; }
-.sh-edit-add-fields label { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
-.sh-edit-add-fields .sh-select { max-width: min(350px, 72vw); font-size: 13px; }
-.sh-edit-body { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 14px; flex: 1 1 0; min-height: 220px; }
-.sh-edit-body ol { list-style: none; padding: 0; margin: 0; overflow: auto; min-height: 0; }
-.sh-edit-body li button { width: 100%; text-align: start; display: flex; align-items: center; gap: 8px; margin-bottom: 6px; padding: 8px; border: 1px solid var(--sh-btn-border); border-radius: 6px; color: inherit; background: transparent; font: inherit; cursor: pointer; }
+.sh-edit-tool-group + .sh-edit-tool-group { border-inline-start: 1px solid var(--sh-menu-sep); padding-inline-start: 6px; }
+.sh-edit-tools, .sh-edit-crop-tools { border-bottom: 1px solid var(--sh-menu-sep); }
+.sh-edit-tools[hidden], .sh-edit-crop[hidden], .sh-edit-crop-tools[hidden], .sh-edit-body ol[hidden] { display: none; }
+.sh-collection-editor details { position: relative; }
+.sh-collection-editor summary { cursor: pointer; color: var(--sh-btn-fg); padding: 7px 5px; }
+.sh-collection-editor summary:focus-visible, .sh-edit-stage:focus-visible { outline: 2px solid var(--sh-focus); outline-offset: -2px; }
+.sh-edit-popup { position: absolute; z-index: 2; top: 100%; right: 0; display: grid; gap: 8px; width: max-content; max-width: calc(100vw - 24px); padding: 12px; border: 1px solid var(--sh-side-border); border-radius: 8px; background: var(--sh-panel-bg); box-shadow: 0 4px 16px #0004; }
+.sh-edit-add-fields label { display: grid; gap: 4px; }
+.sh-edit-add-fields .sh-select { max-width: 100%; font-size: 13px; }
+.sh-edit-body { position: relative; display: flex; flex: 1 1 0; min-height: 128px; overflow: hidden; }
+.sh-edit-body ol { box-sizing: border-box; width: clamp(112px, 16vw, 200px); flex: none; list-style: none; padding: 6px; margin: 0; overflow: auto; min-height: 0; }
+.sh-edit-body li button { width: 100%; text-align: start; display: flex; align-items: center; gap: 6px; margin-bottom: 4px; padding: 5px; border: 1px solid transparent; border-radius: 5px; color: inherit; background: transparent; font: inherit; cursor: pointer; }
 .sh-edit-body li button:hover { background: var(--sh-btn-hover); }
 .sh-edit-body li button:focus-visible { outline: 2px solid var(--sh-focus); outline-offset: -2px; }
-.sh-edit-body li span { overflow-wrap: anywhere; }
-.sh-edit-body li img { width: 50px; max-height: 72px; object-fit: contain; }
-.sh-edit-body [aria-current=true] { border: 2px solid var(--sh-accent); background: var(--sh-btn-hover); }
-.sh-edit-preview { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--sh-main-bg); border-radius: 6px; padding: 10px; }
-.sh-edit-preview p { flex: 0 0 auto; margin: 0 0 8px; color: var(--sh-panel-fg2); overflow-wrap: anywhere; }
-.sh-edit-stage { flex: 1; min-height: 0; min-width: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-.sh-edit-sheet { position: relative; flex: none; line-height: 0; box-shadow: 0 2px 10px #0003; }
-.sh-edit-sheet canvas { display: block; }
-.sh-edit-exports { margin-inline-start: auto; }
-.sh-collection-editor footer { padding-top: 10px; border-top: 1px solid var(--sh-menu-sep); }
+.sh-edit-body li span { overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.sh-edit-body li img { width: 38px; height: 52px; object-fit: contain; }
+.sh-edit-body [aria-current=true] { border-color: var(--sh-accent); background: var(--sh-btn-hover); }
+.sh-edit-preview { min-width: 0; min-height: 0; flex: 1; display: flex; background: var(--sh-main-bg); }
+.sh-edit-stage { flex: 1; min-height: 0; min-width: 0; display: flex; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; cursor: grab; user-select: none; }
+.sh-edit-stage.sh-edit-pan-key * { cursor: grab; }
+.sh-edit-pan-mode .sh-edit-crop { pointer-events: none; }
+.sh-edit-crop-tools [aria-pressed=true] { color: var(--sh-btn-primary-fg); background: var(--sh-btn-primary-bg); }
+.sh-edit-stage.sh-edit-panning, .sh-edit-stage.sh-edit-panning * { cursor: grabbing; }
+.sh-edit-sheet { position: relative; flex: none; margin: auto; line-height: 0; box-shadow: 0 2px 10px #0003; }
+.sh-edit-sheet canvas { display: block; background: white; }
+.sh-collection-editor footer { border-top: 1px solid var(--sh-menu-sep); gap: 8px; }
+.sh-collection-editor footer p { min-width: 0; flex: 1; margin: 0; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--sh-panel-fg2); }
+.sh-edit-navigation, .sh-edit-zoom-controls { flex-wrap: nowrap; font-variant-numeric: tabular-nums; }
+.sh-edit-navigation .sh-btn, .sh-edit-zoom-controls .sh-btn { padding: 0; width: 30px; font-size: 17px; }
+.sh-edit-zoom-controls output { min-width: 4ch; text-align: center; }
+.sh-edit-navigation span { min-width: 4ch; text-align: center; }
 .sh-edit-crop { position: absolute; inset: 0; overflow: hidden; touch-action: none; cursor: crosshair; }
 .sh-edit-selection { position: absolute; border: 2px solid var(--sh-accent); box-sizing: border-box; box-shadow: 0 0 0 2000px #0006; cursor: move; }
 .sh-edit-selection span { position: absolute; width: 12px; height: 12px; background: white; border: 1px solid var(--sh-accent); transform: translate(-50%, -50%); }
@@ -3003,14 +3010,13 @@ select.sh-select option:disabled {
 .sh-edit-selection [data-handle=s] { left: 50%; top: 100%; cursor: ns-resize; }
 .sh-edit-selection [data-handle=sw] { left: 0; top: 100%; cursor: nesw-resize; }
 .sh-edit-selection [data-handle=w] { left: 0; top: 50%; cursor: ew-resize; }
-.sh-edit-crop[hidden], .sh-edit-crop-tools[hidden] { display: none; }
-@media (max-width: 650px) { .sh-edit-body { grid-template-columns: 130px minmax(0, 1fr); } .sh-edit-body li img { width: 30px; } }
-
-@media (max-width: 650px) {
-  .sh-collection-editor { padding: 10px; }
-  .sh-edit-add-hint { display: none; }
-  .sh-edit-exports { margin-inline-start: 0; }
-  .sh-edit-tool-group + .sh-edit-tool-group { border: none; padding-inline-start: 0; }
+@media (max-width: 700px) {
+  .sh-collection-editor header, .sh-collection-editor footer, .sh-edit-tools, .sh-edit-crop-tools { padding: 4px 6px; }
+  .sh-collection-editor footer { justify-content: space-between; gap: 4px; }
+  .sh-collection-editor footer p { flex-basis: 100%; order: 1; font-size: 11px; }
+  .sh-edit-body ol { position: absolute; z-index: 1; inset: 0 auto 0 0; width: min(230px, 65vw); background: var(--sh-panel-bg); box-shadow: 3px 0 10px #0003; }
+  .sh-edit-popup { position: fixed; top: auto; inset-inline: 6px; max-width: none; width: auto; }
+  .sh-edit-tool-group + .sh-edit-tool-group { border: 0; padding-inline-start: 0; }
 }
 .sh-bind-roles > summary { color: var(--sh-btn-fg); font-weight: 500; }
 .sh-bind-roles[open] > summary { margin-bottom: 10px; }

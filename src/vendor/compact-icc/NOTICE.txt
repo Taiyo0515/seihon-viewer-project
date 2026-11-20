@@ -1,0 +1,4 @@
+sRGB-v2-micro.icc
+Compact ICC Profiles by Clinton Ingram, CC0 1.0 Universal (LICENSE)
+https://github.com/saucecontrol/Compact-ICC-Profiles/blob/bdd84663061bc4ae95ca70decff54f581e27f702/profiles/sRGB-v2-micro.icc
+SHA-256: 0a8a33aea66a6f154a5642ebe168ef287e73265d9f7b51c42a45e6eedbacda7a

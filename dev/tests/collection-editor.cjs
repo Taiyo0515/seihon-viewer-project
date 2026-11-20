@@ -24,7 +24,36 @@ await page.evaluate(async()=>{
 });
 await page.locator('#shCollect').click();await page.locator('#shCollectEdit').click();
 await page.waitForFunction(()=>window.editor&&!editor.busy&&editor.canvas.width>0);
-console.log('PASS preview');
+const editorDialog = page.locator("#shCollectionEditor");
+const zoomMenu = editorDialog.locator("[data-field=zoomMode]");
+const layout = () => page.evaluate(() => {
+ const rect = editor.canvas.getBoundingClientRect();
+ return {width:rect.width,height:rect.height,stageWidth:editor.stage.clientWidth,stageHeight:editor.stage.clientHeight};
+});
+assert.equal(await zoomMenu.inputValue(), "width");
+const initial = await layout();
+assert(Math.abs(initial.width - initial.stageWidth) <= 1 && initial.height > initial.stageHeight, JSON.stringify(initial));
+await editorDialog.locator("[data-action=sidebar]").click();
+await page.waitForFunction(width => editor.canvas.getBoundingClientRect().width > width + 100, initial.width);
+await zoomMenu.selectOption("page");
+let fit = await layout();
+assert(fit.height <= fit.stageHeight + 1 && fit.width <= fit.stageWidth + 1);
+await zoomMenu.selectOption("actual");
+assert(Math.abs((await layout()).width - 400 * 96 / 72) <= 1);
+await zoomMenu.selectOption("width");
+await editorDialog.locator("[data-action=zoomIn]").click();
+assert.equal(await zoomMenu.inputValue(), "custom");
+await page.waitForFunction(() => editor.canvas.width >= editor.canvas.clientWidth * devicePixelRatio - 1);
+await editorDialog.locator("[data-action=sidebar]").click();
+const stageBounds = await editorDialog.locator(".sh-edit-stage").boundingBox();
+const centerX = stageBounds.x + stageBounds.width / 2, centerY = stageBounds.y + stageBounds.height / 2;
+const topBefore = await page.evaluate(() => editor.stage.scrollTop);
+await page.mouse.move(centerX, centerY); await page.mouse.down();
+await page.mouse.move(centerX - 35, centerY - 65); await page.mouse.up();
+assert(await page.evaluate(() => editor.stage.scrollTop) >= topBefore + 60);
+await page.keyboard.down("Control"); await page.mouse.wheel(0, -40); await page.keyboard.up("Control");
+await zoomMenu.selectOption("width");
+console.log("PASS full-width preview, page fit, 100%, zoom, high-resolution redraw, pan and sidebar");
 let result=await page.evaluate(async()=>{
  const {editedCollectionPdf,cropFromSelection}=await import('./collection-edit.js');
  const {loadPdfFromBytes}=await import('./page-export.js');
@@ -48,10 +77,16 @@ for(const r of result){assert(Math.abs(r.width-r.expectedW)<.01);assert(Math.abs
 assert(result.some(r=>r.text.includes('FIRST')));console.log('PASS 8 rotation/CropBox/vector preservation cases');
 await page.locator('[data-action=right]').click();await page.waitForFunction(()=>!editor.busy&&editor.item.edits?.rotation===90);
 await page.locator('[data-action=crop]').click();await page.waitForFunction(()=>!editor.busy&&editor.cropping&&editor.box);
+await editorDialog.locator("[data-action=zoomIn]").click();
+await page.evaluate(() => editor.stage.scrollTo(0, 0));
 const bounds=await page.locator('.sh-edit-crop').boundingBox();
 await page.mouse.move(bounds.x+bounds.width*.15,bounds.y+bounds.height*.15);
 // full selection initially; dragging inside moves full rectangle, so create range via an edge handle
 await page.mouse.move(bounds.x+1,bounds.y+1);await page.mouse.down();await page.mouse.move(bounds.x+bounds.width*.2,bounds.y+bounds.height*.2);await page.mouse.up();
+const selection = await page.evaluate(() => ({...editor.box}));
+assert(Math.abs(selection.w - .2) < .01 && Math.abs(selection.h - .2) < .01, JSON.stringify(selection));
+await zoomMenu.selectOption("page");
+assert.deepEqual(await page.evaluate(() => ({...editor.box})), selection);
 await page.locator('[data-action=apply]').click();await page.waitForFunction(()=>!editor.busy&&editor.item.edits?.crop);
 console.log('PASS interactive crop and rotation');
 await page.locator('[data-action=duplicate]').click();await page.waitForFunction(()=>!editor.busy&&editor.collection.count===3);
@@ -127,7 +162,3 @@ console.log('PASS main viewer still opens PDF');
 fs.writeFileSync(path.resolve(__dirname,'../logs/collection-editor-results.json'),JSON.stringify({checks:result,outputDims:output.dims,scan,scroll,errors},null,2));
 }finally{await ctx.close()}
 })().catch(e=>{console.error(e);process.exit(1)});
-
-
-
-

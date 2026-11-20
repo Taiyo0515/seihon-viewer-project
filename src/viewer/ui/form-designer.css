@@ -1,0 +1,26 @@
+.sh-form-designer {
+  width: min(1100px, 98vw); max-width: 98vw; height: min(880px, 96dvh); max-height: 96dvh;
+  box-sizing: border-box; padding: 12px; overflow: auto;
+}
+.sh-form-designer[open] { display: flex; flex-direction: column; gap: 8px; }
+.sh-form-designer header, .sh-form-designer footer, .sh-form-tools {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+}
+.sh-form-designer h2 { margin: 0; flex: 1; font-size: 18px; }
+.sh-form-designer [data-filename] { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1; }
+.sh-form-designer .sh-btn { height: 32px; padding-inline: 12px; }
+.sh-form-designer button[hidden], .sh-form-sheet[hidden] { display: none; }
+.sh-form-designer input:is([type=text],[type=number]) {
+  box-sizing: border-box; font: inherit; background: var(--sh-input-bg); color: inherit;
+  border: 1px solid var(--sh-btn-border); border-radius: 4px; padding: 4px 6px;
+}
+.sh-form-designer input[type=number] { width: 5em; }
+.sh-form-designer footer [role=status] { flex: 1 1 12em; }
+.sh-form-stage { flex: 1; min-height: 180px; overflow: auto; padding: 8px; background: var(--sh-main-bg); }
+.sh-form-sheet { position: relative; margin-inline: auto; background: white; box-shadow: 0 2px 8px #0004; }
+.sh-form-sheet canvas { display: block; width: 100%; height: auto; }
+.sh-form-marks { position: absolute; inset: 0; cursor: crosshair; touch-action: none; user-select: none; }
+.sh-form-marks span {
+  position: absolute; box-sizing: border-box; overflow: hidden; white-space: nowrap;
+  background: #cbe2ffb3; color: #092d59; border: 1px solid #185db4; font-size: 12px; pointer-events: none;
+}

@@ -250,3 +250,10 @@
 --------------------------------------------------------------------
 製本ビューア自体のコード(上記以外のファイル)は、個人利用のために
 作成したものです。
+
+Offline markup preview (see vendor/markup/ for upstream licenses)
+  markdown-it 14.3.3 — MIT — https://github.com/markdown-it/markdown-it
+  Mermaid 11.17.2 — MIT — https://github.com/mermaid-js/mermaid
+  KaTeX 0.16.47 — MIT — https://github.com/KaTeX/KaTeX
+  Asciidoctor.js 3.0.4 — MIT — https://github.com/asciidoctor/asciidoctor.js
+  DOMPurify 3.4.18 — Apache-2.0 OR MPL-2.0 — https://github.com/cure53/DOMPurify

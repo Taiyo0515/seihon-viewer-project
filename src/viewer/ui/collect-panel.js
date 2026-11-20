@@ -216,7 +216,7 @@ export class CollectPanel {
     this.button.title = count ? `ページ収集(${count}ページ)` : "ページ収集";
     this.button.setAttribute("aria-label", this.button.title);
     const hasDoc = !!this.app.pdfDocument;
-    for (const id of ["shCollectAddRange", "shCollectAddAll"]) {
+    for (const id of ["shCollectAddRange", "shCollectAddAll", "shCollectRegion"]) {
       document.getElementById(id).disabled = !hasDoc;
     }
     this.rangeInput.disabled = !hasDoc;

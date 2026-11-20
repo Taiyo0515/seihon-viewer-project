@@ -133,3 +133,7 @@ sh dev/run-node.sh dev/opt-0.6.3/snap-e2e.mjs <出力フォルダ>              
 
 ## 0.12.2の確認
 `node dev/tests/manual-scan.cjs` で旧auto設定・選択/キャッシュ保存後の再読込でも自動検査/適用なし、手動適用と手動プレビュー維持、先頭白紙0の7/8ページと既存正数指定を確認する。
+
+## 0.14.0の確認
+
+専用ChromiumとPlaywrightを使い、`node dev/tests/tool-home.cjs` で開始画面、OCR、保護・解除、回転したページからの範囲保存・画像コピー・収集を確認します。画像コピーはテスト用の書き込み先でPNGを照合します。PDF操作は `pdf-tools.cjs`、編集・比較は `review-tools.cjs`、Office変換は `office-tools.cjs`、長期保存形式は `archive-tool.cjs` を使用します。`collection-editor.cjs` は幅合わせ・全体表示・拡大・移動・切り取り・出力を確認します。各試験は同じ dev/tests にあります。

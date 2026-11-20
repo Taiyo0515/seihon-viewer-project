@@ -1,0 +1,45 @@
+#shEmpty:not([hidden]) { display: block; overscroll-behavior: contain; }
+.sh-home-shell, .sh-tools-dialog { box-sizing: border-box; color: var(--sh-panel-fg); font: 14px/1.55 var(--sh-font); }
+.sh-home-shell { max-width: 1160px; margin: 0 auto; padding: clamp(16px, 4vw, 50px) clamp(14px, 4vw, 48px); }
+.sh-home-open { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 18px; padding: 23px clamp(15px, 3vw, 30px); border: 1px solid var(--sh-menu-sep); border-radius: 12px; background: var(--sh-panel-bg); }
+.sh-home-open h1 { font-size: 22px; line-height: 1.4; }
+.sh-home-open p, .sh-tools-grid small { color: var(--sh-panel-fg2); }
+.sh-home-logo, .sh-tool-icon { display: inline-grid; place-items: center; border-radius: 9px; flex: none; }
+.sh-home-logo { width: 46px; height: 46px; background: var(--sh-btn-primary-bg); color: var(--sh-btn-primary-fg); }
+.sh-home-logo svg { width: 30px; height: 30px; }
+.sh-home-open .sh-btn { margin-inline-start: auto; }
+.sh-tools-head, .sh-tools-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.sh-tools-head { margin: 28px 0 14px; }
+.sh-tools-head h2 { margin-inline-end: auto; font-size: 22px; }
+.sh-tools-head input, .sh-tools-filters button { background: var(--sh-panel-bg); border: 1px solid var(--sh-btn-border); border-radius: 8px; color: inherit; font: inherit; padding: 6px 11px; }
+.sh-tools-head input { width: min(200px, 100%); }
+.sh-tools-filters { margin-bottom: 15px; }
+.sh-tools-filters button { cursor: pointer; border-radius: 24px; font-size: 13px; }
+.sh-tools-filters button[aria-pressed="true"] { color: var(--sh-btn-primary-fg); background: var(--sh-btn-primary-bg); border-color: transparent; }
+.sh-tools-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(min(235px,100%),1fr)); gap: 10px; }
+.sh-tools-grid button { display: flex; align-items: flex-start; gap: 13px; padding: 17px 14px; text-align: start; font: inherit; color: inherit; background: var(--sh-panel-bg); border: 1px solid var(--sh-menu-sep); border-radius: 10px; cursor: pointer; }
+.sh-tools-grid button[hidden] { display: none; }
+.sh-tools-grid button:hover, .sh-tools-grid button:focus-visible { border-color: var(--sh-accent); }
+.sh-tool-icon { width: 34px; height: 34px; color: color-mix(in srgb, hsl(var(--tool-hue) 65% 52%) 60%, var(--sh-panel-fg)); background: color-mix(in srgb, hsl(var(--tool-hue) 65% 52%) 15%, var(--sh-panel-bg)); }
+.sh-tools-grid strong, .sh-tools-grid small { display: block; }
+.sh-tools-grid strong { font-size: 15px; }
+.sh-tools-grid small { margin-top: 4px; line-height: 1.5; font-size: 12px; }
+.sh-tools-dialog { margin: auto; width: min(1050px, 96vw); max-height: 90dvh; overflow: auto; padding: 19px; border: 1px solid var(--sh-btn-border); border-radius: 12px; background: var(--sh-main-bg); }
+.sh-tools-dialog .sh-tools-head { margin-top: 0; }
+.sh-tools-dialog::backdrop { background: #0008; }
+.sh-region-layer { position: absolute; inset: 0; z-index: 25; overflow: hidden; cursor: crosshair; touch-action: none; user-select: none; outline: 2px dashed var(--sh-accent); outline-offset: -2px; }
+.sh-region-rect { position: absolute; box-sizing: border-box; border: 2px solid #1879e0; box-shadow: 0 0 0 100vmax #17202966; background: #55aaff20; pointer-events: none; }
+.sh-region-bar { position: fixed; z-index: 501; inset: auto 0 10px; margin-inline: auto; width: fit-content; max-width: calc(100% - 18px); box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; border: 1px solid var(--sh-btn-border); background: var(--sh-panel-bg); color: var(--sh-panel-fg); box-shadow: var(--sh-menu-shadow); border-radius: 10px; padding: 8px; font: 13px var(--sh-font); }
+.sh-region-bar button { min-height: 30px; font-size: 13px; padding: 4px 10px; }
+@media (max-width: 560px) { .sh-home-open .sh-btn { margin-inline-start: 0; } .sh-home-open { gap: 9px; } }
+
+.sh-local-tool { margin: auto; width: min(450px, 94vw); max-height: 92dvh; overflow: auto; box-sizing: border-box; border: 1px solid var(--sh-btn-border); border-radius: 12px; background: var(--sh-panel-bg); color: var(--sh-panel-fg); padding: 20px; font: 14px/1.6 var(--sh-font); }
+.sh-local-tool::backdrop { background: #0008; }
+.sh-local-tool form, .sh-local-tool form > label { display: grid; gap: 6px; }
+.sh-local-tool form { gap: 15px; }
+.sh-local-tool header, .sh-local-tool footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.sh-local-tool h2 { font-size: 18px; }
+.sh-local-tool footer { justify-content: flex-end; }
+.sh-local-tool input, .sh-local-tool select { font: inherit; color: inherit; background: var(--sh-main-bg); border: 1px solid var(--sh-btn-border); border-radius: 7px; padding: 6px; min-width: 0; width: 100%; box-sizing: border-box; }
+.sh-local-tool p { color: var(--sh-panel-fg2); }
+.sh-local-tool [role=status]:empty { display: none; }

@@ -31,7 +31,9 @@ const CHUNK_BYTES = 1024 * 1024;
 /** 補助プログラムを使う権限があるか */
 export async function helperPermitted() {
   try {
-    return !!(await chrome.permissions.contains(HELPER_PERMISSION));
+    const granted = await chrome.permissions.contains(HELPER_PERMISSION);
+    const { clipboardHelperEnabled } = await chrome.storage.local.get("clipboardHelperEnabled");
+    return granted && clipboardHelperEnabled !== false;
   } catch {
     return false;
   }

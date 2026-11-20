@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>文書ビューア</title><link rel="stylesheet" href="document.css"></head>
+<body><header><a href="../viewer/viewer.html">製本ビューア</a><h1 id="name">文書</h1><button id="edit" hidden>編集</button><button id="save" hidden>原稿を保存…</button></header>
+<nav aria-label="表示と編集">
+<label id="autoLabel" hidden><input id="auto" type="checkbox"> 自動更新</label>
+<button id="refresh" hidden>プレビュー更新</button><button id="switch" hidden>原文を表示</button>
+<label id="aoLabel" hidden><input id="ao" type="checkbox"> 青空文庫表示</label>
+<button id="folder" hidden>画像フォルダーを選ぶ…</button><button id="connect" hidden>TeX Liveと接続</button><a id="setup" href="../helper/tex-windows/README.txt" target="_blank" hidden>連携手順</a>
+<button id="unlink" hidden>連携を解除</button><button id="pdfSave" hidden>PDFを保存…</button>
+<span id="status" role="status" aria-live="polite"></span></nav>
+<main id="workspace"><textarea id="source" aria-label="原文" spellcheck="false" hidden></textarea><div id="divider" role="separator" tabindex="0" aria-label="編集欄の幅" aria-orientation="vertical" hidden></div><section id="preview" aria-label="プレビュー"></section></main>
+<script type="module" src="document.js"></script></body></html>

@@ -1,0 +1,41 @@
+.sh-dialog.sh-review-dialog {
+  box-sizing: border-box;
+  width: min(1280px, calc(100vw - 12px));
+  height: calc(100dvh - 16px);
+  max-height: calc(100dvh - 16px);
+  padding: 0;
+}
+.sh-review-dialog[open] { display: flex; flex-direction: column; overflow: auto; }
+.sh-review-dialog [hidden] { display: none !important; }
+.sh-review-dialog header, .sh-review-dialog footer {
+  padding: 8px 16px; display: flex; justify-content: space-between; gap: 8px; align-items: center;
+}
+.sh-review-dialog header { border-bottom: 1px solid var(--sh-menu-sep); }
+.sh-review-dialog footer { border-top: 1px solid var(--sh-menu-sep); flex-wrap: wrap; }
+.sh-review-dialog h2, .sh-review-dialog p { margin: 0; }
+.sh-review-dialog footer p { flex: 1 1 150px; overflow-wrap: anywhere; }
+.sh-review-dialog footer button { margin-inline-start: auto; }
+.sh-review-layout { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(180px, 22%) minmax(0, 1fr); }
+.sh-review-layout aside { padding: 12px; overflow: auto; border-inline-end: 1px solid var(--sh-menu-sep); }
+.sh-review-layout aside > *, .sh-review-layout aside [data-files] > label { display: block; margin-bottom: 12px; }
+.sh-review-layout input:not([type=file]), .sh-review-layout select {
+  border: 1px solid var(--sh-btn-border); border-radius: 4px; color: inherit; background: var(--sh-panel-bg); padding: 3px 6px;
+}
+.sh-review-layout aside input, .sh-review-layout aside select {
+  display: block; box-sizing: border-box; width: 100%; font: inherit; margin-top: 4px;
+}
+.sh-review-layout [data-ink] { display: block; width: 100%; background: white; touch-action: none; cursor: crosshair; margin-block: 4px; }
+.sh-review-work { display: flex; flex-direction: column; min-height: 0; }
+.sh-review-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 10px; }
+.sh-review-nav input { width: 5em; }
+.sh-review-nav label { margin-inline-start: auto; }
+.sh-review-stage { flex: 1; min-height: 0; position: relative; background: var(--sh-main-bg); overflow: auto; overscroll-behavior: contain; }
+.sh-review-paper { position: relative; margin: 7px auto; background: white; }
+.sh-review-paper canvas { width: 100%; height: auto; display: block; }
+.sh-review-paper [data-overlay] { position: absolute; inset: 0; cursor: crosshair; }
+@media (max-width: 650px) {
+  .sh-review-layout { grid-template-columns: 1fr; grid-template-rows: minmax(90px, auto) minmax(150px, 1fr); }
+  .sh-review-layout aside { max-height: 26dvh; border-inline-end: 0; border-bottom: 1px solid var(--sh-menu-sep); }
+  .sh-review-layout aside [data-ink] { width: min(100%, 260px); }
+  .sh-review-layout aside > *, .sh-review-layout aside [data-files] > label { margin-bottom: 6px; }
+}

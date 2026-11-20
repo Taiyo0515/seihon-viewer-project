@@ -34,13 +34,15 @@ import { ScanArranger } from "./scan/scan-arranger.js";
 import { EbookRouter } from "./ebook/ebook-router.js";
 import { ScanLogView } from "./scan/scan-log-view.js";
 import { PdfConvertDialog } from "./ui/convert-dialog.js";
-import { OPEN_ACCEPT } from "../common/ebook-formats.js";
-import { getHandoff } from "../common/handoff.js";
+import { OPEN_ACCEPT, documentFormat } from "../common/ebook-formats.js";
+import { getHandoff, putHandoff } from "../common/handoff.js";
 import { ScanChip, ScanDialog } from "./ui/scan-ui.js";
 import { SidebarTabs } from "./ui/sidebar.js";
 import { SourceMenu } from "./ui/source-menu.js";
 import { ThumbSelection } from "./ui/thumb-select.js";
 import { Toolbar } from "./ui/toolbar.js";
+import { ToolHome } from "./ui/tool-home.js";
+import { RegionCapture } from "./ui/region-capture.js";
 
 const boot = window.__seihon;
 const app = window.PDFViewerApplication;
@@ -222,7 +224,44 @@ const thumbSelection = new ThumbSelection(app, {
   onRoles: (pages, anchor) => contextMenu?.openRoleMenuAt(pages, anchor),
   editor: pageEditor,
 });
+const regionCapture = new RegionCapture({ app, collection, docSource, pageCopy, getSettings });
+document.getElementById("shCollectRegion").addEventListener("click", () => {
+  collectPanel.close();
+  regionCapture.start();
+});
+const toolHome = new ToolHome({
+  onError: message => toast.show(message, { kind: "error" }),
+  openCollection: () => collectPanel.editor.run(() => collectPanel.editor.open()),
+  openViewerTool: async tool => {
+    if (!app.pdfDocument) {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = ".pdf,application/pdf";
+      const file = await new Promise(resolve => {
+        input.oncancel = () => resolve(null);
+        input.onchange = () => resolve(input.files[0]);
+        input.click();
+      });
+      if (!file) { return; }
+      if (!await app.open({ data: new Uint8Array(await file.arrayBuffer()), filename: file.name })) { return; }
+      const opened = app.pdfDocument;
+      await app.pdfViewer.onePageRendered;
+      if (app.pdfDocument !== opened) { return; }
+    }
+    if (tool === "region") { await regionCapture.start(); }
+    if (tool === "annotate") { annotations.setTool("text"); }
+    if (tool === "forms") {
+      const doc = app.pdfDocument;
+      const fields = await doc.getFieldObjects();
+      if (app.pdfDocument !== doc) { return; }
+      if (!fields?.size) { toast.show("入力欄のないPDFです。テキスト入力で記入できます"); annotations.setTool("text"); }
+      else { toast.show("ページ上の入力欄を選んで記入できます。記入後はPDFを保存してください"); }
+    }
+  },
+});
+emptyState.onShow = () => toolHome.initialize();
 contextMenu = new ViewerContextMenu({
+  regionCapture,
   app,
   pageCopy,
   collection,
@@ -481,6 +520,29 @@ function sanitizeViewHistory() {
       return false;
     }
     if (!special) {
+      let fileName = args.filename || args.originalUrl || args.url || "";
+      try {
+        if (/^(https?|file):/i.test(fileName)) fileName = new URL(fileName).pathname;
+        fileName = decodeURIComponent(fileName);
+      } catch {}
+      fileName = fileName.split(/[\\/]/).pop();
+      if (documentFormat(fileName)) {
+        try {
+          let blob;
+          if (args.data) blob = new Blob([args.data]);
+          else {
+            const response = await fetch(args.url);
+            if (!response.ok) throw new Error("ファイルを読み込めませんでした");
+            blob = await response.blob();
+          }
+          const id = await putHandoff(blob, { name: fileName });
+          location.assign(chrome.runtime.getURL("reader/document.html?h=" + id));
+          return true;
+        } catch (error) {
+          showLoadError(error);
+          return false;
+        }
+      }
       scanArranger.beforeUserOpen();
       // 0.4: 電子書籍・コミックなら、それに合った方法で開く(PDF なら null が返り、このまま PDF.js で開く)
       const handled = await ebookRouter.intercept(args);
@@ -1116,6 +1178,8 @@ const moreMenu = new PopupMenu({
     const compact = id => !document.getElementById(id).getClientRects().length;
     const scanInMenu = compact("shScan") && !document.getElementById("shScan").hidden;
     return [
+      { label: "PDFツール一覧…", icon: "layers", onSelect: () => toolHome.open() },
+      ...(hasDoc ? [{ label: "ページの一部分を選択…", icon: "present", onSelect: () => regionCapture.start() }] : []),
       { header: "閲覧" },
       ...(compact("shViewMode") ? viewModeItems() : []),
       ...(compact("shBindDir") ? [{ label: book.direction === "rtl" ? "左綴じに切り替える" : "右綴じに切り替える", icon: "bind-ltr", disabled: !hasDoc, onSelect: () => changeDirection(book.direction === "rtl" ? "ltr" : "rtl") }] : []),

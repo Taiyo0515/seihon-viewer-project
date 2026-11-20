@@ -339,6 +339,7 @@ function bindHelper() {
       toast(`権限を求められませんでした: ${e?.message || e}`);
     }
     if (granted) {
+      await chrome.storage.local.set({ clipboardHelperEnabled: true });
       toast("許可しました");
     }
     renderHelper();
@@ -349,7 +350,10 @@ function bindHelper() {
   });
   $("helperDisable").addEventListener("click", async () => {
     try {
-      await chrome.permissions.remove(HELPER_PERMISSION);
+      await chrome.storage.local.set({ clipboardHelperEnabled: false });
+      if (!(await chrome.storage.local.get("texLiveLinked")).texLiveLinked) {
+        await chrome.permissions.remove(HELPER_PERMISSION);
+      }
       toast("補助プログラムを使うのをやめました");
     } catch (e) {
       toast(`やめられませんでした: ${e?.message || e}`);
@@ -711,6 +715,26 @@ function bindScanChoices() {
 }
 
 // ---- 起動 -------------------------------------------------------------------
+import { connectTexLive, disconnectTexLive, isTexLiveLinked } from "../viewer/tex-live.js";
+let texLinked;
+async function showTexLink() {
+  texLinked = await isTexLiveLinked();
+  $("texLink").textContent = texLinked ? "連携を解除" : "TeX Liveと接続";
+  $("texStatus").textContent = texLinked ? "接続済み" : "未連携";
+  $("texLink").disabled = false;
+}
+$("texLink").onclick = async () => {
+  $("texLink").disabled = true;
+  try {
+    if (texLinked) await disconnectTexLive();
+    else await connectTexLive();
+    await showTexLink();
+  } catch (error) {
+    $("texStatus").textContent = error.message;
+    $("texLink").disabled = false;
+  }
+};
+void showTexLink();
 const settings = await loadSettings();
 render(settings);
 bind();

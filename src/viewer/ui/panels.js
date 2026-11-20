@@ -3,6 +3,7 @@
  */
 
 import { hydrateIcons } from "../icons.js";
+import { documentFormat } from "../../common/ebook-formats.js";
 
 /** ドラッグ&ドロップで受け付けるファイル */
 const OPENABLE = /\.(pdf|epub|mobi|azw3?|prc|kfx|cbz|cbr|cb7|fb2|zip|rar|7z)$/i;
@@ -79,6 +80,7 @@ export class EmptyState {
   }
 
   show(note = "") {
+    this.onShow?.();
     this.note.hidden = !note;
     this.note.textContent = note;
     this.el.hidden = false;
@@ -153,7 +155,7 @@ export function setupDropZone({ onFile, onUrl }) {
   window.addEventListener(
     "dragenter",
     e => {
-      if (e.target.closest?.("#shCollectionEditor")) { return; }
+      if (e.target.closest?.("dialog[open]")) { return; }
       if (!hasFiles(e)) {
         return;
       }
@@ -175,7 +177,7 @@ export function setupDropZone({ onFile, onUrl }) {
   window.addEventListener(
     "dragover",
     e => {
-      if (e.target.closest?.("#shCollectionEditor")) { return; }
+      if (e.target.closest?.("dialog[open]")) { return; }
       if (!hasFiles(e)) {
         return;
       }
@@ -190,7 +192,7 @@ export function setupDropZone({ onFile, onUrl }) {
     e => {
       depth = 0;
       overlay.hidden = true;
-      if (e.target.closest?.("#shCollectionEditor")) { return; }
+      if (e.target.closest?.("dialog[open]")) { return; }
       if (!hasFiles(e)) {
         return;
       }
@@ -198,7 +200,7 @@ export function setupDropZone({ onFile, onUrl }) {
       e.stopPropagation();
       // PDF と、電子書籍・コミック(0.4)。中身は開くときに確かめる
       const file = [...(e.dataTransfer.files || [])].find(
-        f => f.type === "application/pdf" || OPENABLE.test(f.name)
+        f => f.type === "application/pdf" || OPENABLE.test(f.name) || documentFormat(f.name)
       );
       if (file) {
         onFile(file);

@@ -1,0 +1,60 @@
+.sh-dialog.sh-pdf-tool-dialog {
+  box-sizing: border-box;
+  width: min(540px, calc(100vw - 16px));
+  max-height: calc(100dvh - 16px);
+  padding: 0;
+}
+.sh-pdf-tool-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.sh-pdf-tool-dialog header, .sh-pdf-tool-dialog footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 18px;
+}
+.sh-pdf-tool-dialog header { border-bottom: 1px solid var(--sh-menu-sep); }
+.sh-pdf-tool-dialog footer { border-top: 1px solid var(--sh-menu-sep); }
+.sh-pdf-tool-dialog h2, .sh-pdf-tool-dialog p { margin: 0; }
+.sh-pdf-tool-dialog footer p { flex: 1 1 160px; overflow-wrap: anywhere; }
+.sh-pdf-tool-dialog footer .sh-btn { margin-inline-start: auto; }
+.sh-tool-body { overflow-y: auto; overscroll-behavior: contain; padding: 16px 18px; }
+.sh-tool-body fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.sh-tool-input {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px dashed var(--sh-btn-border);
+  border-radius: 9px;
+  padding: 18px 10px;
+  color: var(--sh-panel-fg2);
+}
+.sh-tool-files { padding: 0; margin: 8px 0; list-style: none; }
+.sh-tool-files li { display: flex; align-items: center; gap: 4px; padding: 6px 0; }
+.sh-tool-files li + li { border-top: 1px solid var(--sh-menu-sep); }
+.sh-tool-files li > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.sh-tool-files small { display: block; color: var(--sh-panel-fg2); }
+.sh-tool-files .sh-btn { min-width: 30px; padding: 3px 7px; }
+.sh-tool-fields { display: grid; gap: 10px; }
+.sh-tool-fields label { display: grid; gap: 3px; }
+.sh-tool-fields label[hidden], .sh-pdf-tool-dialog [data-hint][hidden] { display: none; }
+.sh-tool-fields input, .sh-tool-fields select {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 6px 9px;
+  color: var(--sh-panel-fg);
+  font: inherit;
+  background: var(--sh-panel-bg);
+  border: 1px solid var(--sh-btn-border);
+  border-radius: 5px;
+}
+.sh-pdf-tool-dialog [data-hint] { margin-top: 8px; }
+@media (max-height: 400px) {
+  .sh-pdf-tool-dialog header, .sh-pdf-tool-dialog footer { padding-block: 5px; }
+  .sh-tool-input { padding: 5px; }
+}

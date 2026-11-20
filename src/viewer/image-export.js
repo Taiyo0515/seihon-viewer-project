@@ -257,17 +257,19 @@ export function renderScaleFor(base, settings, analysis, shrink = 1) {
  * @param {object} [o.analysis] 調べた結果(無ければ必要なときに調べる)
  * @returns {Promise<{blob:Blob, width:number, height:number, type:"image/png"}>}
  */
-export async function renderPagePng(pdfDoc, pageNumber, { settings, rotation = 0, shrink = 1, analysis = null }) {
+export async function renderPagePng(pdfDoc, pageNumber, { settings, rotation = 0, shrink = 1, analysis = null, region = null }) {
   const page = await pdfDoc.getPage(pageNumber);
   const totalRotation = (((page.rotate + rotation) % 360) + 360) % 360;
   const base = page.getViewport({ scale: 1, rotation: totalRotation });
   if (!analysis && settings.imageQuality === "original") {
     analysis = await analyzePage(page);
   }
-  const scale = renderScaleFor(base, settings, analysis, shrink);
+  // 選択範囲だけのキャンバスを確保する。画面の表示倍率にかかわらずPDFから直接描画する。
+  const bounds = region || { x: 0, y: 0, w: 1, h: 1 };
+  const scale = renderScaleFor({ width: base.width * bounds.w, height: base.height * bounds.h }, settings, analysis, shrink);
   const viewport = page.getViewport({ scale, rotation: totalRotation });
-  const width = Math.max(1, Math.round(viewport.width));
-  const height = Math.max(1, Math.round(viewport.height));
+  const width = Math.max(1, Math.round(viewport.width * bounds.w));
+  const height = Math.max(1, Math.round(viewport.height * bounds.h));
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -278,6 +280,7 @@ export async function renderPagePng(pdfDoc, pageNumber, { settings, rotation = 0
     await page.render({
       canvas,
       viewport,
+      transform: region ? [1, 0, 0, 1, -bounds.x * viewport.width, -bounds.y * viewport.height] : null,
       // 「印刷」と同じ描き方: フォームの入力内容と、自分で書き込んだ注釈も画像に含める
       intent: "print",
       annotationMode: pdfjs().AnnotationMode.ENABLE_STORAGE,
@@ -286,7 +289,7 @@ export async function renderPagePng(pdfDoc, pageNumber, { settings, rotation = 0
     const blob = await new Promise((resolve, reject) =>
       canvas.toBlob(b => (b ? resolve(b) : reject(new Error("PNG に変換できませんでした"))), "image/png")
     );
-    return { blob, width, height, type: "image/png" };
+    return { blob, width, height, type: "image/png", pointWidth: base.width * bounds.w, pointHeight: base.height * bounds.h };
   } finally {
     // 大きな画像のメモリをすぐに解放する
     canvas.width = 0;

@@ -189,6 +189,22 @@ export async function hasPdf(key) {
   return count > 0;
 }
 
+/** 範囲画像と収集項目を一緒に登録し、他のタブの整理と競合しても片方だけを残さない。 */
+export async function addCollectedClip(name, bytes, limit) {
+  const key = "clip:" + crypto.randomUUID();
+  const data = new Blob([bytes], { type: "application/pdf" });
+  await withStores(["pdfs", "collection"], "readwrite", async (pdfs, items) => {
+    const [sources, entries] = await Promise.all([promisify(pdfs.getAll()), promisify(items.getAll())]);
+    const usage = sources.reduce((n, p) => n + (p.size || 0), 0) + entries.reduce((n, i) => n + (i.thumb?.size || 0), 0);
+    if (usage + data.size > limit) { throw new Error("収集の保存上限を超えます。詳細設定で上限を変更できます"); }
+    const order = entries.reduce((n, i) => Math.max(n, i.order), 0) + 1;
+    const now = Date.now();
+    pdfs.add({ key, name, data, size: data.size, pages: 1, addedAt: now, usedAt: now });
+    items.add({ pdfKey: key, name, sourceType: "image", pageIndex: 0, label: "", order, addedAt: now, thumb: null });
+  });
+  notifyChange("collection");
+}
+
 /** 保存している PDF の一覧(データ本体は含めない) */
 export async function listPdfInfos() {
   const out = [];

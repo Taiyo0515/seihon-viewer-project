@@ -12,7 +12,7 @@
 
 import "../lib/foliate/view.js";
 import { getHandoff, putHandoff } from "../common/handoff.js";
-import { FORMAT_LABELS, OPEN_ACCEPT } from "../common/ebook-formats.js";
+import { FORMAT_LABELS, OPEN_ACCEPT, documentFormat } from "../common/ebook-formats.js";
 import { formatBytes, saveBlobAs, sanitizeFileName } from "../common/files.js";
 import { loadSettings } from "../common/settings.js";
 import { applyThemePreference, readCachedThemePreference } from "../viewer/theme.js";
@@ -241,6 +241,11 @@ async function openBlob(blob, { name = "", url = "" } = {}) {
   showLoading(`${name || "本"} を開いています…`);
   let info;
   try {
+    if (documentFormat(name)) {
+      const id = await putHandoff(blob, { name });
+      location.assign(chrome.runtime.getURL("reader/document.html?h=" + id));
+      return;
+    }
     info = await inspectEbook(blob, name);
   } catch (e) {
     if (e instanceof EbookUnsupportedError) {

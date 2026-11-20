@@ -28,7 +28,13 @@ export const EBOOK_EXTENSIONS = [
 ];
 
 /** ファイルを選ぶ画面の accept 属性(PDF と電子書籍・コミック) */
+export const DOCUMENT_EXTENSIONS = ["md","markdown","mmd","mermaid","adoc","asciidoc","txt","csv","tsv","svg","tex"];
+export function documentFormat(name) {
+  const ext = /[.]([a-z]+)$/i.exec(name)?.[1].toLowerCase();
+  return DOCUMENT_EXTENSIONS.includes(ext) ? ext : null;
+}
 export const OPEN_ACCEPT = [
+  ...DOCUMENT_EXTENSIONS.map(ext => "." + ext),
   "application/pdf",
   ".pdf",
   "application/epub+zip",

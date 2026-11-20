@@ -20,6 +20,11 @@
     <link rel="resource" type="application/l10n" href="/pdfjs/web/locale/locale.json" />
     <link rel="stylesheet" href="/pdfjs/web/viewer.css" />
     <link rel="stylesheet" href="seihon.css" />
+    <link rel="stylesheet" href="ui/tool-home.css" />
+    <link rel="stylesheet" href="ui/pdf-tools.css" />
+    <link rel="stylesheet" href="ui/conversion-tools.css" />
+    <link rel="stylesheet" href="ui/review-tools.css" />
+    <link rel="stylesheet" href="ui/form-designer.css" />
     <!-- 1) 起動準備(PDF.js より先に実行): URL の整理・テーマ・PDF.js の設定・Worker の先行起動 -->
     <script src="boot.js" type="module"></script>
     <!-- 2) PDF.js 本体(公式配布物そのまま) -->
@@ -858,15 +863,14 @@
 
         <!-- PDF を開いていないとき -->
         <div id="shEmpty" class="sh-panel-host" hidden>
-          <div class="sh-panel">
-            <div class="sh-panel-icon" data-icon="book-large"></div>
-            <h1>製本ビューア</h1>
-            <p>PDF・電子書籍(EPUB・MOBI・AZW・AZW3)・コミック(CBZ・CBR)を、ここにドラッグ&amp;ドロップするか、ファイルを選んで開きます。</p>
-            <p class="sh-panel-buttons">
-              <button id="shEmptyOpen" class="sh-btn sh-btn-primary" type="button">ファイルを選ぶ</button>
-            </p>
-            <p class="sh-panel-note">ショートカット: <kbd>Ctrl</kbd> + <kbd>O</kbd></p>
+          <div class="sh-home-shell">
+            <header class="sh-home-open">
+              <span class="sh-home-logo" data-icon="book-large"></span>
+              <div><h1>製本ビューア</h1><p>PDF・電子書籍・Markdown・図・表などをここにドロップして読む</p></div>
+              <button id="shEmptyOpen" class="sh-btn sh-btn-primary" type="button" title="Ctrl+O">ファイルを開く</button>
+            </header>
             <p id="shEmptyNote" class="sh-panel-note" hidden></p>
+            <section id="shHomeCatalog" aria-label="PDFツール"></section>
           </div>
         </div>
 
@@ -1333,6 +1337,7 @@
           </div>
           <p id="shCollectRangeError" class="sh-collect-error" role="alert" hidden></p>
           <button id="shCollectAddAll" class="sh-btn sh-btn-small sh-btn-text" type="button">この PDF を全部追加</button>
+          <button id="shCollectRegion" class="sh-btn sh-btn-small" type="button">ページの一部分を選択…</button>
           <p class="sh-collect-help">ページやサムネイルを右クリック →「収集に追加」でも追加できます。サムネイルは Ctrl+クリック・Shift+クリックで複数選べます。</p>
         </section>
         <div class="sh-collect-list-head">

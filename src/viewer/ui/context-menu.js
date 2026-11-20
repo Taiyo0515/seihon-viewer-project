@@ -68,6 +68,7 @@ export class ViewerContextMenu {
         onSelect: () => this.pageCopy.copySinglePage(pageNumber),
       },
       { label: "画像を保存…", icon: "file-png", onSelect: () => this.pageCopy.savePageImage(pageNumber) },
+      { label: "ページの一部分を選択…", icon: "present", onSelect: () => this.regionCapture.start(pageNumber) },
       { separator: true },
       collected
         ? { label: "収集から外す", icon: "collect-remove", onSelect: () => this.collection.removeCurrentPage(pageNumber) }
