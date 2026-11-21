@@ -1,3 +1,5 @@
+@import url("editorial-palette.css");
+
 /* 詳細設定・初回案内ページの共通スタイル(Chrome の設定画面に近い見た目) */
 
 :root,
@@ -799,4 +801,94 @@ select optgroup {
   margin: 6px 0 0;
   font-size: 12px;
   color: var(--muted);
+}
+
+/* In the manuscript theme the settings read like a book index, with a ruled
+   masthead and a separate working sheet for each group of controls. */
+:root[data-ui-theme="original"] {
+  --bg: var(--desk);
+  --card: var(--sheet);
+  --fg: var(--type);
+  --fg2: var(--secondary-type);
+  --muted: var(--quiet-type);
+  --accent: var(--stamp);
+  --accent-fg: var(--on-stamp);
+  --border: var(--rule);
+  --input-bg: var(--sheet);
+  --shadow: 0 2px 0 var(--rule);
+}
+:root[data-ui-theme="original"] {
+  & .page-header {
+    max-width: none;
+    align-items: center;
+    padding: clamp(20px, 3.5vw, 48px) max(20px, calc((100% - 920px) / 2));
+    color: var(--binding-type);
+    background: var(--binding);
+    border-bottom: 5px double #93b5a0;
+  }
+  & .page-header .sub { color: #d9e5d8; }
+  & .page-header img { flex: none; }
+  & .page-header h1 { font: 650 clamp(22px, 3vw, 36px)/1.35 var(--display-face); }
+  & main, & .cat-home { max-width: 968px; }
+  & .cat-home {
+    grid-template-columns: 1fr;
+    gap: 0;
+    margin-top: clamp(20px, 4vw, 44px);
+  }
+  & .cat-card {
+    align-items: baseline;
+    padding: clamp(14px, 2.3vw, 24px);
+    border: none;
+    border-bottom: 1px solid var(--rule);
+    border-radius: 0;
+    box-shadow: none;
+  }
+  & .cat-card:hover { background: color-mix(in srgb, var(--stamp) 8%, var(--sheet)); }
+  & .cat-no {
+    background: transparent;
+    border-radius: 0;
+    border-inline-end: 1px solid var(--rule);
+    color: var(--stamp);
+    font: 600 21px/1 var(--display-face);
+  }
+  & .cat-title, & .cat-head h2, & .card > :is(h2,h3), & .how-to h3 {
+    font-family: var(--display-face);
+    font-weight: 650;
+  }
+  & .cat-title { font-size: 21px; }
+  & .cat-items { margin-top: 0; }
+  & .cat-head { border-bottom: 3px double var(--rule); background: var(--bg); }
+  & .card {
+    border-radius: 0;
+    border-top: 3px solid var(--stamp);
+    padding: 10px clamp(14px, 3vw, 32px) 22px;
+    margin: 22px 0;
+    box-shadow: 0 1px 0 var(--rule);
+  }
+  & .card > :is(h2,h3) { font-size: 20px; }
+  & .subnav a, & .btn, & .sh-ri .sh-btn, & .select, & .text-input, & textarea {
+    border-radius: 3px;
+  }
+  & .btn { min-height: 34px; height: auto; white-space: normal; }
+  & .btn:not(.primary):hover { border-color: var(--stamp); }
+  & .subnav a { border: 0; border-inline-start: 2px solid var(--rule); }
+  & .how-to div {
+    border: 0;
+    border-radius: 0;
+    border-top: 1px solid var(--rule);
+    padding: 12px 0;
+  }
+  & .how-to { gap: 12px 24px; }
+  & .table-wrap, & .backup-preview { border-radius: 2px; }
+  & .check-list .mark { font-weight: 700; }
+}
+@media (min-width: 750px) {
+  :root[data-ui-theme="original"] .cat-home .cat-text {
+    flex: 1;
+    display: grid;
+    grid-template-columns: minmax(200px, .95fr) minmax(180px, 1.4fr);
+    align-items: baseline;
+    gap: 2px 16px;
+  }
+  :root[data-ui-theme="original"] .cat-home .cat-items { grid-column: 2; }
 }

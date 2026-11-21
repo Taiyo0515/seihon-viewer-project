@@ -10,7 +10,7 @@
  *  6. 拡張アイコン・右クリックメニュー・初回案内
  *  7. 強制ダウンロード対策 第3層(それでも始まった PDF のダウンロードを見つけ、保存されたファイルをビューアで開く)
  *
- * 外部サーバーへの送信は一切行いません。
+ * 文書は元の配信サイトから取得します。開発者のサーバーには送信しません。
  */
 
 import {
@@ -276,6 +276,7 @@ chrome.webNavigation.onCommitted.addListener(details => {
 });
 
 chrome.tabs.onRemoved.addListener(tabId => {
+  lastMainFrame.delete(tabId);
   releaseRuleBase(tabId);
   setPdfTab(tabId, false);
   getFileBypassTabs().then(tabs => {
@@ -464,7 +465,8 @@ chrome.webRequest.onSendHeaders.addListener(
       return;
     }
     const ref = details.requestHeaders?.find(h => h.name.toLowerCase() === "referer")?.value || null;
-    lastMainFrame.set(details.tabId, { url: details.url, referer: ref, time: Date.now() });
+    if (ref) lastMainFrame.set(details.tabId, { url: details.url, referer: ref, time: Date.now() });
+    else lastMainFrame.delete(details.tabId);
     // 古い記録を掃除
     const now = Date.now();
     for (const [id, v] of lastMainFrame) {
@@ -497,7 +499,7 @@ async function removeRefererRule(tabId) {
 async function prepareFetch(tabId, url, refererHint) {
   let referer = null;
   const entry = lastMainFrame.get(tabId);
-  if (entry && stripHash(entry.url) === stripHash(url)) {
+  if (entry && Date.now() - entry.time <= MAIN_FRAME_MEMORY_MS && stripHash(entry.url) === stripHash(url)) {
     referer = entry.referer;
   }
   referer ||= refererHint || null;
@@ -618,6 +620,7 @@ chrome.webRequest.onHeadersReceived.addListener(
       /^(application\/(x-)?pdf|application\/acrobat|text\/(x-)?pdf)/.test(type) ||
       (/octet-stream|download|unknown|binary/.test(type) &&
         (looksLikePdfUrl(details.url) || /\.pdf\b/i.test(get("content-disposition"))));
+    if (!isPdf && lastMainFrame.get(details.tabId)?.url === details.url) lastMainFrame.delete(details.tabId);
     setPdfTab(details.tabId, isPdf);
   },
   { urls: ["http://*/*", "https://*/*"], types: ["main_frame"] },

@@ -1,0 +1,15 @@
+/* Product surfaces share these materials; document and book contents keep their own colors. */
+:root[data-ui-theme="original"] {
+  --desk: light-dark(#eceae1, #182321);
+  --sheet: light-dark(#fffdf6, #22312e);
+  --type: light-dark(#213c37, #edf1e7);
+  --secondary-type: light-dark(#485f58, #c4d1c8);
+  --quiet-type: light-dark(#57675f, #b6c5bb);
+  --rule: light-dark(#bdc9bc, #54665d);
+  --stamp: light-dark(#16584d, #a5ddc2);
+  --on-stamp: light-dark(#fffdf6, #10362b);
+  --binding: light-dark(#18463d, #113b33);
+  --binding-type: #f7f5e5;
+  --display-face: "Yu Mincho", "Hiragino Mincho ProN", "Noto Serif CJK JP", Georgia, serif;
+  accent-color: var(--stamp);
+}

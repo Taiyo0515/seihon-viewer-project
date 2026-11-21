@@ -1,8 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-  <!-- 製本ビューアのアイコン: 開いた本(見開き) -->
-  <rect x="4" y="4" width="120" height="120" rx="26" fill="#d93025"/>
-  <path d="M64 34 C52 26 36 24 20 27 V96 C36 93 52 95 64 103 Z" fill="#ffffff"/>
-  <path d="M64 34 C76 26 92 24 108 27 V96 C92 93 76 95 64 103 Z" fill="#fde7e5"/>
-  <path d="M64 34 V103" stroke="#a52714" stroke-width="3" stroke-linecap="round"/>
-  <path d="M30 44 H54 M30 54 H54 M30 64 H50 M74 44 H98 M74 54 H98 M74 64 H94" stroke="#d93025" stroke-width="4" stroke-linecap="round" opacity="0.55"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><title>製本ビューア ― 糸綴じの本</title>
+<rect x="6" y="6" width="116" height="116" rx="22" fill="#204b40"/>
+<polygon fill="#d1aa65" points="28,32 93,23 103,31 103,99 39,107 28,98"/>
+<polygon fill="#f8f1df" points="35,29 100,22 100,94 35,103"/>
+<polygon fill="#b44b37" points="76,25 89,23 89,52 82,48 76,54"/>
+<path d="M30 49l16 -2" stroke="#204b40" stroke-width="5"/>
+<path d="M30 68l16 -2" stroke="#204b40" stroke-width="5"/>
+<path d="M30 87l16 -2" stroke="#204b40" stroke-width="5"/>
 </svg>

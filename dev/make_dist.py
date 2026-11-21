@@ -14,6 +14,7 @@
 
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -49,15 +50,21 @@ def tracked_files():
 
 def main(argv):
     force = "--force" in argv
-    args = [a for a in argv if a != "--force"]
+    store = "--store" in argv
+    args = [a for a in argv if a not in ("--force", "--store")]
+    store_id = os.environ.get("SEIHON_STORE_ID", "")
+    if store and store_id and not re.fullmatch("[a-p]{32}", store_id):
+        raise ValueError("SEIHON_STORE_ID must be the 32-letter dashboard item ID")
     with open(os.path.join(SRC, "manifest.json"), encoding="utf-8") as fh:
         version = json.load(fh)["version"]
-    out = os.path.abspath(args[0]) if args else os.path.join(ROOT, "dist", "%s-%s.zip" % (TOP, version))
+    out = os.path.abspath(args[0]) if args else os.path.join(ROOT, "dist", "%s-%s%s.zip" % (TOP, version, "-store" if store else ""))
     if os.path.exists(out) and not force:
         print("すでにあります(上書きしません。置き換えるときは --force): %s" % out)
         return 1
     os.makedirs(os.path.dirname(out), exist_ok=True)
     files = tracked_files()
+    if store:
+        files = [name for name in files if not name.startswith("tools/test-server/")]
     dirs = set()
     for f in files:
         parts = f.split("/")[:-1]
@@ -65,21 +72,29 @@ def main(argv):
             dirs.add("/".join(parts[:i]))
     tmp = out + ".part"
     with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
-        root_info = zipfile.ZipInfo(TOP + "/", time.localtime(os.path.getmtime(SRC))[:6])
-        root_info.external_attr = (0o40755 << 16) | 0x10
-        z.writestr(root_info, b"")
-        for d in sorted(dirs):
-            info = zipfile.ZipInfo("%s/%s/" % (TOP, d), time.localtime(os.path.getmtime(os.path.join(SRC, d)))[:6])
-            info.external_attr = (0o40755 << 16) | 0x10
-            z.writestr(info, b"")
+        if not store:
+            root_info = zipfile.ZipInfo(TOP + "/", time.localtime(os.path.getmtime(SRC))[:6])
+            root_info.external_attr = (0o40755 << 16) | 0x10
+            z.writestr(root_info, b"")
+            for d in sorted(dirs):
+                info = zipfile.ZipInfo("%s/%s/" % (TOP, d), time.localtime(os.path.getmtime(os.path.join(SRC, d)))[:6])
+                info.external_attr = (0o40755 << 16) | 0x10
+                z.writestr(info, b"")
         for f in files:
             path = os.path.join(SRC, *f.split("/"))
             st = os.stat(path)
-            info = zipfile.ZipInfo("%s/%s" % (TOP, f), time.localtime(st.st_mtime)[:6])
+            info = zipfile.ZipInfo(f if store else "%s/%s" % (TOP, f), time.localtime(st.st_mtime)[:6])
             info.external_attr = ((st.st_mode & 0o777) | 0o100000) << 16  # 実行できるファイル(補助プログラム)はそのまま
             info.compress_type = zipfile.ZIP_DEFLATED
             with open(path, "rb") as fh:
-                z.writestr(info, fh.read())
+                data = fh.read()
+                if store and f == "manifest.json":
+                    manifest = json.loads(data)
+                    manifest.pop("key", None)
+                    data = json.dumps(manifest, ensure_ascii=False, indent=2).encode("utf-8")
+                elif store and store_id and f.startswith("helper/"):
+                    data = data.replace(b"miiaicaobmegmjkmicojhmajnancjnjp", store_id.encode("ascii"))
+                z.writestr(info, data)
     os.replace(tmp, out)
     print("作りました: %s(%d ファイル、版 %s)" % (out, len(files), version))
     return 0

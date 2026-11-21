@@ -1,7 +1,7 @@
 <!doctype html>
 <!--
   製本ビューア: PDF.js 公式ビューア(v6.4.299, Apache License 2.0)の viewer.html を土台に、
-  Chrome 標準 PDF ビューアに似せたツールバー・サイドバーへ組み替えたもの。
+  製本ビューアの閲覧・収集・出力操作を加えたもの。
 
   PDF.js の内部処理は要素の id で部品を探すため、元の要素は id を変えずにすべて残している。
   使わない部品(PDF.js 純正のツールバー)は #pdfjsUiHost にまとめて非表示にしている。
@@ -9,8 +9,9 @@
   PDF.js: Copyright 2012 Mozilla Foundation, Licensed under the Apache License, Version 2.0
   Adobe CMap resources: Copyright 1990-2015 Adobe Systems Incorporated (BSD-3-Clause)
 -->
-<html lang="ja" dir="ltr" mozdisallowselectionprint>
+<html lang="ja" data-ui-theme="original" dir="ltr" mozdisallowselectionprint>
   <head>
+    <script type="module" src="../common/ui-theme.js"></script>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
     <meta name="google" content="notranslate" />
@@ -25,6 +26,7 @@
     <link rel="stylesheet" href="ui/conversion-tools.css" />
     <link rel="stylesheet" href="ui/review-tools.css" />
     <link rel="stylesheet" href="ui/form-designer.css" />
+    <link rel="stylesheet" href="reading-room.css" />
     <!-- 1) 起動準備(PDF.js より先に実行): URL の整理・テーマ・PDF.js の設定・Worker の先行起動 -->
     <script src="boot.js" type="module"></script>
     <!-- 2) PDF.js 本体(公式配布物そのまま) -->
@@ -38,8 +40,9 @@
     <div id="outerContainer">
       <span id="viewer-alert" class="visuallyHidden" role="alert"></span>
 
-      <!-- ===== Chrome 風ツールバー ===== -->
+      <!-- ===== 文書ツールバー ===== -->
       <header id="shToolbar" class="sh-toolbar" role="toolbar" aria-label="PDF ツールバー">
+        <span class="sh-app-mark" title="製本ビューア"><span aria-hidden="true" class="sh-bookplate"></span><span class="sh-app-name">製本ビューア</span></span>
         <div class="sh-start">
           <button
             id="viewsManagerToggleButton"

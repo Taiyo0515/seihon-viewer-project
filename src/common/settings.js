@@ -32,6 +32,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   /** 同じPDFを再び開いたとき、前回見ていた位置から表示する */
   restorePosition: true,
   /** テーマ: "system" システムに従う / "light" / "dark" */
+  uiTheme: "original",
   theme: "system",
   /**
    * 印刷の画質:
@@ -200,7 +201,8 @@ export const SETTING_LABELS = Object.freeze({
   bindingDirection: "綴じ方向",
   restorePosition: "表示位置",
   rotateStep: "回転ボタンの動き",
-  theme: "テーマ",
+  uiTheme: "画面デザイン",
+  theme: "明るさ",
   printQuality: "印刷の画質",
   guardEnabled: "強制ダウンロード対策",
   guardExcludeSites: "対策の対象外にするサイト",
@@ -257,6 +259,7 @@ const ENUMS = {
   initialView: ["book", "spread", "single"],
   rotateStep: [-90, -180, -270, 90, 180, 270],
   bindingDirection: ["ltr", "rtl"],
+  uiTheme: ["original", "classic"],
   theme: ["system", "light", "dark"],
   printQuality: ["max", "auto", "standard", "high"],
   guardOriginalFile: ["keep", "delete"],

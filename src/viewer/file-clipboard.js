@@ -11,7 +11,6 @@
  *  - 補助プログラムが無いとき(または使えないとき)は、Chrome のダウンロードで「ダウンロード」の「製本ビューア_コピー」に保存し、
  *    保存したファイルの場所(パス)を、文字としてクリップボードに入れる
  *    (ファイルを選ぶ画面の「ファイル名」の欄に貼り付けて使える)。このときも使い捨てで、次にコピーすると前のファイルは消す。
- *    ダウンロードの表示(ツールバーのダウンロードの印)は、保存している間だけ出さない(0.4.1)。
  *
  * 補助プログラムとのやりとりには Chrome の「ネイティブ メッセージング」を使う。
  * そのための権限(nativeMessaging)は、詳細設定で補助プログラムを使うと決めたときだけ求める(任意の権限)。
@@ -161,25 +160,6 @@ async function rememberCopies(ids) {
   await chrome.storage.local.set({ [COPY_IDS_KEY]: ids.filter(id => Number.isInteger(id)) }).catch(() => {});
 }
 
-/** ダウンロードの表示(ツールバーの印・吹き出し)を一時的に出さない(downloads.ui の権限があるとき) */
-async function hideDownloadUi() {
-  if (typeof chrome.downloads.setUiOptions !== "function") {
-    return { restore: async () => {} };
-  }
-  try {
-    await chrome.downloads.setUiOptions({ enabled: false });
-  } catch {
-    return { restore: async () => {} };
-  }
-  return {
-    restore: async () => {
-      try {
-        await chrome.downloads.setUiOptions({ enabled: true });
-      } catch {}
-    },
-  };
-}
-
 /** 保存済みのファイルを、補助プログラムでクリップボードに入れる */
 async function copyPathsWithHelper(paths) {
   try {
@@ -244,16 +224,14 @@ export async function copyFilesToClipboard(files, { folder = null, onProgress = 
     // Chrome のダウンロードで「製本ビューア_コピー」に保存する
     const dir = folder ? `${COPY_FOLDER}/${folder}` : COPY_FOLDER;
     const saved = [];
-    // 使い捨て: 前のコピーで保存したファイルを消す。保存している間は、ダウンロードの表示を出さない
+    // 使い捨て: 前のコピーで保存したファイルを消す
     await disposePreviousCopies();
-    const ui = await hideDownloadUi();
     try {
       for (const f of files) {
         saved.push(await saveBlobAndWait(f.blob, `${dir}/${f.name}`));
         onProgress?.(saved.length, files.length);
       }
     } finally {
-      await ui.restore();
       await rememberCopies(saved.map(x => x.id));
     }
     paths = saved.map(s => s.path);

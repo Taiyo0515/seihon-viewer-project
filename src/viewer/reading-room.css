@@ -1,0 +1,197 @@
+/* The bookplate identifies the extension in both interface styles. */
+.sh-app-mark {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-inline-end: 10px;
+  color: var(--sh-toolbar-fg);
+  font: 600 13px/1 var(--sh-font);
+}
+.sh-bookplate {
+  position: relative;
+  display: inline-block;
+  width: 19px;
+  height: 22px;
+  box-sizing: border-box;
+  border: 2px solid currentColor;
+  border-inline-start-width: 5px;
+  border-radius: 2px 4px 4px 2px;
+}
+.sh-bookplate::after {
+  content: "";
+  position: absolute;
+  inset: 4px 2px auto 3px;
+  height: 3px;
+  border-block: 1px solid currentColor;
+}
+@media (max-width: 1080px) {
+  .sh-app-name { position: absolute; clip-path: inset(50%); width: 1px; height: 1px; overflow: hidden; }
+}
+
+@media screen {
+  :root[data-ui-theme="original"] {
+    --room-paper: #faf7ef;
+    --room-page: #fffdf7;
+    --room-desk: #e8e5da;
+    --room-wash: #eeeade;
+    --room-line: #c6c5b7;
+    --room-ink: #243b33;
+    --room-subtle: #53635a;
+    --room-green: #245b46;
+    --room-on-green: #fffdf3;
+    --room-tint: #d9e6d7;
+    --room-rule: #92613e;
+    --room-serif: "Baskervville","Yu Mincho","Hiragino Mincho ProN",serif;
+    --sh-toolbar-h: 64px;
+    --toolbar-height: 64px;
+    --sh-toolbar-bg: var(--room-paper);
+    --sh-toolbar-fg: var(--room-ink);
+    --sh-toolbar-border: var(--room-line);
+    --sh-icon: var(--room-ink);
+    --sh-icon-disabled: color-mix(in srgb,var(--room-ink) 38%,transparent);
+    --sh-hover: var(--room-tint);
+    --sh-active-bg: var(--room-tint);
+    --sh-pressed-icon: var(--room-green);
+    --sh-input-bg: var(--room-wash);
+    --sh-input-selection: color-mix(in srgb,var(--room-green) 26%,transparent);
+    --sh-sep: var(--room-line);
+    --sh-side-bg: var(--room-paper);
+    --sh-side-fg: var(--room-ink);
+    --sh-side-border: var(--room-line);
+    --sh-main-bg: var(--room-desk);
+    --sh-accent: var(--room-green);
+    --sh-focus: var(--room-green);
+    --sh-page-shadow: 0 2px 8px #17231a25;
+    --sh-thumb-label: var(--room-ink);
+    --sh-menu-bg: var(--room-page);
+    --sh-menu-fg: var(--room-ink);
+    --sh-menu-hover: var(--room-tint);
+    --sh-menu-sep: var(--room-line);
+    --sh-menu-shadow: 0 6px 22px #10241825;
+    --sh-muted: var(--room-subtle);
+    --sh-panel-bg: var(--room-page);
+    --sh-panel-fg: var(--room-ink);
+    --sh-panel-fg2: var(--room-subtle);
+    --sh-btn-fg: var(--room-green);
+    --sh-btn-border: var(--room-line);
+    --sh-btn-hover: var(--room-tint);
+    --sh-btn-primary-bg: var(--room-green);
+    --sh-btn-primary-fg: var(--room-on-green);
+    --sh-findbar-bg: var(--room-paper);
+    --sh-findbar-fg: var(--room-ink);
+    --sh-scroll-thumb: var(--room-line);
+    --sh-scroll-thumb-hover: var(--room-subtle);
+    --sh-toast-bg: var(--room-ink);
+    --sh-toast-fg: var(--room-paper);
+    --sh-toast-action: var(--room-paper);
+    --sh-chip-border: var(--room-line);
+  }
+  :root[data-ui-theme="original"][data-theme="dark"] {
+    --room-paper: #202e29;
+    --room-page: #26362e;
+    --room-desk: #17221d;
+    --room-wash: #324138;
+    --room-line: #526256;
+    --room-ink: #eeeede;
+    --room-subtle: #bfccbd;
+    --room-green: #a6d5b4;
+    --room-on-green: #193625;
+    --room-tint: #394e40;
+    --room-rule: #d3a883;
+  }
+
+  :root[data-ui-theme="original"] {
+    & #shToolbar {
+      border-block-end: 3px double var(--room-line);
+      padding-inline: clamp(8px,1.4vw,24px);
+    }
+    & .sh-app-mark {
+      align-self: stretch;
+      padding-inline-end: 12px;
+      border-inline-end: 1px solid var(--room-line);
+      color: var(--room-green);
+      font: 700 15px var(--room-serif);
+    }
+    & .sh-title { font-weight: 600; }
+    & :is(.sh-icon-btn,.sh-btn,.sh-chip-btn,.sh-popup,.sh-panel,.sh-edit-popup) { border-radius: 4px; }
+    & .sh-center {
+      background: var(--room-page);
+      box-shadow: inset 0 0 0 1px var(--room-line);
+      border-radius: 5px;
+      padding: 3px;
+    }
+    & .sh-page-selector { padding-inline-start: 4px; font-variant-numeric: tabular-nums; }
+    & :is(.sh-page-selector input,#shZoomInput) { border-radius: 3px; }
+    & #shMore { border: 1px solid var(--room-line); }
+    & .sh-badge { border-radius: 3px; }
+    & :is(.sh-popup,.sh-dialog,.sh-tools-dialog,.sh-local-tool) {
+      border: 1px solid var(--room-line);
+      border-block-start: 3px solid var(--room-rule);
+      border-radius: 4px;
+      box-shadow: var(--sh-menu-shadow);
+    }
+    & :is(.sh-dialog,.sh-local-tool,.sh-collection-editor,.sh-annot-head,.sh-panel) h2,
+    & .sh-thumb-header-title { font-family: var(--room-serif); font-weight: 700; }
+    & .sh-annot-head, & .sh-bind-head, & .sh-collection-editor header {
+      border-block-end: 3px double var(--room-line);
+      background: var(--room-paper);
+    }
+    & .sh-collection-editor footer, & .sh-bind-foot { background: var(--room-paper); }
+    & #shEmpty { background: var(--room-paper); }
+    & .sh-home-shell { max-width: 1240px; }
+    & .sh-home-open {
+      border: 0;
+      border-block: 1px solid var(--room-line);
+      border-inline-start: 6px solid var(--room-green);
+      border-radius: 0;
+      background: var(--room-page);
+      padding: clamp(16px,3vw,38px);
+    }
+    & .sh-home-open h1 { font: 700 clamp(25px,3vw,40px)/1.4 var(--room-serif); }
+    & .sh-home-logo { display: none; }
+    & .sh-tools-head { padding-block-end: 12px; border-block-end: 3px double var(--room-line); }
+    & .sh-tools-head h2 { font: 700 24px/1.3 var(--room-serif); }
+    & .sh-tools-head input { border-radius: 3px; }
+    & .sh-tools-filters button { border-radius: 3px; }
+    & .sh-tools-grid { gap: 0 20px; }
+    & .sh-tools-grid button {
+      align-items: center;
+      border: 0;
+      border-block-end: 1px solid var(--room-line);
+      background: transparent;
+      border-radius: 0;
+      padding: 14px 6px;
+    }
+    & .sh-tools-grid button:is(:hover,:focus-visible) { background: var(--room-tint); }
+    & .sh-tool-icon {
+      border-radius: 3px;
+      border-inline-start: 2px solid var(--room-rule);
+      background: var(--room-wash);
+      color: var(--room-green);
+    }
+    & .sh-region-rect { border-color: var(--room-green); background: color-mix(in srgb,var(--room-green) 12%,transparent); }
+  }
+  @media (min-width: 780px) {
+    :root[data-ui-theme="original"] #shHomeCatalog {
+      display: grid;
+      grid-template-columns: 10.5rem minmax(0,1fr);
+      column-gap: 26px;
+      align-items: start;
+    }
+    :root[data-ui-theme="original"] #shHomeCatalog .sh-tools-head { grid-column: 1 / -1; }
+    :root[data-ui-theme="original"] #shHomeCatalog .sh-tools-filters {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 3px;
+      border-inline-end: 1px solid var(--room-line);
+      padding-inline-end: 16px;
+    }
+    :root[data-ui-theme="original"] #shHomeCatalog .sh-tools-filters button { text-align: start; border: 0; }
+    :root[data-ui-theme="original"] .sh-tools-none { grid-column: 2; }
+  }
+  @media (max-width: 680px) {
+    :root[data-ui-theme="original"] { --sh-toolbar-h: 52px; --toolbar-height: 52px; }
+    :root[data-ui-theme="original"] .sh-app-mark { padding-inline-end: 4px; margin-inline-end: 4px; }
+  }
+}

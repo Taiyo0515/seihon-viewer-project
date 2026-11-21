@@ -1,6 +1,7 @@
 <!doctype html>
-<html lang="ja">
+<html lang="ja" data-ui-theme="original">
   <head>
+    <script type="module" src="../common/ui-theme.js"></script>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark light" />
@@ -112,11 +113,18 @@
             </div>
           </div>
           <div class="row">
-            <div class="label">テーマ</div>
+            <div class="label">画面デザイン</div>
+            <div class="control radios">
+              <label><input type="radio" name="uiTheme" value="original" /> 書房<span class="default-mark">初期値</span></label>
+              <label><input type="radio" name="uiTheme" value="classic" /> クラシック（従来の配色と配置）</label>
+            </div>
+          </div>
+          <div class="row">
+            <div class="label">明るさ</div>
             <div class="control radios">
               <label><input type="radio" name="theme" value="system" /> システムに従う<span class="default-mark">初期値</span></label>
               <label><input type="radio" name="theme" value="light" /> ライト</label>
-              <label><input type="radio" name="theme" value="dark" /> ダーク(Chrome 標準ビューアと同じ配色)</label>
+              <label><input type="radio" name="theme" value="dark" /> ダーク</label>
             </div>
           </div>
           <div class="row">
@@ -696,7 +704,7 @@
             <dt>PDF表示エンジン</dt><dd>PDF.js 6.4.299(Mozilla、Apache License 2.0、拡張内に同梱)</dd>
             <dt>PDF加工</dt><dd>pdf-lib 1.17.1(MIT License、拡張内に同梱)</dd>
             <dt>保存場所</dt><dd>設定・速度ログは chrome.storage、収集したページと元の PDF・ページ役割はこの拡張の中のデータベース(IndexedDB)。拡張機能を削除すると消えます。</dd>
-            <dt>通信</dt><dd>外部サーバーへの送信・解析・広告・更新確認は一切行いません。</dd>
+            <dt>通信</dt><dd>Web文書は元の配信先から取得します。文書処理と保存はこの端末で行います。<a href="../privacy.html">プライバシーポリシー</a></dd>
             <dt>状態</dt><dd id="aboutStatus">-</dd>
           </dl>
           <p class="buttons">

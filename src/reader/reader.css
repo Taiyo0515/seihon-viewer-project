@@ -1,3 +1,5 @@
+@import url("../common/editorial-palette.css");
+
 /* 電子書籍リーダー(0.4)。ビューアの見た目(Chrome 風)に合わせる */
 
 :root,
@@ -347,3 +349,56 @@ body.rd-empty .rd-menu [data-needs-book] { display: none; }
 /* 0.5: 選択欄の一覧の色(ダークモードで白地・白い文字にならないように) */
 select option,
 select optgroup { background-color: var(--panel); color: var(--fg); }
+
+:root[data-ui-theme="original"] {
+  --bg: var(--desk);
+  --bar: var(--sheet);
+  --fg: var(--type);
+  --muted: var(--quiet-type);
+  --border: var(--rule);
+  --hover: color-mix(in srgb, var(--stamp) 10%, var(--sheet));
+  --accent: var(--stamp);
+  --accent-fg: var(--on-stamp);
+  --panel: var(--sheet);
+  --shadow: 2px 3px 0 color-mix(in srgb, var(--rule) 75%, transparent);
+
+  & .rd-toolbar {
+    background: var(--binding);
+    color: var(--binding-type);
+    border-bottom: 4px double #93b5a0;
+    padding-inline: clamp(4px, 1.7vw, 24px);
+  }
+  & .rd-toolbar :is(.rd-format, .rd-font-size) { color: #d9e5d8; }
+  & .rd-toolbar .rd-btn { border-radius: 3px; }
+  & .rd-toolbar .rd-btn:is(:hover,[aria-pressed="true"],[aria-expanded="true"]) {
+    color: white;
+    background: #346456;
+  }
+  & .rd-toolbar .rd-btn:focus-visible { outline-color: white; }
+  & .rd-title { font: 600 17px/1.4 var(--display-face); }
+  & .rd-side { width: min(300px, 82vw); }
+  & .rd-tabs button, & .rd-chapter { font-family: var(--display-face); font-weight: 650; }
+  & .rd-toc a { border-radius: 0; border-inline-start: 3px solid transparent; }
+  & .rd-toc a[aria-current="true"] { border-color: var(--stamp); }
+  & .rd-panel-card {
+    text-align: start;
+    border-radius: 0;
+    border-inline-start: 7px solid var(--stamp);
+    border-block: 1px solid var(--rule);
+    padding: clamp(20px, 4vw, 48px);
+    margin-block: auto;
+    max-width: 610px;
+  }
+  & .rd-panel-card h1 { font: 650 clamp(22px, 3.6vw, 34px)/1.4 var(--display-face); }
+  & .rd-panel-card p { line-height: 1.85; }
+  & .rd-panel-icon .sh-icon { width: 34px; height: 34px; }
+  & .rd-btn-primary, & .rd-btn-plain, & .rd-menu, & .rd-dialog, & .rd-toast { border-radius: 3px; }
+  & .rd-menu, & .rd-dialog { border: 1px solid var(--rule); border-top: 4px solid var(--stamp); }
+  & .rd-dialog h2 { font: 650 23px/1.4 var(--display-face); }
+  & .rd-footer { border-top: 3px double var(--rule); }
+}
+@media (max-width: 640px) {
+  :root[data-ui-theme="original"] .rd-toolbar { height: auto; min-height: 46px; flex-wrap: wrap; padding-block: 3px; }
+  :root[data-ui-theme="original"] .rd-field { flex-wrap: wrap; }
+  :root[data-ui-theme="original"] .rd-field select { min-width: 0; max-width: 100%; }
+}

@@ -31,6 +31,7 @@ const RADIO_SETTINGS = [
   "launchMode",
   "initialView",
   "bindingDirection",
+  "uiTheme",
   "theme",
   "printQuality",
   "guardOriginalFile",

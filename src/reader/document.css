@@ -1,3 +1,5 @@
+@import url("../common/editorial-palette.css");
+
 *{box-sizing:border-box} [hidden]{display:none!important}
 :root{color-scheme:light dark;font:15px/1.5 system-ui,sans-serif;--bg:light-dark(#faf9f6,#202123);--panel:light-dark(white,#292a2d);--line:light-dark(#c5c8cc,#56595d);--ink:light-dark(#172026,#eee);--accent:light-dark(#235d85,#a5d5ff)}
 body{margin:0;height:100dvh;display:flex;flex-direction:column;background:var(--bg);color:var(--ink)}
@@ -11,3 +13,36 @@ h1{font-size:1.05rem;flex:1;overflow-wrap:anywhere;margin:0}a{color:var(--accent
 .rendering{position:absolute;visibility:hidden;pointer-events:none;width:60%;top:0}
 .tex-page{text-align:center}.tex-page canvas{display:block;margin:1rem auto;max-width:100%;height:auto}
 @media(max-width:700px){#workspace.editing #divider{display:none}#workspace.editing.source-mode #preview{display:none}#workspace.editing:not(.source-mode) #source{display:none}#workspace.editing #source{flex:1}header,nav{gap:.35rem;padding:.4rem .6rem}}
+
+:root[data-ui-theme="original"] {
+  --bg: var(--desk);
+  --panel: var(--sheet);
+  --line: var(--rule);
+  --ink: var(--type);
+  --accent: var(--stamp);
+
+  & body > header {
+    background: var(--binding);
+    color: var(--binding-type);
+    padding-block: .7rem;
+    border-bottom: 4px double #93b5a0;
+  }
+  & header h1 { font: 650 clamp(1rem, 2vw, 1.35rem)/1.4 var(--display-face); }
+  & header a {
+    border-inline-end: 1px solid #94b9a4;
+    padding-inline-end: .75rem;
+    color: var(--binding-type);
+    text-underline-offset: .25rem;
+  }
+  & header button { color: #fff; background: #345f51; border-color: #91ad9d; }
+  & header #save { background: var(--binding-type); color: #193e33; }
+  & body > nav { gap: .5rem .9rem; border-bottom: 1px solid var(--rule); }
+  & button, & select, & input[type="search"] { border-radius: 3px; }
+  & button:hover:enabled { outline: 1px solid currentColor; }
+  & #source { line-height: 1.8; padding: clamp(.8rem, 2vw, 1.8rem); }
+  & #divider { background: var(--desk); border-inline: 1px solid var(--rule); }
+  & #divider:is(:hover,:focus-visible) { background: var(--stamp); }
+  & #preview { background: var(--sheet); border-inline-start: 4px solid var(--rule); }
+  & #preview .df-selected { background: color-mix(in srgb, var(--stamp) 18%, var(--sheet)); }
+  & #preview :is(.df-selected:focus-visible,.df-region) { border-color: var(--stamp); }
+}
