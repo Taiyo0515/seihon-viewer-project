@@ -821,14 +821,14 @@ select optgroup {
   & .page-header {
     max-width: none;
     align-items: center;
-    padding: clamp(20px, 3.5vw, 48px) max(20px, calc((100% - 920px) / 2));
-    color: var(--binding-type);
-    background: var(--binding);
-    border-bottom: 5px double #93b5a0;
+    padding: 18px max(20px, calc((100% - 920px) / 2));
+    color: var(--type);
+    background: var(--sheet);
+    border-bottom: 1px solid var(--rule);
   }
-  & .page-header .sub { color: #d9e5d8; }
+  & .page-header .sub { color: var(--quiet-type); }
   & .page-header img { flex: none; }
-  & .page-header h1 { font: 650 clamp(22px, 3vw, 36px)/1.35 var(--display-face); }
+  & .page-header h1 { font: 650 clamp(18px, 2vw, 22px)/1.35 var(--display-face); }
   & main, & .cat-home { max-width: 968px; }
   & .cat-home {
     grid-template-columns: 1fr;
@@ -845,6 +845,7 @@ select optgroup {
   }
   & .cat-card:hover { background: color-mix(in srgb, var(--stamp) 8%, var(--sheet)); }
   & .cat-no {
+    display: none;
     background: transparent;
     border-radius: 0;
     border-inline-end: 1px solid var(--rule);
@@ -857,10 +858,10 @@ select optgroup {
   }
   & .cat-title { font-size: 21px; }
   & .cat-items { margin-top: 0; }
-  & .cat-head { border-bottom: 3px double var(--rule); background: var(--bg); }
+  & .cat-head { border-bottom: 1px solid var(--rule); background: var(--bg); }
   & .card {
     border-radius: 0;
-    border-top: 3px solid var(--stamp);
+    border-top: 1px solid var(--rule);
     padding: 10px clamp(14px, 3vw, 32px) 22px;
     margin: 22px 0;
     box-shadow: 0 1px 0 var(--rule);

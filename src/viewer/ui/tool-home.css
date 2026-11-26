@@ -28,7 +28,19 @@
 .sh-tools-dialog .sh-tools-head { margin-top: 0; }
 .sh-tools-dialog::backdrop { background: #0008; }
 .sh-region-layer { position: absolute; inset: 0; z-index: 25; overflow: hidden; cursor: crosshair; touch-action: none; user-select: none; outline: 2px dashed var(--sh-accent); outline-offset: -2px; }
-.sh-region-rect { position: absolute; box-sizing: border-box; border: 2px solid #1879e0; box-shadow: 0 0 0 100vmax #17202966; background: #55aaff20; pointer-events: none; }
+.sh-region-rect { position: absolute; box-sizing: border-box; border: 2px solid #1879e0; box-shadow: 0 0 0 100vmax #17202966; background: #55aaff20; cursor: move; }
+/* Edges are draggable along their full length. The visible square marks the midpoint. */
+.sh-region-handle { position: absolute; display: grid; place-items: center; }
+.sh-region-handle::after { content: ""; width: 7px; height: 7px; background: white; border: 1px solid #474952; border-radius: 1px; }
+.sh-region-handle:focus-visible::after { outline: 2px solid var(--sh-focus); outline-offset: 1px; }
+.sh-region-handle:is([data-edge=n],[data-edge=s]) { inset-inline: 0; height: 12px; cursor: ns-resize; }
+.sh-region-handle:is([data-edge=e],[data-edge=w]) { inset-block: 0; width: 12px; cursor: ew-resize; }
+.sh-region-handle[data-edge^=n] { top: -7px; }
+.sh-region-handle[data-edge^=s] { bottom: -7px; }
+.sh-region-handle[data-edge$=w] { left: -7px; }
+.sh-region-handle[data-edge$=e] { right: -7px; }
+.sh-region-handle:is([data-edge=nw],[data-edge=se]) { width: 14px; height: 14px; cursor: nwse-resize; }
+.sh-region-handle:is([data-edge=sw],[data-edge=ne]) { width: 14px; height: 14px; cursor: nesw-resize; }
 .sh-region-bar { position: fixed; z-index: 501; inset: auto 0 10px; margin-inline: auto; width: fit-content; max-width: calc(100% - 18px); box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; border: 1px solid var(--sh-btn-border); background: var(--sh-panel-bg); color: var(--sh-panel-fg); box-shadow: var(--sh-menu-shadow); border-radius: 10px; padding: 8px; font: 13px var(--sh-font); }
 .sh-region-bar button { min-height: 30px; font-size: 13px; padding: 4px 10px; }
 @media (max-width: 560px) { .sh-home-open .sh-btn { margin-inline-start: 0; } .sh-home-open { gap: 9px; } }

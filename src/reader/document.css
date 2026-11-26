@@ -25,24 +25,24 @@ h1{font-size:1.05rem;flex:1;overflow-wrap:anywhere;margin:0}a{color:var(--accent
     background: var(--binding);
     color: var(--binding-type);
     padding-block: .7rem;
-    border-bottom: 4px double #93b5a0;
+    border-bottom: 1px solid var(--rule);
   }
   & header h1 { font: 650 clamp(1rem, 2vw, 1.35rem)/1.4 var(--display-face); }
   & header a {
-    border-inline-end: 1px solid #94b9a4;
+    border-inline-end: 1px solid #83848e;
     padding-inline-end: .75rem;
     color: var(--binding-type);
     text-underline-offset: .25rem;
   }
-  & header button { color: #fff; background: #345f51; border-color: #91ad9d; }
-  & header #save { background: var(--binding-type); color: #193e33; }
+  & header button { color: #fff; background: #464750; border-color: #9697a1; }
+  & header #save { background: var(--binding-type); color: #25262c; }
   & body > nav { gap: .5rem .9rem; border-bottom: 1px solid var(--rule); }
   & button, & select, & input[type="search"] { border-radius: 3px; }
   & button:hover:enabled { outline: 1px solid currentColor; }
   & #source { line-height: 1.8; padding: clamp(.8rem, 2vw, 1.8rem); }
   & #divider { background: var(--desk); border-inline: 1px solid var(--rule); }
   & #divider:is(:hover,:focus-visible) { background: var(--stamp); }
-  & #preview { background: var(--sheet); border-inline-start: 4px solid var(--rule); }
+  & #preview { background: var(--sheet);  }
   & #preview .df-selected { background: color-mix(in srgb, var(--stamp) 18%, var(--sheet)); }
   & #preview :is(.df-selected:focus-visible,.df-region) { border-color: var(--stamp); }
 }

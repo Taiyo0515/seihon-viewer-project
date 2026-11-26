@@ -365,14 +365,14 @@ select optgroup { background-color: var(--panel); color: var(--fg); }
   & .rd-toolbar {
     background: var(--binding);
     color: var(--binding-type);
-    border-bottom: 4px double #93b5a0;
+    border-bottom: 1px solid var(--rule);
     padding-inline: clamp(4px, 1.7vw, 24px);
   }
-  & .rd-toolbar :is(.rd-format, .rd-font-size) { color: #d9e5d8; }
+  & .rd-toolbar :is(.rd-format, .rd-font-size) { color: #eeeeef; }
   & .rd-toolbar .rd-btn { border-radius: 3px; }
   & .rd-toolbar .rd-btn:is(:hover,[aria-pressed="true"],[aria-expanded="true"]) {
     color: white;
-    background: #346456;
+    background: #464750;
   }
   & .rd-toolbar .rd-btn:focus-visible { outline-color: white; }
   & .rd-title { font: 600 17px/1.4 var(--display-face); }
@@ -383,7 +383,7 @@ select optgroup { background-color: var(--panel); color: var(--fg); }
   & .rd-panel-card {
     text-align: start;
     border-radius: 0;
-    border-inline-start: 7px solid var(--stamp);
+    border: 0;
     border-block: 1px solid var(--rule);
     padding: clamp(20px, 4vw, 48px);
     margin-block: auto;
@@ -393,9 +393,9 @@ select optgroup { background-color: var(--panel); color: var(--fg); }
   & .rd-panel-card p { line-height: 1.85; }
   & .rd-panel-icon .sh-icon { width: 34px; height: 34px; }
   & .rd-btn-primary, & .rd-btn-plain, & .rd-menu, & .rd-dialog, & .rd-toast { border-radius: 3px; }
-  & .rd-menu, & .rd-dialog { border: 1px solid var(--rule); border-top: 4px solid var(--stamp); }
+  & .rd-menu, & .rd-dialog { border: 1px solid var(--rule);  }
   & .rd-dialog h2 { font: 650 23px/1.4 var(--display-face); }
-  & .rd-footer { border-top: 3px double var(--rule); }
+  & .rd-footer { border-top: 1px solid var(--rule); }
 }
 @media (max-width: 640px) {
   :root[data-ui-theme="original"] .rd-toolbar { height: auto; min-height: 46px; flex-wrap: wrap; padding-block: 3px; }

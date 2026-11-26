@@ -49,6 +49,11 @@ export class ToolHome {
       <input type="search" aria-label="ツールを検索" placeholder="ツールを検索"></div>
       <div class="sh-tools-filters" aria-label="用途で絞り込み"></div>
       <div class="sh-tools-grid"></div><p class="sh-tools-none" role="status" hidden>該当するツールがありません</p>`;
+    // Keep the file action and its existing listener when the catalog is laid out.
+    if (!dialog) {
+      const opener = host.parentElement.querySelector(".sh-home-open");
+      if (opener) host.prepend(opener);
+    }
     const input = host.querySelector("input");
     const filters = host.querySelector(".sh-tools-filters");
     const grid = host.querySelector(".sh-tools-grid");

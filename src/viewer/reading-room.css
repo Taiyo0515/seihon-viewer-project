@@ -1,4 +1,5 @@
-/* The bookplate identifies the extension in both interface styles. */
+@import url("../common/editorial-palette.css");
+body:not(.sh-no-document) .sh-app-mark { display: none; }
 .sh-app-mark {
   flex: none;
   display: inline-flex;
@@ -31,20 +32,20 @@
 
 @media screen {
   :root[data-ui-theme="original"] {
-    --room-paper: #faf7ef;
-    --room-page: #fffdf7;
-    --room-desk: #e8e5da;
-    --room-wash: #eeeade;
-    --room-line: #c6c5b7;
-    --room-ink: #243b33;
-    --room-subtle: #53635a;
-    --room-green: #245b46;
-    --room-on-green: #fffdf3;
-    --room-tint: #d9e6d7;
-    --room-rule: #92613e;
-    --room-serif: "Baskervville","Yu Mincho","Hiragino Mincho ProN",serif;
-    --sh-toolbar-h: 64px;
-    --toolbar-height: 64px;
+    --room-paper: var(--desk);
+    --room-page: var(--sheet);
+    --room-desk: var(--desk);
+    --room-wash: var(--desk);
+    --room-line: var(--rule);
+    --room-ink: var(--type);
+    --room-subtle: var(--quiet-type);
+    --room-accent: var(--stamp);
+    --room-on-accent: var(--on-stamp);
+    --room-rule: var(--stamp);
+    --room-heading: var(--display-face);
+    --room-tint: color-mix(in srgb,var(--stamp) 13%,var(--sheet));
+    --sh-toolbar-h: 48px;
+    --toolbar-height: 48px;
     --sh-toolbar-bg: var(--room-paper);
     --sh-toolbar-fg: var(--room-ink);
     --sh-toolbar-border: var(--room-line);
@@ -52,16 +53,16 @@
     --sh-icon-disabled: color-mix(in srgb,var(--room-ink) 38%,transparent);
     --sh-hover: var(--room-tint);
     --sh-active-bg: var(--room-tint);
-    --sh-pressed-icon: var(--room-green);
+    --sh-pressed-icon: var(--room-accent);
     --sh-input-bg: var(--room-wash);
-    --sh-input-selection: color-mix(in srgb,var(--room-green) 26%,transparent);
+    --sh-input-selection: color-mix(in srgb,var(--room-accent) 26%,transparent);
     --sh-sep: var(--room-line);
     --sh-side-bg: var(--room-paper);
     --sh-side-fg: var(--room-ink);
     --sh-side-border: var(--room-line);
     --sh-main-bg: var(--room-desk);
-    --sh-accent: var(--room-green);
-    --sh-focus: var(--room-green);
+    --sh-accent: var(--room-accent);
+    --sh-focus: var(--room-accent);
     --sh-page-shadow: 0 2px 8px #17231a25;
     --sh-thumb-label: var(--room-ink);
     --sh-menu-bg: var(--room-page);
@@ -73,11 +74,11 @@
     --sh-panel-bg: var(--room-page);
     --sh-panel-fg: var(--room-ink);
     --sh-panel-fg2: var(--room-subtle);
-    --sh-btn-fg: var(--room-green);
+    --sh-btn-fg: var(--room-accent);
     --sh-btn-border: var(--room-line);
     --sh-btn-hover: var(--room-tint);
-    --sh-btn-primary-bg: var(--room-green);
-    --sh-btn-primary-fg: var(--room-on-green);
+    --sh-btn-primary-bg: var(--room-accent);
+    --sh-btn-primary-fg: var(--room-on-accent);
     --sh-findbar-bg: var(--room-paper);
     --sh-findbar-fg: var(--room-ink);
     --sh-scroll-thumb: var(--room-line);
@@ -87,111 +88,102 @@
     --sh-toast-action: var(--room-paper);
     --sh-chip-border: var(--room-line);
   }
-  :root[data-ui-theme="original"][data-theme="dark"] {
-    --room-paper: #202e29;
-    --room-page: #26362e;
-    --room-desk: #17221d;
-    --room-wash: #324138;
-    --room-line: #526256;
-    --room-ink: #eeeede;
-    --room-subtle: #bfccbd;
-    --room-green: #a6d5b4;
-    --room-on-green: #193625;
-    --room-tint: #394e40;
-    --room-rule: #d3a883;
-  }
 
   :root[data-ui-theme="original"] {
     & #shToolbar {
-      border-block-end: 3px double var(--room-line);
+      border-block-end: 1px solid var(--room-line);
       padding-inline: clamp(8px,1.4vw,24px);
     }
     & .sh-app-mark {
       align-self: stretch;
       padding-inline-end: 12px;
       border-inline-end: 1px solid var(--room-line);
-      color: var(--room-green);
-      font: 700 15px var(--room-serif);
+      color: var(--room-accent);
+      font: 700 15px var(--room-heading);
     }
     & .sh-title { font-weight: 600; }
     & :is(.sh-icon-btn,.sh-btn,.sh-chip-btn,.sh-popup,.sh-panel,.sh-edit-popup) { border-radius: 4px; }
-    & .sh-center {
-      background: var(--room-page);
-      box-shadow: inset 0 0 0 1px var(--room-line);
-      border-radius: 5px;
-      padding: 3px;
-    }
     & .sh-page-selector { padding-inline-start: 4px; font-variant-numeric: tabular-nums; }
     & :is(.sh-page-selector input,#shZoomInput) { border-radius: 3px; }
-    & #shMore { border: 1px solid var(--room-line); }
     & .sh-badge { border-radius: 3px; }
     & :is(.sh-popup,.sh-dialog,.sh-tools-dialog,.sh-local-tool) {
       border: 1px solid var(--room-line);
-      border-block-start: 3px solid var(--room-rule);
       border-radius: 4px;
       box-shadow: var(--sh-menu-shadow);
     }
     & :is(.sh-dialog,.sh-local-tool,.sh-collection-editor,.sh-annot-head,.sh-panel) h2,
-    & .sh-thumb-header-title { font-family: var(--room-serif); font-weight: 700; }
+    & .sh-thumb-header-title { font-family: var(--room-heading); font-weight: 700; }
     & .sh-annot-head, & .sh-bind-head, & .sh-collection-editor header {
-      border-block-end: 3px double var(--room-line);
+      border-block-end: 1px solid var(--room-line);
       background: var(--room-paper);
     }
     & .sh-collection-editor footer, & .sh-bind-foot { background: var(--room-paper); }
-    & #shEmpty { background: var(--room-paper); }
-    & .sh-home-shell { max-width: 1240px; }
+    & #shEmpty { background: var(--sheet); }
+    & .sh-home-shell { max-width: 1160px; padding: clamp(16px,3vw,40px); }
     & .sh-home-open {
-      border: 0;
-      border-block: 1px solid var(--room-line);
-      border-inline-start: 6px solid var(--room-green);
-      border-radius: 0;
-      background: var(--room-page);
-      padding: clamp(16px,3vw,38px);
+      flex-direction: column; align-items: stretch; gap: 8px;
+      background: transparent; border: 0; padding: 0; border-radius: 0;
     }
-    & .sh-home-open h1 { font: 700 clamp(25px,3vw,40px)/1.4 var(--room-serif); }
-    & .sh-home-logo { display: none; }
-    & .sh-tools-head { padding-block-end: 12px; border-block-end: 3px double var(--room-line); }
-    & .sh-tools-head h2 { font: 700 24px/1.3 var(--room-serif); }
-    & .sh-tools-head input { border-radius: 3px; }
-    & .sh-tools-filters button { border-radius: 3px; }
-    & .sh-tools-grid { gap: 0 20px; }
+    & .sh-home-open .sh-home-logo, & .sh-home-open h1 { display: none; }
+    & .sh-home-open .sh-btn { order: -1; margin: 0; min-height: 36px; }
+    & .sh-home-open p { margin: 0; font-size: 12px; line-height: 1.65; color: var(--quiet-type); }
+    & .sh-tools-head { margin: 0; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--rule); }
+    & .sh-tools-head h2 { font-size: 19px; font-weight: 650; margin-block: 0; }
+    & .sh-tools-head input { border-radius: 4px; }
+    & .sh-tools-filters { gap: 3px; }
+    & .sh-tools-filters button {
+      color: var(--secondary-type); background: transparent;
+      border: 0; border-radius: 3px; min-height: 32px;
+    }
+    & .sh-tools-filters button[aria-pressed="true"] {
+      font-weight: 650; color: var(--stamp); background: var(--room-tint);
+    }
+    & .sh-tools-grid { grid-template-columns: minmax(0,1fr); gap: 0; }
     & .sh-tools-grid button {
-      align-items: center;
-      border: 0;
-      border-block-end: 1px solid var(--room-line);
+      align-items: baseline; gap: 11px; padding: 11px 6px;
+      border: 0; border-bottom: 1px solid var(--rule); border-radius: 0;
       background: transparent;
-      border-radius: 0;
-      padding: 14px 6px;
     }
-    & .sh-tools-grid button:is(:hover,:focus-visible) { background: var(--room-tint); }
-    & .sh-tool-icon {
-      border-radius: 3px;
-      border-inline-start: 2px solid var(--room-rule);
-      background: var(--room-wash);
-      color: var(--room-green);
+    & .sh-tools-grid button:is(:hover,:focus-visible) { background: var(--desk); }
+    & .sh-tool-icon { align-self: center; width: 18px; height: 18px; background: transparent; color: var(--quiet-type); }
+    & .sh-tool-icon svg { width: 17px; height: 17px; }
+    & .sh-tools-grid button > span:last-child {
+      flex: 1; display: grid; grid-template-columns: minmax(12em, .8fr) minmax(0,1.3fr);
+      gap: 12px; align-items: baseline;
     }
-    & .sh-region-rect { border-color: var(--room-green); background: color-mix(in srgb,var(--room-green) 12%,transparent); }
+    & .sh-tools-grid strong { font-size: 14px; font-weight: 600; }
+    & .sh-tools-grid small { margin: 0; font-size: 13px; color: var(--quiet-type); }
+    & .sh-region-rect { border-color: var(--room-accent); background: color-mix(in srgb,var(--room-accent) 12%,transparent); }
   }
   @media (min-width: 780px) {
     :root[data-ui-theme="original"] #shHomeCatalog {
-      display: grid;
-      grid-template-columns: 10.5rem minmax(0,1fr);
-      column-gap: 26px;
-      align-items: start;
+      display: grid; grid-template-columns: 12rem minmax(0,1fr);
+      grid-template-areas: "open head" "filters tools";
+      grid-template-rows: auto 1fr;
+      column-gap: clamp(24px,4vw,60px); align-items: start;
     }
-    :root[data-ui-theme="original"] #shHomeCatalog .sh-tools-head { grid-column: 1 / -1; }
-    :root[data-ui-theme="original"] #shHomeCatalog .sh-tools-filters {
-      flex-direction: column;
-      align-items: stretch;
-      gap: 3px;
-      border-inline-end: 1px solid var(--room-line);
-      padding-inline-end: 16px;
+    :root[data-ui-theme="original"] #shHomeCatalog {
+      & .sh-home-open { grid-area: open; }
+      & .sh-tools-head { grid-area: head; align-self: end; }
+      & .sh-tools-filters { grid-area: filters; flex-flow: column; align-items: stretch; padding-top: 20px; }
+      & .sh-tools-filters button { text-align: start; padding-inline: 9px; }
+      & .sh-tools-grid, & .sh-tools-none { grid-area: tools; }
     }
-    :root[data-ui-theme="original"] #shHomeCatalog .sh-tools-filters button { text-align: start; border: 0; }
-    :root[data-ui-theme="original"] .sh-tools-none { grid-column: 2; }
+  }
+  @media (max-width: 779px) {
+    :root[data-ui-theme="original"] {
+      & .sh-home-open { align-items: start; margin-bottom: 24px; }
+      & .sh-tools-head { margin-bottom: 8px; }
+      & .sh-tools-head input { max-width: 48%; }
+      & .sh-tools-grid button > span:last-child { display: block; }
+      & .sh-tools-grid small { margin-top: 2px; }
+    }
   }
   @media (max-width: 680px) {
     :root[data-ui-theme="original"] { --sh-toolbar-h: 52px; --toolbar-height: 52px; }
     :root[data-ui-theme="original"] .sh-app-mark { padding-inline-end: 4px; margin-inline-end: 4px; }
   }
 }
+
+:root[data-ui-theme="original"] .sh-bookplate { background: url("../icons/icon32.png") center/contain no-repeat; width:24px; height:24px; border:0; }
+:root[data-ui-theme="original"] .sh-bookplate::after { content:none; }
